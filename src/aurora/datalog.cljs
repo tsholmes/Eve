@@ -1,6 +1,6 @@
 (ns aurora.datalog
   (:require clojure.set)
-  (:require-macros [aurora.datalog :refer [rule defrule query]]))
+  (:require-macros [aurora.datalog :refer [rule defrule q* q? q!]]))
 
 (defrecord Knowledge [axioms facts rules])
 
@@ -31,6 +31,19 @@
                   (update-in [:facts] new-facts)))))
 
 (comment
+  ((rule
+       [?x ?relates ?z]
+       [?y ?relates ?z]
+       (not= x y)
+       :return
+       [x :likes y]
+       [y :likes x])
+   #{[:jamie :likes :datalog]
+       [:jamie :likes :types]
+       [:jamie :hates :types]
+       [:chris :likes :datalog]
+       [:chris :hates :types]})
+
   (def marmite
     (knowledge
      #{[:jamie :likes :datalog]
@@ -39,33 +52,41 @@
        [:chris :likes :datalog]
        [:chris :hates :types]}
      [(rule
-       [x :likes y]
-       [y :likes x]
-       :where
        [?x ?relates ?z]
        [?y ?relates ?z]
-       (not= x y))
+       (not= x y)
+       :return
+       [x :likes y]
+       [y :likes x])
       (rule
-       [x :hates y]
-       :where
        [?x :likes ?z]
        [?y :hates ?z]
-       (not= x y))
+       (not= x y)
+       :return
+       [x :hates y])
       (rule
-       [x :marmites y]
-       :where
        [?x :likes ?y]
        [?x :hates ?y]
-       (not= x y))]
+       (not= x y)
+       :return
+       [x :marmites y])]
      []))
 
   (:facts marmite)
 
-  (query marmite relates :where [:jamie ?relates :chris])
+  (q* marmite [:jamie ?relates :chris] :return relates)
 
-  (query (unknow marmite [:chris :hates :types]) relates :where [:jamie ?relates :chris])
+  (q* (unknow marmite [:chris :hates :types]) [:jamie ?relates :chris] :return relates)
 
-  (query marmite :where [?entity ?relates :chris] :check (keyword? relates))
+  (q* marmite [?entity ?relates :chris] :ignore (assert (keyword? relates)))
 
-  (query marmite :where [?entity ?relates :chris] :check (= :impossible relates))
+  (q* marmite [?entity ?relates :chris] :ignore (assert (= :impossible relates)))
+
+  (q? marmite [:jamie ?relates :chris])
+
+  (q? marmite [:jamie ?relates :bob])
+
+  (q! marmite [:jamie ?relates :chris] :return relates)
+
+  (q! marmite [:jamie ?relates :chris] :return relates relates)
   )
