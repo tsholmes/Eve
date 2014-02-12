@@ -11,7 +11,7 @@
    (coll? pattern) (into (empty pattern) (map #(bind-in % bound) pattern))
    :else pattern))
 
-(defn query->cljs [outputs clauses]
+(defn query->cljs [outputs clauses checks]
   (let [facts (gensym "facts")
         result (gensym "result")
         bound (atom #{})
@@ -35,27 +35,28 @@
            `(do
               ~@(for [guard guards]
                   (match/test guard))
+              ~@(for [check checks]
+                  `(assert ~check))
               ~@(for [output outputs]
                   `(~'js* ~(str result " = ~{}") (conj! ~result ~output))))
            (reverse bound-patterns))
          (persistent! ~result)))))
 
-(defn parse-outputs&clauses [outputs&clauses]
-  ;; syntax is [output+ :where pattern+]
-  (loop [outputs []
-         outputs&clauses outputs&clauses]
-    (assert (not (empty? outputs&clauses)))
-    (let [[output|where & outputs&clauses] outputs&clauses]
-      (if (= :where output|where)
-        (do
-          (assert (not (empty? outputs)))
-          (assert (not (empty? outputs&clauses)))
-          [outputs outputs&clauses])
-        (recur (conj outputs output|where) outputs&clauses)))))
+(defn split-on [k elems]
+  (let [[left right] (split-with #(not= k %) elems)]
+    [left (rest right)]))
 
-(defmacro rule [& outputs&clauses]
-  (let [[outputs clauses] (parse-outputs&clauses outputs&clauses)]
-    (query->cljs outputs clauses)))
+(defn parse-outputs&clauses&checks [outputs&clauses&checks]
+  ;; syntax is [output+ :where clause+ :check check+])
+  (let [[outputs clauses&checks] (split-on :where outputs&clauses&checks)
+        [clauses checks] (split-on :check clauses&checks)]
+    [outputs clauses checks]))
 
-(defmacro defrule [name & outputs&clauses]
-  `(def ~name (rule ~@outputs&clauses)))
+(defmacro rule [& outputs&clauses&checks]
+  (apply query->cljs (parse-outputs&clauses&checks outputs&clauses&checks)))
+
+(defmacro defrule [name & outputs&clauses&checks]
+  `(def ~name (rule ~@outputs&clauses&checks)))
+
+(defmacro query [knowledge & outputs&clauses&checks]
+  `((rule ~@outputs&clauses&checks) (:facts ~knowledge)))

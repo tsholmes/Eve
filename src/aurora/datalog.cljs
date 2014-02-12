@@ -1,11 +1,8 @@
 (ns aurora.datalog
   (:require clojure.set)
-  (:require-macros [aurora.datalog :refer [rule defrule]]))
+  (:require-macros [aurora.datalog :refer [rule defrule query]]))
 
-(defrecord Knowledge [axioms facts rules guards])
-
-(defn query [knowledge rule]
-  (rule (:facts knowledge)))
+(defrecord Knowledge [axioms facts rules])
 
 (defn- fixpoint [knowledge]
   (let [rules (:rules knowledge)]
@@ -20,7 +17,7 @@
           (assoc knowledge :facts new-facts))))))
 
 (defn knowledge [facts rules guards]
-  (fixpoint (Knowledge. facts rules guards)))
+  (fixpoint (Knowledge. facts facts rules)))
 
 (defn know [knowledge & facts]
   (fixpoint (-> knowledge
@@ -64,7 +61,11 @@
 
   (:facts marmite)
 
-  (query marmite (rule relates :where [:jamie ?relates :chris]))
+  (query marmite relates :where [:jamie ?relates :chris])
 
-  (query (unknow marmite [:chris :hates :types]) (rule relates :where [:jamie ?relates :chris]))
-)
+  (query (unknow marmite [:chris :hates :types]) relates :where [:jamie ?relates :chris])
+
+  (query marmite :where [?entity ?relates :chris] :check (keyword? relates))
+
+  (query marmite :where [?entity ?relates :chris] :check (= :impossible relates))
+  )
