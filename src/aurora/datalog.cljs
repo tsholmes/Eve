@@ -1,6 +1,6 @@
 (ns aurora.datalog
   (:require clojure.set)
-  (:require-macros [aurora.util :refer [check deftraced]]
+  (:require-macros [aurora.macros :refer [check deftraced]]
                    [aurora.match :refer [match]]
                    [aurora.datalog :refer [rule defrule q* q? q!]]))
 
@@ -8,18 +8,21 @@
 
 (defrecord Schema [attribute check-v! check-vs!])
 
+(defn one! [vs]
+  (check (<= (count vs) 1)))
+
 (defrecord Knowledge [axiom-eavs cache-eavs e->a->vs a->e->vs a->schema rules])
 
 (defn set-schema [knowledge schema]
   ;; TODO check schema
-  (assoc-in knowledge [a->schema (:attribute schema)] schema))
+  (assoc-in knowledge [:a->schema (:attribute schema)] schema))
 
 (defn add-eav
   ([knowledge eav]
    (add-eav knowledge eav true))
   ([knowledge eav axiom?]
    (let [[e a v] eav
-         {:keys [check-v! check-vs!]} (get-in knowledge [a->schema a])
+         {:keys [check-v! check-vs!]} (get-in knowledge [:a->schema a])
          _ (when check-v! (check-v! v))
          vs (conj (get-in knowledge [:e->a->vs e a] #{}) v)
          _ (when check-vs! (check-vs! vs))
@@ -52,6 +55,20 @@
     (fixpoint (reduce add-eav (Knowledge. #{} #{} {} {} {} (:rules knowledge)) facts))))
 
 (comment
+
+  (-> (knowledge #{} [])
+      (set-schema (Schema. :likes #(check (keyword? %)) one!))
+      (add-eav [:jamie :likes :datalog]))
+
+  (-> (knowledge #{} [])
+      (set-schema (Schema. :likes #(check (keyword? %)) one!))
+      (add-eav [:jamie :likes "datalog"]))
+  (-> (knowledge #{} [])
+      (set-schema (Schema. :likes #(check (keyword? %)) one!))
+      (add-eav [:jamie :likes :datalog])
+      (add-eav [:jamie :likes :types]))
+
+  (knowledge [:jamie :likes :datalog] [])
 
   ((rule
        [?x ?relates ?z]
