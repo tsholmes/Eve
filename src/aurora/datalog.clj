@@ -67,7 +67,7 @@
 
 (defmacro q* [knowledge & args]
   (let [facts (gensym "facts")]
-    `(let [~facts (:facts ~knowledge)]
+    `(let [~facts (:cache-eavs ~knowledge)]
        (into #{}
              ~(query->cljs (parse-args args) facts)))))
 
@@ -88,7 +88,7 @@
 
 (defmacro q! [knowledge & args]
   (let [facts (gensym "facts")]
-    `(let [~facts (:facts ~knowledge)
+    `(let [~facts (:cache-eavs ~knowledge)
            values# ~(query->cljs (parse-args args) facts)
            result# (into #{} values#)]
        (check (= (count values#) (count result#)))

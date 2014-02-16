@@ -1,12 +1,38 @@
 (ns aurora.datalog
   (:require clojure.set)
-  (:require-macros [aurora.datalog :refer [rule defrule q* q? q!]]))
+  (:require-macros [aurora.util :refer [check deftraced]]
+                   [aurora.match :refer [match]]
+                   [aurora.datalog :refer [rule defrule q* q? q!]]))
 
-(defrecord Knowledge [axioms facts rules])
+;; TODO naming is inconsistent
+
+(defrecord Schema [attribute check-v! check-vs!])
+
+(defrecord Knowledge [axiom-eavs cache-eavs e->a->vs a->e->vs a->schema rules])
+
+(defn set-schema [knowledge schema]
+  (assoc-in knowledge [a->schema (:attribute schema)] schema))
+
+(defn add-eav
+  ([knowledge eav]
+   (add-eav knowledge eav true))
+  ([knowledge eav axiom?]
+   (let [[e a v] eav
+         {:keys [check-v! check-vs!]} (get-in knowledge [a->schema a])
+         _ (when check-v! (check-v! v))
+         vs (conj (get-in e->a->vs [e a]) v)
+         _ (when check-vs! (check-vs! vs))
+         knowledge (-> knowledge
+                       (update-in [:cache-eavs] conj eav)
+                       (assoc-in [:e->a->vs e a] vs)
+                       (assoc-in [:a->e->vs a e] vs))]
+     (if axiom?
+       (update-in knowledge [:axiom-eavs] conj eav)
+       knowledge))))
 
 (defn- fixpoint [knowledge]
   (let [rules (:rules knowledge)]
-    (loop [facts (:facts knowledge)]
+    (loop [facts (:cache-eavs knowledge)]
       (let [new-facts (reduce
                        (fn [facts rule]
                          (clojure.set/union (rule facts) facts))
@@ -14,21 +40,17 @@
                        rules)]
         (if (not= facts new-facts)
           (recur new-facts)
-          (assoc knowledge :facts new-facts))))))
+          (assoc knowledge :cache-eavs new-facts))))))
 
-(defn knowledge [facts rules guards]
-  (fixpoint (Knowledge. facts facts rules)))
+(defn knowledge [facts rules]
+  (fixpoint (reduce add-eav (Knowledge. #{} #{} {} {} {} rules) facts)))
 
 (defn know [knowledge & facts]
-  (fixpoint (-> knowledge
-                (update-in [:axioms] clojure.set/union facts)
-                (update-in [:facts] clojure.set/union facts))))
+  (fixpoint (reduce add-eav knowledge facts)))
 
 (defn unknow [knowledge & facts]
-  (let [new-facts (clojure.set/difference (:facts knowledge) facts)]
-    (fixpoint (-> knowledge
-                  (assoc-in [:axioms] new-facts)
-                  (update-in [:facts] new-facts)))))
+  (let [new-facts (clojure.set/difference (:axiom-eavs knowledge) facts)]
+    (fixpoint (reduce add-eav (Knowledge. #{} #{} {} {} {} (:rules knowledge)) facts))))
 
 (comment
   ((rule
