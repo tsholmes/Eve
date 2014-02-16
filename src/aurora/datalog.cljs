@@ -11,6 +11,11 @@
 (defn one! [vs]
   (check (<= (count vs) 1)))
 
+(defn many! [vs])
+
+(defn id! [value]
+  (check (string? value)))
+
 (defrecord Knowledge [axiom-eavs cache-eavs e->a->vs a->e->vs a->schema rules])
 
 (defn set-schema [knowledge schema]
@@ -22,6 +27,7 @@
    (add-eav knowledge eav true))
   ([knowledge eav axiom?]
    (let [[e a v] eav
+         _ (id! e)
          {:keys [check-v! check-vs!]} (get-in knowledge [:a->schema a])
          _ (when check-v! (check-v! v))
          vs (conj (get-in knowledge [:e->a->vs e a] #{}) v)
@@ -44,8 +50,8 @@
       (recur new-knowledge)
       knowledge)))
 
-(defn knowledge [facts rules]
-  (fixpoint (reduce add-eav (Knowledge. #{} #{} {} {} {} rules) facts)))
+(defn knowledge [facts rules schemas]
+  (fixpoint (reduce add-eav (reduce set-schema (Knowledge. #{} #{} {} {} {} rules) schemas) facts)))
 
 (defn know [knowledge & facts]
   (fixpoint (reduce add-eav knowledge facts)))
