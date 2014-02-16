@@ -11,6 +11,7 @@
 (defrecord Knowledge [axiom-eavs cache-eavs e->a->vs a->e->vs a->schema rules])
 
 (defn set-schema [knowledge schema]
+  ;; TODO check schema
   (assoc-in knowledge [a->schema (:attribute schema)] schema))
 
 (defn add-eav
@@ -20,7 +21,7 @@
    (let [[e a v] eav
          {:keys [check-v! check-vs!]} (get-in knowledge [a->schema a])
          _ (when check-v! (check-v! v))
-         vs (conj (get-in e->a->vs [e a]) v)
+         vs (conj (get-in knowledge [:e->a->vs e a] #{}) v)
          _ (when check-vs! (check-vs! vs))
          knowledge (-> knowledge
                        (update-in [:cache-eavs] conj eav)
@@ -31,16 +32,14 @@
        knowledge))))
 
 (defn- fixpoint [knowledge]
-  (let [rules (:rules knowledge)]
-    (loop [facts (:cache-eavs knowledge)]
-      (let [new-facts (reduce
-                       (fn [facts rule]
-                         (clojure.set/union (rule facts) facts))
-                       facts
-                       rules)]
-        (if (not= facts new-facts)
-          (recur new-facts)
-          (assoc knowledge :cache-eavs new-facts))))))
+  (let [new-knowledge (reduce
+                       (fn [knowledge rule]
+                         (reduce #(add-eav %1 %2 false) knowledge (rule knowledge)))
+                       knowledge
+                       (:rules knowledge))]
+    (if (not= knowledge new-knowledge)
+      (recur new-knowledge)
+      knowledge)))
 
 (defn knowledge [facts rules]
   (fixpoint (reduce add-eav (Knowledge. #{} #{} {} {} {} rules) facts)))
@@ -53,6 +52,7 @@
     (fixpoint (reduce add-eav (Knowledge. #{} #{} {} {} {} (:rules knowledge)) facts))))
 
 (comment
+
   ((rule
        [?x ?relates ?z]
        [?y ?relates ?z]
@@ -60,11 +60,25 @@
        :return
        [x :likes y]
        [y :likes x])
-   #{[:jamie :likes :datalog]
+   (knowledge
+    #{[:jamie :likes :datalog]
        [:jamie :likes :types]
        [:jamie :hates :types]
        [:chris :likes :datalog]
-       [:chris :hates :types]})
+       [:chris :hates :types]}))
+
+  ((rule
+    [?x :likes ?z]
+    [?y :hates ?z]
+    (not= x y)
+    :return
+    [x :hates y])
+   (knowledge
+    #{[:jamie :likes :datalog]
+      [:jamie :likes :types]
+      [:jamie :hates :types]
+      [:chris :likes :datalog]
+      [:chris :hates :types]}))
 
   (def marmite
     (knowledge
@@ -94,7 +108,8 @@
        [x :marmites y])]
      []))
 
-  (:facts marmite)
+  (:cache-eavs marmite)
+  (:e->a->vs marmite)
 
   (q* marmite [:jamie ?relates :chris] :return relates)
 

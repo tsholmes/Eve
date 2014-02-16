@@ -16,6 +16,14 @@
    (coll? form) (apply clojure.set/union (map ->vars form))
    :else #{}))
 
+(defn constant? [form]
+  (cond
+   (and (seq? form) (= 'quote (first form))) true
+   (var? form) false
+   (= '_ form) false
+   (coll? form) (every? constant? form)
+   :else true))
+
 (defn pattern->cljs [pattern input]
   (cond
    (= '_ pattern)

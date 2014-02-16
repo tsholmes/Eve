@@ -12,8 +12,57 @@
    (coll? pattern) (into (empty pattern) (map #(bind-in % bound) pattern))
    :else pattern))
 
-(defn query->cljs [{:keys [where ignore return]} facts]
+(defn clause->cljs [[e a v :as eav] cache-eavs e->a->vs a->e->vs tail]
+  (let [eav-sym (gensym "eav")
+        e-sym (gensym "e")
+        a-sym (gensym "a")
+        v-sym (gensym "v")
+        vs-sym (gensym "vs")]
+    (cond
+     (and (match/constant? a) (match/constant? e))
+     `(doseq [~v-sym (get-in ~e->a->vs [~e ~a])]
+        (try
+          ~(match/pattern->cljs v v-sym)
+          ~tail
+          (catch aurora.match.MatchFailure e#)))
+
+     (match/constant? a)
+     `(doseq [[~e-sym ~vs-sym] (get ~a->e->vs ~a)]
+        (try
+          ~(match/pattern->cljs e e-sym)
+          (doseq [~v-sym ~vs-sym]
+            (try
+              ~(match/pattern->cljs v v-sym)
+              ~tail
+              (catch aurora.match.MatchFailure e#)))
+          (catch aurora.match.MatchFailure e#)))
+
+     (match/constant? e)
+     `(doseq [[~a-sym ~vs-sym] (get ~e->a->vs ~e)]
+        (try
+          ~(match/pattern->cljs a a-sym)
+          (doseq [~v-sym ~vs-sym]
+            (try
+              ~(match/pattern->cljs v v-sym)
+              ~tail
+              (catch aurora.match.MatchFailure e#)))
+          (catch aurora.match.MatchFailure e#)))
+
+     :else
+     `(doseq [[~e-sym ~a-sym ~v-sym] ~cache-eavs]
+        (try
+          ~(match/pattern->cljs e e-sym)
+          ~(match/pattern->cljs a a-sym)
+          ~(match/pattern->cljs v v-sym)
+          ~tail
+          (catch aurora.match.MatchFailure e#)))
+     )))
+
+(defn query->cljs [{:keys [where ignore return]} knowledge]
   (let [result (gensym "result")
+        cache-eavs (gensym "cache->eavs")
+        e->a->vs (gensym "e->a->vs")
+        a->e->vs (gensym "a->e->vs")
         bound (atom #{})
         patterns (filter #(not (guard? %)) where)
         guards (filter guard? where)
@@ -21,16 +70,12 @@
                          (let [bound-pattern (bind-in pattern @bound)]
                            (swap! bound clojure.set/union (match/->vars pattern))
                            bound-pattern))]
-    `(let [~@(interleave (match/->vars where) (repeat nil))
+    `(let [{~cache-eavs :cache-eavs ~e->a->vs :e->a->vs ~a->e->vs :a->e->vs} ~knowledge
+           ~@(interleave (match/->vars where) (repeat nil))
            ~result (transient [])]
        ~(reduce
          (fn [tail bound-pattern]
-           (let [fact (gensym "fact")]
-             `(doseq [~fact ~facts]
-                (try
-                  ~(match/pattern->cljs bound-pattern fact)
-                  ~tail
-                  (catch aurora.match.MatchFailure e#)))))
+             (clause->cljs bound-pattern cache-eavs e->a->vs a->e->vs tail))
          `(do
             ~@(for [guard guards]
                 (match/test guard))
@@ -57,19 +102,19 @@
           (recur parts (first right) (rest right)))))))
 
 (defmacro rule [& args]
-  (let [facts (gensym "facts")]
-    `(fn [~facts]
+  (let [knowledge (gensym "knowledge")]
+    `(fn [~knowledge]
        (into #{}
-             ~(query->cljs (parse-args args) facts)))))
+             ~(query->cljs (parse-args args) knowledge)))))
 
 (defmacro defrule [name & args]
   `(def ~name (rule ~@args)))
 
 (defmacro q* [knowledge & args]
-  (let [facts (gensym "facts")]
-    `(let [~facts (:cache-eavs ~knowledge)]
+  (let [knowledge-sym (gensym "knowledge")]
+    `(let [~knowledge-sym ~knowledge]
        (into #{}
-             ~(query->cljs (parse-args args) facts)))))
+             ~(query->cljs (parse-args args) knowledge-sym)))))
 
 (defmacro q1 [knowledge & args]
   `(let [result# (q* ~knowledge ~@args)]
@@ -87,9 +132,9 @@
      @any#))
 
 (defmacro q! [knowledge & args]
-  (let [facts (gensym "facts")]
-    `(let [~facts (:cache-eavs ~knowledge)
-           values# ~(query->cljs (parse-args args) facts)
+  (let [knowledge-sym (gensym "knowledge")]
+    `(let [~knowledge-sym ~knowledge
+           values# ~(query->cljs (parse-args args) knowledge-sym)
            result# (into #{} values#)]
        (check (= (count values#) (count result#)))
        result#)))
