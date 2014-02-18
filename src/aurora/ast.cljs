@@ -1,12 +1,8 @@
 (ns aurora.ast
   (:require aurora.util
-            [aurora.datalog :as datalog :refer [->Schema one! many!]])
+            [aurora.datalog :as datalog :refer [has-one required exclusive]])
   (:require-macros [aurora.macros :refer [check]]
-                   [aurora.datalog :refer [q1 q+ q*]]))
-
-;; TODO
-;; should checks be imperative or generate facts?
-;; add rules for step, page, pattern etc
+                   [aurora.datalog :refer [rule q1 q+ q* q?]]))
 
 (defn vector! [elem!]
   (fn [value]
@@ -34,25 +30,42 @@
 (defn true! [value]
   (check (true? value)))
 
-(def schemas
-  [(->Schema :page/args ids! one!)
-   (->Schema :page/steps #(and (ids! %) (check (>= (count %) 1))) one!)
-   (->Schema :match/arg id! one!)
-   (->Schema :match/branches ids! one!)
-   (->Schema :branch/pattern id! one!)
-   (->Schema :branch/guards ids! one!)
-   (->Schema :branch/action id! one!)
-   (->Schema :data/nil true! one!)
-   (->Schema :data/ref id! one!)
-   (->Schema :data/text text! one!)
-   (->Schema :data/number number! one!)
-   (->Schema :data/vector (vector! id!) one!)
-   (->Schema :data/map (map! id! id!) one!)
-   (->Schema :pattern/any true! one!)
-   (->Schema :pattern/bind id! one!)
-   (->Schema :call/fun id! one!)
-   (->Schema :call/args ids! one!)
-   (->Schema :js/name text! one!)])
+(def rules
+  [(has-one :page/args ids!)
+   (has-one :page/steps #(and (ids! %) (check (>= (count %) 1))))
+   (has-one :match/arg id!)
+   (has-one :match/branches ids!)
+   (has-one :branch/pattern id!)
+   (has-one :branch/guards ids!)
+   (has-one :branch/action id!)
+   (has-one :constant/value id!) ;; creates identity - necessary for mutable code
+   (has-one :data/nil true!)
+   (has-one :data/ref id!)
+   (has-one :data/text text!)
+   (has-one :data/number number!)
+   (has-one :data/vector (vector! id!))
+   (has-one :data/map (map! id! id!))
+   (has-one :pattern/any true!)
+   (has-one :pattern/ref id!)
+   (has-one :pattern/text text!)
+   (has-one :pattern/number number!)
+   (has-one :pattern/vector (vector! id!))
+   (has-one :pattern/map (map! id! id!))
+   (has-one :call/fun id!)
+   (has-one :call/args ids!)
+   (has-one :js/name text!)
+
+   (required :page :page/args :page/steps)
+   (required :match :match/arg :match/branches)
+   (required :branch :branch/pattern :branch/guards :branch/action)
+   (required :call :call/fun :call/args)
+   (required :js :js/name)
+   (required :constant :constant/value)
+
+   (exclusive :data :data/nil :data/ref :data/text :data/number :data/vector :data/map)
+   (exclusive :pattern :pattern/any :pattern/ref :pattern/text :pattern/number :pattern/vector :pattern/map)
+
+   ])
 
 (def stdlib
   #{["fun_mult" :js/name "cljs.core._STAR_.call"]
@@ -70,7 +83,9 @@
     ["result" :call/fun "fun_sub"]
     ["result" :call/args ["nil" "b_squared" "four_a_c"]]})
 
-(datalog/knowledge (clojure.set/union stdlib example-a) [] schemas)
+(datalog/knowledge (clojure.set/union stdlib example-a) rules)
+
+(q? (datalog/knowledge (clojure.set/union stdlib example-a) rules) ["root" :page true])
 
 (def example-b
   #{["root" :page/args ["arg_x"]]
@@ -108,9 +123,11 @@
     ["branch_only" :branch/action "action_only"]
     ["pattern_only" :data/vec ["bind_z" "text_foo"]]
     ["bind_z" :pattern/bind "any"]
-    ["text_foo" :data/test "foo"]
+    ["text_foo" :data/text "foo"]
     ["action_only" :call/fun "replace"]
     ["action_only" :call/args ["bind_z" "text_more"]]
     ["text_more" :data/text "more foo!"]})
 
-(datalog/knowledge (clojure.set/union stdlib example-b) [] schemas)
+(datalog/knowledge (clojure.set/union stdlib example-b) rules)
+
+(q* (datalog/knowledge (clojure.set/union stdlib example-b) rules) [?id :match true] :return id)

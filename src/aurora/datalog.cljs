@@ -6,32 +6,14 @@
 
 ;; TODO naming is inconsistent
 
-(defrecord Schema [attribute check-v! check-vs!])
-
-(defn one! [vs]
-  (check (<= (count vs) 1)))
-
-(defn many! [vs])
-
-(defn id! [value]
-  (check (string? value)))
-
-(defrecord Knowledge [axiom-eavs cache-eavs e->a->vs a->e->vs a->schema rules])
-
-(defn set-schema [knowledge schema]
-  ;; TODO check schema
-  (assoc-in knowledge [:a->schema (:attribute schema)] schema))
+(defrecord Knowledge [axiom-eavs cache-eavs e->a->vs a->e->vs rules])
 
 (defn add-eav
   ([knowledge eav]
    (add-eav knowledge eav true))
   ([knowledge eav axiom?]
    (let [[e a v] eav
-         _ (id! e)
-         {:keys [check-v! check-vs!]} (get-in knowledge [:a->schema a])
-         _ (when check-v! (check-v! v))
          vs (conj (get-in knowledge [:e->a->vs e a] #{}) v)
-         _ (when check-vs! (check-vs! vs))
          knowledge (-> knowledge
                        (update-in [:cache-eavs] conj eav)
                        (assoc-in [:e->a->vs e a] vs)
@@ -50,31 +32,60 @@
       (recur new-knowledge)
       knowledge)))
 
-(defn knowledge [facts rules schemas]
-  (fixpoint (reduce add-eav (reduce set-schema (Knowledge. #{} #{} {} {} {} rules) schemas) facts)))
+(defn knowledge [facts rules]
+  (fixpoint (reduce add-eav (Knowledge. #{} #{} {} {} rules) facts)))
 
 (defn know [knowledge & facts]
   (fixpoint (reduce add-eav knowledge facts)))
 
 (defn unknow [knowledge & facts]
   (let [new-facts (clojure.set/difference (:axiom-eavs knowledge) facts)]
-    (fixpoint (reduce add-eav (Knowledge. #{} #{} {} {} {} (:rules knowledge)) facts))))
+    (fixpoint (reduce add-eav (Knowledge. #{} #{} {} {} (:rules knowledge)) facts))))
+
+(defn learn [knowledge & rules]
+  (fixpoint (reduce #(update-in %1 [:rules] conj %2) knowledge rules)))
+
+(defn schema [a v! vs!]
+  (fn [knowledge]
+    (doseq [[e vs] (get-in knowledge [:a->e->vs a])]
+      (vs! vs)
+      (doseq [v vs] (v! v)))))
+
+(defn one! [vs]
+  (check (<= (count vs) 1)))
+
+(defn has-one [a v!]
+  (schema a v! one!))
+
+(defn required [name & as]
+  (fn [knowledge]
+    (for [[e a->vs] (:e->a->vs knowledge)
+          :when (some #(seq (get a->vs %)) as)]
+      (do (check (every? #(seq (get a->vs %)) as))
+        [e name true]))))
+
+;; TODO exclusive can potentially be extensible
+(defn exclusive [name & as]
+  (fn [knowledge]
+    (for [[e a->vs] (:e->a->vs knowledge)
+          :when (some #(seq (get a->vs %)) as)]
+      (do (check (<= (count (filter #(seq (get a->vs %)) as)) 1))
+        [e name true]))))
 
 (comment
 
   (-> (knowledge #{} [])
-      (set-schema (Schema. :likes #(check (keyword? %)) one!))
-      (add-eav [:jamie :likes :datalog]))
+      (learn (schema :likes #(check (keyword? %)) one!))
+      (know [:jamie :likes :datalog]))
 
   (-> (knowledge #{} [])
-      (set-schema (Schema. :likes #(check (keyword? %)) one!))
-      (add-eav [:jamie :likes "datalog"]))
-  (-> (knowledge #{} [])
-      (set-schema (Schema. :likes #(check (keyword? %)) one!))
-      (add-eav [:jamie :likes :datalog])
-      (add-eav [:jamie :likes :types]))
+      (learn (schema :likes #(check (keyword? %)) one!))
+      (know [:jamie :likes "datalog"]))
 
-  (knowledge [:jamie :likes :datalog] [])
+  (-> (knowledge #{} [])
+      (learn (schema :likes #(check (keyword? %)) one!))
+      (know [:jamie :likes :datalog])
+      (know [:jamie :likes :types]))
 
   ((rule
        [?x ?relates ?z]
@@ -149,4 +160,18 @@
   (q! marmite [:jamie ?relates :chris] :return relates)
 
   (q! marmite [:jamie ?relates :chris] :return relates relates)
+
+  (knowledge #{[:jamie :person/age 27] [:jamie :person/height 11]} [(has-one :person/age #(check (number? %)))])
+
+  (knowledge #{[:jamie :person/age "27"] [:jamie :person/height 11]} [(has-one :person/age #(check (number? %)))])
+
+  (knowledge #{[:jamie :person/age 27] [:jamie :person/age 11]} [(has-one :person/age #(check (number? %)))])
+
+  (knowledge #{[:jamie :person/age 27] [:jamie :person/height 11]} [(required :person :person/age :person/height)])
+
+  (knowledge #{[:jamie :person/height 11]} [(required :person :person/age :person/height)])
+
+  (knowledge #{[:jamie :person/age 27] ["isbn123" :book/title "Return of the King"]} [(exclusive :kind :person/age :book/title)])
+
+  (knowledge #{[:jamie :person/age 27] [:jamie :book/title "Return of the King"]} [(exclusive :kind :person/age :book/title)])
   )
