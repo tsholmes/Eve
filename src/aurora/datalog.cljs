@@ -22,15 +22,18 @@
        (update-in knowledge [:axiom-eavs] conj eav)
        knowledge))))
 
-(defn- fixpoint [knowledge]
-  (let [new-knowledge (reduce
-                       (fn [knowledge rule]
-                         (reduce #(add-eav %1 %2 false) knowledge (rule knowledge)))
-                       knowledge
-                       (:rules knowledge))]
-    (if (not= knowledge new-knowledge)
-      (recur new-knowledge)
-      knowledge)))
+(defn fixpoint
+  ([knowledge rules]
+   (let [new-knowledge (reduce
+                        (fn [knowledge rule]
+                          (reduce #(add-eav %1 %2 false) knowledge (rule knowledge)))
+                        knowledge
+                        rules)]
+     (if (not= knowledge new-knowledge)
+       (recur new-knowledge rules)
+       knowledge)))
+  ([knowledge]
+   (reduce fixpoint knowledge (:rules knowledge))))
 
 (defn knowledge [facts rules]
   (fixpoint (reduce add-eav (Knowledge. #{} #{} {} {} rules) facts)))
@@ -42,8 +45,9 @@
   (let [new-facts (clojure.set/difference (:axiom-eavs knowledge) facts)]
     (fixpoint (reduce add-eav (Knowledge. #{} #{} {} {} (:rules knowledge)) facts))))
 
-(defn learn [knowledge & rules]
-  (fixpoint (reduce #(update-in %1 [:rules] conj %2) knowledge rules)))
+;; TODO needs auto stratification
+#_(defn learn [knowledge & rules]
+    (fixpoint (reduce #(update-in %1 [:rules] conj %2) knowledge rules)))
 
 (defn has-one [a v!]
   (fn [knowledge]
@@ -89,26 +93,13 @@
 
 (defn has
   ([kn e]
-   (get-in kn [:e->a->v e]))
+   (get-in kn [:e->a->vs e]))
   ([kn e a]
-   (get-in kn [:e->a->v e a]))
+   (get-in kn [:e->a->vs e a]))
   ([kn e a v]
-   (get-in kn [:e->a->v e a v])))
+   (get-in kn [:e->a->vs e a v])))
 
 (comment
-
-  (-> (knowledge #{} [])
-      (learn (schema :likes #(check (keyword? %)) one!))
-      (know [:jamie :likes :datalog]))
-
-  (-> (knowledge #{} [])
-      (learn (schema :likes #(check (keyword? %)) one!))
-      (know [:jamie :likes "datalog"]))
-
-  (-> (knowledge #{} [])
-      (learn (schema :likes #(check (keyword? %)) one!))
-      (know [:jamie :likes :datalog])
-      (know [:jamie :likes :types]))
 
   ((rule
        [?x ?relates ?z]
@@ -144,26 +135,25 @@
        [:jamie :hates :types]
        [:chris :likes :datalog]
        [:chris :hates :types]}
-     [(rule
-       [?x ?relates ?z]
-       [?y ?relates ?z]
-       (not= x y)
-       :return
-       [x :likes y]
-       [y :likes x])
-      (rule
-       [?x :likes ?z]
-       [?y :hates ?z]
-       (not= x y)
-       :return
-       [x :hates y])
-      (rule
-       [?x :likes ?y]
-       [?x :hates ?y]
-       (not= x y)
-       :return
-       [x :marmites y])]
-     []))
+     [[(rule
+        [?x ?relates ?z]
+        [?y ?relates ?z]
+        (not= x y)
+        :return
+        [x :likes y]
+        [y :likes x])
+       (rule
+        [?x :likes ?z]
+        [?y :hates ?z]
+        (not= x y)
+        :return
+        [x :hates y])
+       (rule
+        [?x :likes ?y]
+        [?x :hates ?y]
+        (not= x y)
+        :return
+        [x :marmites y])]]))
 
   (:cache-eavs marmite)
   (:e->a->vs marmite)
@@ -184,17 +174,17 @@
 
   (q! marmite [:jamie ?relates :chris] :return relates relates)
 
-  (knowledge #{[:jamie :person/age 27] [:jamie :person/height 11]} [(has-one :person/age #(check (number? %2)))])
+  (knowledge #{[:jamie :person/age 27] [:jamie :person/height 11]} [[(has-one :person/age #(check (number? %2)))]])
 
-  (knowledge #{[:jamie :person/age "27"] [:jamie :person/height 11]} [(has-one :person/age #(check (number? %2)))])
+  (knowledge #{[:jamie :person/age "27"] [:jamie :person/height 11]} [[(has-one :person/age #(check (number? %2)))]])
 
-  (knowledge #{[:jamie :person/age 27] [:jamie :person/age 11]} [(has-one :person/age #(check (number? %2)))])
+  (knowledge #{[:jamie :person/age 27] [:jamie :person/age 11]} [[(has-one :person/age #(check (number? %2)))]])
 
-  (knowledge #{[:jamie :person/age 27] [:jamie :person/height 11]} [(required :person :person/age :person/height)])
+  (knowledge #{[:jamie :person/age 27] [:jamie :person/height 11]} [[(required :person :person/age :person/height)]])
 
-  (knowledge #{[:jamie :person/height 11]} [(required :person :person/age :person/height)])
+  (knowledge #{[:jamie :person/height 11]} [[(required :person :person/age :person/height)]])
 
-  (knowledge #{[:jamie :person/age 27] ["isbn123" :book/title "Return of the King"]} [(exclusive :kind :person/age :book/title)])
+  (knowledge #{[:jamie :person/age 27] ["isbn123" :book/title "Return of the King"]} [[(exclusive :kind :person/age :book/title)]])
 
-  (knowledge #{[:jamie :person/age 27] [:jamie :book/title "Return of the King"]} [(exclusive :kind :person/age :book/title)])
+  (knowledge #{[:jamie :person/age 27] [:jamie :book/title "Return of the King"]} [[(exclusive :kind :person/age :book/title)]])
   )
