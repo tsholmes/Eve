@@ -18,7 +18,7 @@
    [(exclusive :data :data/nil :data/ref :data/text :data/number :data/vector :data/map)
     (exclusive :pattern :pattern/any :pattern/ref :pattern/text :pattern/number :pattern/vector :pattern/map)]
 
-   [(group :value :data :call :js :page)]
+   [(group :value :data :call :js :page)] ;; NOTE this is probably wrong, still got def and ref confused
 
    [(exclusive :node :page :match :branch :call :js :constant :data :pattern)]
 
@@ -45,6 +45,8 @@
     (has-one :call/fun (id! :value))
     (has-one :call/args (ids!))
     (has-one :js/name text!)]])
+
+;; examples
 
 (def stdlib
   #{[:fun_mult :js/name "cljs.core._STAR_.call"]

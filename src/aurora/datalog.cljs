@@ -132,3 +132,9 @@
 (q! marmite [:jamie ?relates :chris] :return relates)
 
 #_(q! marmite [:jamie ?relates :chris] :return relates relates)
+
+(q* (knowledge #{[:jamie :has {:books 3 :laptop 1}]} [])
+    [:jamie :has ?items]
+    (:in [?item ?count] ?items)
+    :return
+    count)

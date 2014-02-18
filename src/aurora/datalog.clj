@@ -3,14 +3,25 @@
             [aurora.macros :refer [check]]))
 
 (defn guard? [pattern]
-  (seq? pattern))
+  (and (seq? pattern) (not= :in (first pattern))))
+
+(defn subquery? [pattern]
+  (and (seq? pattern) (= :in (first pattern))))
 
 (defn bind-in [pattern bound]
   (cond
    (and (seq? pattern) (= 'quote (first pattern))) pattern
    (bound (match/->var pattern)) (match/->var pattern)
+   (seq? pattern) (into nil (reverse (map #(bind-in % bound) pattern)))
    (coll? pattern) (into (empty pattern) (map #(bind-in % bound) pattern))
    :else pattern))
+
+(defn subquery->cljs [[_ pattern collection] tail]
+  (assert (empty? (match/->vars collection)) (str "Not ground: " (pr-str collection)))
+  (let [elem (gensym "elem")]
+    `(doseq [~elem ~collection]
+       ~(match/pattern->cljs pattern elem)
+       ~tail)))
 
 (defn clause->cljs [[e a v :as eav] cache-eavs e->a->vs a->e->vs tail]
   (let [eav-sym (gensym "eav")
@@ -75,7 +86,12 @@
            ~result (transient [])]
        ~(reduce
          (fn [tail bound-pattern]
-             (clause->cljs bound-pattern cache-eavs e->a->vs a->e->vs tail))
+           (cond
+            (subquery? bound-pattern)
+            (subquery->cljs bound-pattern tail)
+
+            :else
+            (clause->cljs bound-pattern cache-eavs e->a->vs a->e->vs tail)))
          `(do
             ~@(for [guard guards]
                 (match/test guard))
@@ -138,3 +154,4 @@
            result# (into #{} values#)]
        (check (= (count values#) (count result#)))
        result#)))
+
