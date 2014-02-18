@@ -1,58 +1,55 @@
 (ns aurora.ast
   (:require aurora.util
-            [aurora.datalog :as datalog :refer [has-one required exclusive]])
+            [aurora.datalog :as datalog :refer [has-one required exclusive id!]])
   (:require-macros [aurora.macros :refer [check]]
                    [aurora.datalog :refer [rule q1 q+ q* q?]]))
 
 (defn vector! [elem!]
-  (fn [value]
+  (fn [kn value]
     (check (vector? value))
-    (check (every? elem! value))))
+    (check (every? #(elem! kn %) value))))
 
 (defn map! [key! val!]
-  (fn [value]
+  (fn [kn value]
     (check (map? value))
-    (check (every? key! (keys value)))
-    (check (every? val! (vals value)))))
+    (check (every? #(key! kn %) (keys value)))
+    (check (every? #(val! kn %) (vals value)))))
 
-(defn id! [value]
+(defn ids! [& as]
+  (vector! (apply id! as)))
+
+(defn text! [kn value]
   (check (string? value)))
 
-(def ids!
-  (vector! id!))
-
-(defn text! [value]
-  (check (string? value)))
-
-(defn number! [value]
+(defn number! [kn value]
   (check (number? value)))
 
-(defn true! [value]
+(defn true! [kn value]
   (check (true? value)))
 
 (def rules
-  [(has-one :page/args ids!)
-   (has-one :page/steps #(and (ids! %) (check (>= (count %) 1))))
-   (has-one :match/arg id!)
-   (has-one :match/branches ids!)
-   (has-one :branch/pattern id!)
-   (has-one :branch/guards ids!)
-   (has-one :branch/action id!)
-   (has-one :constant/value id!) ;; creates identity - necessary for mutable code
+  [(has-one :page/args (ids!))
+   (has-one :page/steps (ids!))
+   (has-one :match/arg (id!))
+   (has-one :match/branches (ids!))
+   (has-one :branch/pattern (id!))
+   (has-one :branch/guards (ids!))
+   (has-one :branch/action (id!))
+   (has-one :constant/value (id!)) ;; creates identity - necessary for mutable code
    (has-one :data/nil true!)
-   (has-one :data/ref id!)
+   (has-one :data/ref (id!))
    (has-one :data/text text!)
    (has-one :data/number number!)
-   (has-one :data/vector (vector! id!))
-   (has-one :data/map (map! id! id!))
+   (has-one :data/vector (vector! (id!)))
+   (has-one :data/map (map! (id!) (id!)))
    (has-one :pattern/any true!)
-   (has-one :pattern/ref id!)
+   (has-one :pattern/ref (id!))
    (has-one :pattern/text text!)
    (has-one :pattern/number number!)
-   (has-one :pattern/vector (vector! id!))
-   (has-one :pattern/map (map! id! id!))
-   (has-one :call/fun id!)
-   (has-one :call/args ids!)
+   (has-one :pattern/vector (vector! (id!)))
+   (has-one :pattern/map (map! (id!) (id!)))
+   (has-one :call/fun (id!))
+   (has-one :call/args (ids!))
    (has-one :js/name text!)
 
    (required :page :page/args :page/steps)

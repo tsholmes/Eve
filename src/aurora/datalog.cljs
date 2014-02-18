@@ -45,17 +45,32 @@
 (defn learn [knowledge & rules]
   (fixpoint (reduce #(update-in %1 [:rules] conj %2) knowledge rules)))
 
-(defn schema [a v! vs!]
+(defn has-one [a v!]
   (fn [knowledge]
     (doseq [[e vs] (get-in knowledge [:a->e->vs a])]
-      (vs! vs)
-      (doseq [v vs] (v! v)))))
+      (check (<= (count vs) 1))
+      (doseq [v vs] (v! knowledge v)))))
 
-(defn one! [vs]
-  (check (<= (count vs) 1)))
+(defn has-many [a v!]
+  (fn [knowledge]
+    (doseq [[e vs] (get-in knowledge [:a->e->vs a])]
+      (doseq [v vs] (v! knowledge v)))))
 
-(defn has-one [a v!]
-  (schema a v! one!))
+(defn id? [id]
+  (string? id))
+
+(defn id! [& as]
+  (fn [kn id]
+    (check (id? id))
+    (doseq [a as]
+      (check (seq (has kn id a))))
+    true))
+
+(defn group [name & as]
+  (fn [knowledge]
+    (for [[e a->vs] (:e->a->vs knowledge)
+          :when (some #(seq (get a->vs %)) as)]
+      [e name true])))
 
 (defn required [name & as]
   (fn [knowledge]
@@ -71,6 +86,14 @@
           :when (some #(seq (get a->vs %)) as)]
       (do (check (<= (count (filter #(seq (get a->vs %)) as)) 1))
         [e name true]))))
+
+(defn has
+  ([kn e]
+   (get-in kn [:e->a->v e]))
+  ([kn e a]
+   (get-in kn [:e->a->v e a]))
+  ([kn e a v]
+   (get-in kn [:e->a->v e a v])))
 
 (comment
 
@@ -161,11 +184,11 @@
 
   (q! marmite [:jamie ?relates :chris] :return relates relates)
 
-  (knowledge #{[:jamie :person/age 27] [:jamie :person/height 11]} [(has-one :person/age #(check (number? %)))])
+  (knowledge #{[:jamie :person/age 27] [:jamie :person/height 11]} [(has-one :person/age #(check (number? %2)))])
 
-  (knowledge #{[:jamie :person/age "27"] [:jamie :person/height 11]} [(has-one :person/age #(check (number? %)))])
+  (knowledge #{[:jamie :person/age "27"] [:jamie :person/height 11]} [(has-one :person/age #(check (number? %2)))])
 
-  (knowledge #{[:jamie :person/age 27] [:jamie :person/age 11]} [(has-one :person/age #(check (number? %)))])
+  (knowledge #{[:jamie :person/age 27] [:jamie :person/age 11]} [(has-one :person/age #(check (number? %2)))])
 
   (knowledge #{[:jamie :person/age 27] [:jamie :person/height 11]} [(required :person :person/age :person/height)])
 
