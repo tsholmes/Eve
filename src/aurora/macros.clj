@@ -18,6 +18,11 @@
        (catch aurora.util.FailedCheck e#
          (throw (update-in e# [:trace] conj (list '~name ~@traced-args)))))))
 
+(defmacro catch [& body]
+  `(try
+     ~@body
+     (catch :default e# e#)))
+
 (defmacro with-path [path & body]
   `(binding [aurora.core/*path* (if (coll? ~path)
                                   (apply conj aurora.core/*path* ~path)

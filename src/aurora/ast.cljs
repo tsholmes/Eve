@@ -1,31 +1,9 @@
 (ns aurora.ast
   (:require aurora.util
-            [aurora.datalog :as datalog :refer [has-one group required exclusive id!]])
+            [aurora.datalog :as datalog]
+            [aurora.schema :as schema :refer [required exclusive group has-one id! ids! true! text! number! vector! map!]])
   (:require-macros [aurora.macros :refer [check]]
                    [aurora.datalog :refer [rule q1 q+ q* q?]]))
-
-(defn vector! [elem!]
-  (fn [kn value]
-    (check (vector? value))
-    (check (every? #(elem! kn %) value))))
-
-(defn map! [key! val!]
-  (fn [kn value]
-    (check (map? value))
-    (check (every? #(key! kn %) (keys value)))
-    (check (every? #(val! kn %) (vals value)))))
-
-(defn ids! [& as]
-  (vector! (apply id! as)))
-
-(defn text! [kn value]
-  (check (string? value)))
-
-(defn number! [kn value]
-  (check (number? value)))
-
-(defn true! [kn value]
-  (check (true? value)))
 
 (def rules
   ;; NOTE this is hand-stratified
