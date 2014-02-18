@@ -1,4 +1,4 @@
-(ns aurora.ast
+(ns aurora.code
   (:require aurora.util
             [aurora.datalog :as datalog]
             [aurora.schema :as schema :refer [required exclusive group has-one id! ids! true! text! number! vector! map!]])
