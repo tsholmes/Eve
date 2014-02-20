@@ -7,43 +7,39 @@
 
 (def rules
   ;; NOTE this is hand-stratified
-  ;; NOTE would prefer to merge :data and :pattern but requires more sophisticated rules eg (:contains ?id)
   [[(required :page :page/args :page/steps)
     (required :match :match/arg :match/branches)
     (required :branch :branch/pattern :branch/guards :branch/action)
     (required :call :call/fun :call/args)
-    (required :js :js/name)
-    (required :constant :constant/value)]
+    (required :js :js/name)]
 
-   [(exclusive :data :data/nil :data/ref :data/text :data/number :data/vector :data/map)
-    (exclusive :pattern :pattern/any :pattern/ref :pattern/text :pattern/number :pattern/vector :pattern/map)]
+   [(exclusive :data :data/nil :data/text :data/number :data/vector :data/map)
+    (exclusive :pattern :data :pattern/any :pattern/bind :pattern/vector :pattern/map)]
 
-   [(group :value :data :call :js :page)] ;; NOTE this is probably wrong, still got def and ref confused
+   [(exclusive :step? :data :call :match)]
 
-   [(exclusive :node :page :match :branch :call :js :constant :data :pattern)]
+   [(rule [?page :page/args ?args] (:in ?arg ?args) :return [arg :arg page])
+    (rule [?page :page/steps ?steps] (:in ?step ?steps) :return [step :step id])]
 
-   [(has-one :page/args (ids!))
-    (has-one :page/steps (ids! :node))
-    (has-one :match/arg (id!))
+   [(group :ref :step :arg :js :page :pattern)] ;; TODO check scoping (same page, def before ref, pattern only in branch)
+
+   [(has-one :page/args (ids! :arg))
+    (has-one :page/steps (ids! :step?))
+    (has-one :match/arg (id! :ref))
     (has-one :match/branches (ids! :branch))
     (has-one :branch/pattern (id! :pattern))
-    (has-one :branch/guards (ids! :value))
-    (has-one :branch/action (id! :value))
-    (has-one :constant/value (id! :data)) ;; creates identity - necessary for mutable code
+    (has-one :branch/guards (ids! :call))
+    (has-one :branch/action (id! :call))
     (has-one :data/nil true!)
-    (has-one :data/ref (id!))
     (has-one :data/text text!)
     (has-one :data/number number!)
-    (has-one :data/vector (vector! (id! :data)))
-    (has-one :data/map (map! (id! :data) (id! :data)))
+    (has-one :data/vector (vector! (id! :ref)))
+    (has-one :data/map (map! (id! :ref) (id! :ref)))
     (has-one :pattern/any true!)
-    (has-one :pattern/ref (id!))
-    (has-one :pattern/text text!)
-    (has-one :pattern/number number!)
     (has-one :pattern/vector (vector! (id! :pattern)))
-    (has-one :pattern/map (map! (id! :pattern) (id! :pattern))) ;; would prefer :data keys - maybe constants are not patterns?
-    (has-one :call/fun (id! :value))
-    (has-one :call/args (ids!))
+    (has-one :pattern/map (map! (id! :pattern) (id! :pattern)))
+    (has-one :call/fun (id! :ref))
+    (has-one :call/args (ids! :ref))
     (has-one :js/name text!)]])
 
 ;; examples
@@ -57,7 +53,8 @@
 
 (def example-a
   #{[:root :page/args [:arg_a :arg_b :arg_c]]
-    [:root :page/steps [:b_squared :four :four_a_c :result]]
+    [:root :page/steps [:nil :b_squared :four :four_a_c :result]]
+    [:nil :data/nil true]
     [:b_squared :call/fun :fun_mult]
     [:b_squared :call/args [:nil :arg_b :arg_b]]
     [:four :data/number 4]
@@ -73,14 +70,14 @@
 (def example-b
   #{[:root :page/args [:arg_x]]
     [:root :page/steps [:result]]
-    [:result :match/arg :x]
+    [:result :match/arg :arg_x]
     [:result :match/branches [:branch_map :branch_nested]]
     [:branch_map :branch/pattern :pattern_map]
     [:branch_map :branch/guards [:number_a :number_b]]
     [:branch_map :branch/action :action_map]
     [:pattern_map :pattern/map {:text_a :bind_a :text_b :bind_b}]
-    [:text_a :pattern/text "a"]
-    [:text_b :pattern/text "a"]
+    [:text_a :data/text "a"]
+    [:text_b :data/text "a"]
     [:bind_a :pattern/any true]
     [:bind_b :pattern/any true]
     [:number_a :call/fun :fun_number]
@@ -93,20 +90,20 @@
     [:branch_nested :branch/guards []]
     [:branch_nested :branch/action :action_nested]
     [:pattern_nested :pattern/map {:text_vec :bind_y}]
-    [:text_vec :pattern/text "vec"]
+    [:text_vec :data/text "vec"]
     [:bind_y :pattern/any true]
     [:action_nested :call/fun :vec]
     [:action_nested :call/args [:bind_y]]
     [:vec :page/args [:arg_y]]
     [:vec :page/steps [:vec_result]]
-    [:vec_result :match/arg :x]
+    [:vec_result :match/arg :arg_x]
     [:vec_result :match/branches [:branch_only]]
     [:branch_only :branch/pattern :pattern_only]
     [:branch_only :branch/guards []]
     [:branch_only :branch/action :action_only]
     [:pattern_only :pattern/vector [:bind_z :text_foo]]
     [:bind_z :pattern/any true]
-    [:text_foo :pattern/text "foo"]
+    [:text_foo :data/text "foo"]
     [:action_only :call/fun :replace]
     [:action_only :call/args [:bind_z :text_more]]
     [:text_more :data/text "more foo!"]})
