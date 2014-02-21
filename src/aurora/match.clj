@@ -1,4 +1,5 @@
-(ns aurora.match)
+(ns aurora.match
+  (:require cljs.compiler))
 
 (defn test [pred]
   `(when-not ~pred (throw (aurora.match.MatchFailure.))))
@@ -30,7 +31,7 @@
    nil
 
    (var? pattern)
-   `(~'js* ~(str (->var pattern) " = ~{}") ~input)
+   `(~'js* ~(str (cljs.compiler/munge (->var pattern)) " = ~{}") ~input)
 
    (or (true? pattern)
        (false? pattern)
