@@ -3,6 +3,8 @@
             aurora.util)
   (:require-macros [aurora.macros :refer [check deftraced]]))
 
+(declare expression->string statement->string)
+
 (defn head [x] [x]
   (try (name (first x)) (catch :default _ nil)))
 
@@ -45,11 +47,10 @@
                         (str "!(" (expression->string (nth x 1)) ")"))
    (= "?" (head x)) (do (check (= 4 (count x)))
                         (str "(" (expression->string (nth x 1)) ") ? (" (expression->string (nth x 2)) ") : (" (expression->string (nth x 3)) ")"))
-   (= "fn" (head x)) (do (check (= (count x) 5)
+   (= "fn" (head x)) (do (check (= (count x) 4)
                                 (vector? (nth x 2)))
                        (str "function " (when (nth x 1) (name->string (nth x 1))) "(" (join ", " (map name->string (nth x 2))) ") {\n"
                             (indent (statement->string (nth x 3))) "\n"
-                            (indent (str "return " (expression->string (nth x 4)) ";")) "\n"
                             "}"))
    (seq? x) (do (check (>= (count x) 1))
               (let [f (expression->string (nth x 0))
@@ -85,4 +86,6 @@
                                  (str " catch (" (name->string (nth catch 1)) ") {\n"
                                       (indent (statement->string (nth catch 2))) "\n"
                                       "}")))))
+   (= "return" (head x)) (do (check (= (count x 2)))
+                            (str "return " (expression->string (nth x 1)) ";"))
    :else (expression->string x)))
