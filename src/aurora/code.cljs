@@ -37,7 +37,7 @@
     (has-one :data/map (map! (id! :ref) (id! :ref)))
     (has-one :pattern/any true!)
     (has-one :pattern/vector (vector! (id! :pattern)))
-    (has-one :pattern/map (map! (id! :pattern) (id! :pattern)))
+    (has-one :pattern/map (map! (id! :data) (id! :pattern)))
     (has-one :call/fun (id! :ref))
     (has-one :call/args (ids! :ref))
     (has-one :js/name text!)]])
@@ -65,7 +65,7 @@
 
 (errors (datalog/knowledge (clojure.set/union stdlib example-a) rules))
 
-(q? (datalog/knowledge (clojure.set/union stdlib example-a) rules) [:root :page true])
+(q* (datalog/knowledge (clojure.set/union stdlib example-a) rules) [?id :page true] :return id)
 
 (def example-b
   #{[:root :page/args [:arg_x]]

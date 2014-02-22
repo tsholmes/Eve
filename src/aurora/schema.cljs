@@ -66,6 +66,13 @@
       :return
       error))
 
+(defn has-many [a v!]
+  (fn [knowledge]
+    (for [[e vs] (get-in knowledge [:a->e->vs a])
+          v vs
+          error (v! knowledge v)]
+      [e ::error (assoc error :e e :a a :v v)])))
+
 (defn has-one [a v!]
   (fn [knowledge]
     (concat
@@ -73,13 +80,6 @@
            :when (> (count vs) 1)]
        [e ::error (error "Too many values" :e e :a a :vs vs)])
      ((has-many a v!) knowledge))))
-
-(defn has-many [a v!]
-  (fn [knowledge]
-    (for [[e vs] (get-in knowledge [:a->e->vs a])
-          v vs
-          error (v! knowledge v)]
-      [e ::error (assoc error :e e :a a :v v)])))
 
 (defn group [name & as]
   (fn [knowledge]
@@ -97,7 +97,7 @@
         [e name true]
         [e ::error (error "Missing required attributes" :e e :group name :found-as found-as :missing-as missing-as)]))))
 
-;; TODO exclusive can potentially be extensible
+;; TODO exclusive can potentially be extensible if split into group and exclusive
 (defn exclusive [name & as]
   (fn [knowledge]
     (for [[e a->vs] (:e->a->vs knowledge)

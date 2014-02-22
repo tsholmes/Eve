@@ -72,7 +72,8 @@
     [:jamie :likes :types]
     [:jamie :hates :types]
     [:chris :likes :datalog]
-    [:chris :hates :types]}))
+    [:chris :hates :types]}
+  []))
 
 ((rule
   [?x :likes ?z]
@@ -85,7 +86,8 @@
     [:jamie :likes :types]
     [:jamie :hates :types]
     [:chris :likes :datalog]
-    [:chris :hates :types]}))
+    [:chris :hates :types]}
+  []))
 
 (def marmite
   (knowledge
