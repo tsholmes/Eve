@@ -4,9 +4,9 @@
             [aurora.datalog :as datalog]
             [aurora.schema :as schema]
             [aurora.code :as code]
-            [aurora.util :refer [map!]])
+            aurora.util)
   (:require-macros [aurora.macros :refer [for! check deftraced]]
-                   [aurora.datalog :refer [rule q1]]))
+                   [aurora.datalog :refer [rule q1 q*]]))
 
 ;; ids
 
@@ -30,7 +30,7 @@
   true ;; TODO not very helpful
   )
 
-(defn chain [forms]
+(defn chain [& forms]
   (reduce
    (fn [tail form]
      (clojure.walk/postwalk-replace {::tail tail} form))
@@ -80,7 +80,7 @@
    [(fn [kn]
       (q* kn
           [?e :pattern/vector ?elems]
-          (every? #(seq (has kn % :jsth/pattern)) elems) ;; hack to prevent q1 blowing up
+          (every? #(seq (datalog/has kn % :jsth/pattern)) elems) ;; hack to prevent q1 blowing up
           :return
           (let [jsth-elems (for [i (range (count elems))]
                              (let [elem (nth elems i)]
@@ -96,14 +96,14 @@
     (fn [kn]
       (q* kn
           [?e :pattern/map ?keys&vals]
-          (every? #(seq (has kn % :jsth/step)) (keys keys&vals)) ;; hack to prevent q1 blowing up
-          (every? #(seq (has kn % :jsth/pattern)) (vals keys&vals)) ;; hack to prevent q1 blowing up
+          (every? #(seq (datalog/has kn % :jsth/step)) (keys keys&vals)) ;; hack to prevent q1 blowing up
+          (every? #(seq (datalog/has kn % :jsth/pattern)) (vals keys&vals)) ;; hack to prevent q1 blowing up
           :return
           (let [jsth-vals (for [key (keys keys&vals)]
                             (let [val (get keys&vals key)]
                               (q1 kn
                                   [key :jsth/step ?jsth-key]
-                                  [val :jsth/pattern ?jsth-pattern]
+                                  [val :jsth/pattern ?jsth-val]
                                   :return
                                   `(do
                                      (let! ~(id->value key) ~jsth-key)
@@ -162,6 +162,12 @@
                               (do ~@jsth-steps
                                 (return ~(id->value (last steps)))))])))])
 
+(def rules
+  `[~data-rules
+    ~call-rules
+    ~@match-rules
+    ~page-rules])
+
 (defn one-rule [kn]
   (let [steps (q* kn
                   [?e :jsth/page ?jsth-page]
@@ -173,3 +179,8 @@
        (let! program {})
        ~@steps
        (return program))))
+
+(defn compile [facts]
+  (one-rule (datalog/knowledge facts (concat code/rules rules))))
+
+(compile )

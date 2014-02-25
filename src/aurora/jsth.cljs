@@ -86,6 +86,6 @@
                                  (str " catch (" (name->string (nth catch 1)) ") {\n"
                                       (indent (statement->string (nth catch 2))) "\n"
                                       "}")))))
-   (= "return" (head x)) (do (check (= (count x 2)))
+   (= "return" (head x)) (do (check (= (count x) 2))
                             (str "return " (expression->string (nth x 1)) ";"))
    :else (expression->string x)))

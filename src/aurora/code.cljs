@@ -19,7 +19,7 @@
    [(exclusive :step? :data :call :match)]
 
    [(rule [?page :page/args ?args] (:in ?arg ?args) :return [arg :arg page])
-    (rule [?page :page/steps ?steps] (:in ?step ?steps) :return [step :step id])]
+    (rule [?page :page/steps ?steps] (:in ?step ?steps) :return [step :step page])]
 
    [(group :ref :step :arg :js :page :pattern)] ;; TODO check scoping (same page, def before ref, pattern only in branch)
 
