@@ -6,7 +6,7 @@
             [aurora.code :as code]
             aurora.util)
   (:require-macros [aurora.macros :refer [for! check deftraced]]
-                   [aurora.datalog :refer [rule q1 q*]]))
+                   [aurora.datalog :refer [rule q1 q* q?]]))
 
 ;; ids
 
@@ -84,10 +84,10 @@
                                    [elem :jsth/pattern ?jsth-elem]
                                    :return
                                    `(do
-                                      (let! ~(id->value elem) (cljs.core.nth.call nil ::arg ~i))
+                                      (let! ~(id->value elem) (cljs.core.nth ::arg ~i))
                                       ~(postwalk-replace {::arg (id->value elem)} jsth-elem)))))]
-            [e :jsth/pattern `(if (cljs.core.vector_QMARK_.call nil ::arg)
-                                (if (= ~(count elems) (cljs.core.count.call nil ::arg))
+            [e :jsth/pattern `(if (cljs.core.vector_QMARK_ ::arg)
+                                (if (= ~(count elems) (cljs.core.count ::arg))
                                   ~(apply chain jsth-elems)))])))
     (fn [kn]
       (q* kn
@@ -103,27 +103,27 @@
                                   :return
                                   `(do
                                      (let! ~(id->value key) ~jsth-key)
-                                     (if (cljs.core.contains_QMARK_.call nil ::arg ~(id->value key))
+                                     (if (cljs.core.contains_QMARK_ ::arg ~(id->value key))
                                        (do
-                                         (let! ~(id->value val) (cljs.core.get.call nil ::arg ~(id->value key)))
+                                         (let! ~(id->value val) (cljs.core.get ::arg ~(id->value key)))
                                          ~(postwalk-replace {::arg (id->value val)} jsth-val)))))))]
-            [e :jsth/pattern `(if (cljs.core.map_QMARK_.call nil ::arg)
+            [e :jsth/pattern `(if (cljs.core.map_QMARK_ ::arg)
                                 ~(apply chain jsth-vals))])))]
    [(fn [kn]
       (q* kn
-          [?e :match/guards ?guards]
+          [?e :branch/guards ?guards]
+          (every? #(seq (datalog/has kn % :jsth/step)) guards) ;; hack to prevent q1 blowing up
           :return
           (let [jsth-guards (for [guard guards]
                               (q1 kn
                                   [guard :jsth/step ?jsth-guard]
                                   :return
                                   `(if ~jsth-guard ::tail)))]
-            [e :jsth/guards (apply chain jsth-guards)])))]
-   ;; TODO guards
+            [e :jsth/guards (apply chain (concat jsth-guards [::tail]))])))]
    [(rule [?e :branch/pattern ?pattern]
           [?pattern :jsth/pattern ?jsth-pattern]
           [?e :branch/guards ?guards]
-          [?guards :jsth/guards ?jsth-guards]
+          [?e :jsth/guards ?jsth-guards] ;; cant attach directly to guards :(
           [?e :branch/action ?action]
           [?action :jsth/step ?jsth-action]
           :return
@@ -134,6 +134,7 @@
       (q* kn
           [?e :match/arg ?arg]
           [?e :match/branches ?branches]
+          (every? #(seq (datalog/has kn % :jsth/branch)) branches) ;; hack to prevent q1 blowing up
           :return
           (let [jsth-branches (for [branch branches]
                                 (q1 kn
@@ -141,7 +142,7 @@
                                     :return
                                     jsth-branch))]
             [e :jsth/step `((fn [~(id->value arg)]
-                              ~(postwalk-replace {::arg arg} (apply chain jsth-branches)))
+                              ~(postwalk-replace {::arg (id->value arg)} (apply chain (concat jsth-branches [`(throw "failed")]))))
                             ~(id->value arg))])))]])
 
 (def page-rules
@@ -149,6 +150,7 @@
      (q* kn
          [?e :page/args ?args]
          [?e :page/steps ?steps]
+         (every? #(seq (datalog/has kn % :jsth/step)) steps) ;; hack to prevent q1 blowing up
          :return
          (let [jsth-steps (for [step steps]
                             (q1 kn
@@ -195,3 +197,19 @@
     #_js/console.log
     js/eval
     (.value_root 1 2 3))
+
+(-> (clojure.set/union code/stdlib code/example-b)
+    (datalog/knowledge (concat code/rules rules))
+    one-rule
+    (jsth/expression->string)
+    #_js/console.log
+    js/eval
+    (.value_root {"a" 1 "b" 2}))
+
+(-> (clojure.set/union code/stdlib code/example-b)
+    (datalog/knowledge (concat code/rules rules))
+    one-rule
+    (jsth/expression->string)
+    #_js/console.log
+    js/eval
+    (.value_root {"a" 1 "c" 2}))

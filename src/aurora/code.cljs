@@ -76,7 +76,7 @@
     [:branch_map :branch/action :action_map]
     [:pattern_map :pattern/map {:text_a :bind_a :text_b :bind_b}]
     [:text_a :data/text "a"]
-    [:text_b :data/text "a"]
+    [:text_b :data/text "b"]
     [:bind_a :pattern/any true]
     [:bind_b :pattern/any true]
     [:number_a :call/fun :fun_number]
