@@ -18,11 +18,7 @@
 
 (deftraced id->value [id] [id]
   (check id)
-  (symbol (str "value_" id)))
-
-(deftraced id->temp [id] [id]
-  (check id)
-  (symbol (str "temp_" id)))
+  (symbol (str "value_" (name id))))
 
 ;; compiler
 
@@ -144,23 +140,24 @@
                                     [branch :jsth/branch ?jsth-branch]
                                     :return
                                     jsth-branch))]
-            [e :jsth/step `((fn ~(id->temp e) [~(id->value arg)]
+            [e :jsth/step `((fn [~(id->value arg)]
                               ~(postwalk-replace {::arg arg} (apply chain jsth-branches)))
                             ~(id->value arg))])))]])
 
 (def page-rules
   [(fn [kn]
-     (rule [?e :page/args ?args]
-           [?e :page/steps ?steps]
-           :return
-           (let [jsth-steps (for [step steps]
-                              (q1 kn
-                                  [step :jsth/step ?jsth-step]
-                                  :return
-                                  `(let! ~(id->value step) ~jsth-step)))]
-             [e :jsth/page `(fn ~(id->value e) [~@(map id->value args)]
-                              (do ~@jsth-steps
-                                (return ~(id->value (last steps)))))])))])
+     (q* kn
+         [?e :page/args ?args]
+         [?e :page/steps ?steps]
+         :return
+         (let [jsth-steps (for [step steps]
+                            (q1 kn
+                                [step :jsth/step ?jsth-step]
+                                :return
+                                `(let! ~(id->value step) ~jsth-step)))]
+           [e :jsth/page `(fn ~(id->value e) [~@(map id->value args)]
+                            (do ~@jsth-steps
+                              (return ~(id->value (last steps)))))])))])
 
 (def rules
   `[~data-rules
@@ -169,18 +166,32 @@
     ~page-rules])
 
 (defn one-rule [kn]
-  (let [steps (q* kn
+  (let [primitives (q* kn
+                       [?e :js/name ?name]
+                       :return
+                       `(do
+                          (let! ~(id->value e) ~(symbol name))
+                          (set! (.. program ~(id->value e)) ~(id->value e))))
+        steps (q* kn
                   [?e :jsth/page ?jsth-page]
                   :return
                   `(do
-                     ~(postwalk-replace {::program 'program} jsth-page)
-                     (set! (.. ::program ~(id->value e)) ~(id->value e))))]
-    `(fn nil []
-       (let! program {})
-       ~@steps
-       (return program))))
+                     ~jsth-page
+                     (set! (.. program ~(id->value e)) ~(id->value e))))]
+    `((fn []
+        (do
+          (let! program {})
+          ~@primitives
+          ~@steps
+          (return program))))))
 
 (defn compile [facts]
   (one-rule (datalog/knowledge facts (concat code/rules rules))))
 
-(compile )
+(-> (clojure.set/union code/stdlib code/example-a)
+    (datalog/knowledge (concat code/rules rules))
+    one-rule
+    (jsth/expression->string)
+    #_js/console.log
+    js/eval
+    (.value_root 1 2 3))

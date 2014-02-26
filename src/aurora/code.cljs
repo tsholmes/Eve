@@ -45,23 +45,22 @@
 ;; examples
 
 (def stdlib
-  #{[:fun_mult :js/name "cljs.core._STAR_.call"]
-    [:fun_sub :js/name "cljs.core._.call"]
+  #{[:fun_mult :js/name "cljs.core._STAR_"]
+    [:fun_sub :js/name "cljs.core._"]
     [:fun_number :js/name "cljs.core.number_QMARK_"]
-    [:replace :js/name "replace"] ;; temporary hack
+    [:replace :js/name "null"] ;; temporary hack
     })
 
 (def example-a
   #{[:root :page/args [:arg_a :arg_b :arg_c]]
-    [:root :page/steps [:nil :b_squared :four :four_a_c :result]]
-    [:nil :data/nil true]
+    [:root :page/steps [:b_squared :four :four_a_c :result]]
     [:b_squared :call/fun :fun_mult]
-    [:b_squared :call/args [:nil :arg_b :arg_b]]
+    [:b_squared :call/args [:arg_b :arg_b]]
     [:four :data/number 4]
     [:four_a_c :call/fun :fun_mult]
-    [:four_a_c :call/args [:nil :four :arg_a :arg_c]]
+    [:four_a_c :call/args [:four :arg_a :arg_c]]
     [:result :call/fun :fun_sub]
-    [:result :call/args [:nil :b_squared :four_a_c]]})
+    [:result :call/args [:b_squared :four_a_c]]})
 
 (errors (datalog/knowledge (clojure.set/union stdlib example-a) rules))
 

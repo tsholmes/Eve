@@ -47,11 +47,11 @@
                         (str "!(" (expression->string (nth x 1)) ")"))
    (= "?" (head x)) (do (check (= 4 (count x)))
                         (str "(" (expression->string (nth x 1)) ") ? (" (expression->string (nth x 2)) ") : (" (expression->string (nth x 3)) ")"))
-   (= "fn" (head x)) (do (check (= (count x) 4)
-                                (vector? (nth x 2)))
-                       (str "function " (when (nth x 1) (name->string (nth x 1))) "(" (join ", " (map name->string (nth x 2))) ") {\n"
-                            (indent (statement->string (nth x 3))) "\n"
-                            "}"))
+   (= "fn" (head x)) (do (check (= (count x) 3)
+                                (vector? (nth x 1)))
+                       (str "(function (" (join ", " (map name->string (nth x 1))) ") {\n"
+                            (indent (statement->string (nth x 2))) "\n"
+                            "})"))
    (seq? x) (do (check (>= (count x) 1))
               (let [f (expression->string (nth x 0))
                     args (map expression->string (rest x))]
@@ -73,6 +73,11 @@
                          (str "var " (name->string (nth x 1)) " = " (expression->string (nth x 2)) ";"))
    (= "set!" (head x)) (do (check (= (count x) 3))
                          (str (var->string (nth x 1)) " = " (expression->string (nth x 2)) ";"))
+   (= "fn" (head x)) (do (check (= (count x) 4)
+                                (vector? (nth x 2)))
+                       (str "function " (name->string (nth x 1)) "(" (join ", " (map name->string (nth x 2))) ") {\n"
+                            (indent (statement->string (nth x 3))) "\n"
+                            "}"))
    (= "throw" (head x)) (do (check (= (count x) 2))
                           (str "throw " (expression->string (nth x 1)) ";"))
    (= "try" (head x)) (do (check (#{2 3} (count x)))
