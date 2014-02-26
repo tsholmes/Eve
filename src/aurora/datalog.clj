@@ -134,12 +134,12 @@
 
 (defmacro q1 [knowledge & args]
   `(let [result# (q* ~knowledge ~@args)]
-     (check (= (count result#) 1))
+     (assert (= (count result#) 1) result#)
      (first result#)))
 
 (defmacro q+ [knowledge & args]
   `(let [result# (q* ~knowledge ~@args)]
-     (check (>= (count result#) 1))
+     (assert (>= (count result#) 1) result#)
      result#))
 
 (defmacro q? [knowledge & args]
@@ -152,6 +152,6 @@
     `(let [~knowledge-sym ~knowledge
            values# ~(query->cljs (parse-args args) knowledge-sym)
            result# (into #{} values#)]
-       (check (= (count values#) (count result#)))
+       (assert (= (count values#) (count result#)) values#)
        result#)))
 
