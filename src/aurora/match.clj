@@ -57,13 +57,13 @@
    `(do
       ~(test `(map? ~input))
       ~@(for [key (keys pattern)]
-          (do (assert (not (var? key)))
+          (do (assert (not (var? key)) (pr-str key))
             (let [value (gensym "value")]
               `(let [~value (get ~input ~key ~::not-found)]
                  ~(test `(not= ~::not-found ~value))
                  ~(pattern->cljs (get pattern key) value))))))
 
-   :else (assert false)))
+   :else (assert false (pr-str pattern))))
 
 (defn match->cljs [patterns guards actions input]
   (let [input-sym (gensym "input")

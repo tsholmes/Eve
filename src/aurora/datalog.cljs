@@ -142,3 +142,10 @@
     (:in [?item ?count] ?items)
     :return
     count)
+
+(q* marmite
+    [:jamie :likes ?thing]
+    (:collect ?things [[?other :likes ?thing]
+                       :return other])
+    :return
+    [thing things other])

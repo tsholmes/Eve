@@ -2,11 +2,18 @@
   (:require [aurora.match :as match]
             [aurora.macros :refer [check]]))
 
+;; TODO naming of clauses sucks
+
+(declare parse-args query->cljs)
+
 (defn subquery? [pattern]
   (and (seq? pattern) (= :in (first pattern))))
 
+(defn collect? [pattern]
+  (and (seq? pattern) (= :collect (first pattern))))
+
 (defn guard? [pattern]
-  (and (seq? pattern) (not= :in (first pattern))))
+  (and (seq? pattern) (not (#{:in :collect} (first pattern)))))
 
 (defn bind-in [pattern bound]
   (cond
@@ -22,6 +29,10 @@
     `(doseq [~elem ~collection]
        ~(match/pattern->cljs pattern elem)
        ~tail)))
+
+(defn collect->cljs [[_ binding collected] knowledge tail]
+  `(let [~(match/->var binding) (into #{} ~(query->cljs collected knowledge))]
+     ~tail))
 
 (defn guard->cljs [guard tail]
   `(do ~(match/test guard)
@@ -83,11 +94,17 @@
    (subquery? clause)
    (let [bound-collection (bind-pattern (nth clause 2) bound)
          bound-pattern (bind-pattern (nth clause 1) bound)]
-     (assert (empty? (match/->vars bound-collection)))
-     [:in bound-pattern bound-collection])
+     (list :in bound-pattern bound-collection))
 
    (guard? clause)
    clause
+
+   (collect? clause)
+   ;; gross...
+   (let [parsed (parse-args (nth clause 2))
+         bound-parsed (update-in parsed [:where] (fn [where] (map #(bind-clause % (atom @bound)) where)))]
+     (swap! bound conj (match/->var (nth clause 1)))
+     (list :collect (nth clause 1) bound-parsed))
 
    :else
    (bind-pattern clause bound)))
@@ -107,6 +124,9 @@
            (cond
             (subquery? bound-clause)
             (subquery->cljs bound-clause tail)
+
+            (collect? bound-clause)
+            (collect->cljs bound-clause knowledge tail)
 
             (guard? bound-clause)
             (guard->cljs bound-clause tail)
@@ -153,12 +173,12 @@
 
 (defmacro q1 [knowledge & args]
   `(let [result# (q* ~knowledge ~@args)]
-     (assert (= (count result#) 1) result#)
+     (assert (= (count result#) 1) (pr-str result#))
      (first result#)))
 
 (defmacro q+ [knowledge & args]
   `(let [result# (q* ~knowledge ~@args)]
-     (assert (>= (count result#) 1) result#)
+     (assert (>= (count result#) 1) (pr-str result#))
      result#))
 
 (defmacro q? [knowledge & args]
@@ -171,6 +191,5 @@
     `(let [~knowledge-sym ~knowledge
            values# ~(query->cljs (parse-args args) knowledge-sym)
            result# (into #{} values#)]
-       (assert (= (count values#) (count result#)) values#)
+       (assert (= (count values#) (count result#)) (pr-str values#))
        result#)))
-
