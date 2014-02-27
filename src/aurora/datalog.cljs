@@ -119,6 +119,8 @@
 (:cache-eavs marmite)
 (:e->a->vs marmite)
 
+(q* marmite [:jamie :likes ?x] :return x)
+
 (q* marmite [:jamie ?relates :chris] :return relates)
 
 (q* (unknow marmite [:chris :hates :types]) [:jamie ?relates :chris] :return relates)

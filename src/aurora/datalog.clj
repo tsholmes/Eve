@@ -2,11 +2,11 @@
   (:require [aurora.match :as match]
             [aurora.macros :refer [check]]))
 
-(defn guard? [pattern]
-  (and (seq? pattern) (not= :in (first pattern))))
-
 (defn subquery? [pattern]
   (and (seq? pattern) (= :in (first pattern))))
+
+(defn guard? [pattern]
+  (and (seq? pattern) (not= :in (first pattern))))
 
 (defn bind-in [pattern bound]
   (cond
@@ -22,6 +22,10 @@
     `(doseq [~elem ~collection]
        ~(match/pattern->cljs pattern elem)
        ~tail)))
+
+(defn guard->cljs [guard tail]
+  `(do ~(match/test guard)
+     ~tail))
 
 (defn clause->cljs [[e a v :as eav] cache-eavs e->a->vs a->e->vs tail]
   (let [eav-sym (gensym "eav")
@@ -69,37 +73,52 @@
           (catch aurora.match.MatchFailure e#)))
      )))
 
+(defn bind-pattern [pattern bound]
+  (let [bound-pattern (bind-in pattern @bound)]
+    (swap! bound clojure.set/union (match/->vars pattern))
+    bound-pattern))
+
+(defn bind-clause [clause bound]
+  (cond
+   (subquery? clause)
+   (let [bound-collection (bind-pattern (nth clause 2) bound)
+         bound-pattern (bind-pattern (nth clause 1) bound)]
+     (assert (empty? (match/->vars bound-collection)))
+     [:in bound-pattern bound-collection])
+
+   (guard? clause)
+   clause
+
+   :else
+   (bind-pattern clause bound)))
+
 (defn query->cljs [{:keys [where ignore return]} knowledge]
   (let [result (gensym "result")
         cache-eavs (gensym "cache->eavs")
         e->a->vs (gensym "e->a->vs")
         a->e->vs (gensym "a->e->vs")
         bound (atom #{})
-        patterns (filter #(not (guard? %)) where)
-        guards (filter guard? where)
-        bound-patterns (for [pattern patterns]
-                         (let [bound-pattern (bind-in pattern @bound)]
-                           (swap! bound clojure.set/union (match/->vars pattern))
-                           bound-pattern))]
+        bound-clauses (map #(bind-clause % bound) where)]
     `(let [{~cache-eavs :cache-eavs ~e->a->vs :e->a->vs ~a->e->vs :a->e->vs} ~knowledge
-           ~@(interleave (match/->vars where) (repeat nil))
+           ~@(interleave @bound (repeat nil))
            ~result (transient [])]
        ~(reduce
-         (fn [tail bound-pattern]
+         (fn [tail bound-clause]
            (cond
-            (subquery? bound-pattern)
-            (subquery->cljs bound-pattern tail)
+            (subquery? bound-clause)
+            (subquery->cljs bound-clause tail)
+
+            (guard? bound-clause)
+            (guard->cljs bound-clause tail)
 
             :else
-            (clause->cljs bound-pattern cache-eavs e->a->vs a->e->vs tail)))
+            (clause->cljs bound-clause cache-eavs e->a->vs a->e->vs tail)))
          `(do
-            ~@(for [guard guards]
-                (match/test guard))
             ~@(for [action ignore]
                 action)
             ~@(for [output return]
                 `(~'js* ~(str result " = ~{}") (conj! ~result ~output))))
-         (reverse bound-patterns))
+         (reverse bound-clauses))
        (persistent! ~result))))
 
 (defn split-on [k elems]
