@@ -30,11 +30,14 @@
   (reduce
    (fn [tail form]
      (clojure.walk/postwalk-replace {::tail tail} form))
-   (reverse forms)))
+   (concat (reverse forms) [::tail])))
 
 (def schemas
-  [(schema/has-one :jsth/step (schema/is! jsth?))
-   (schema/has-one :jsth/pattern (schema/is! jsth?))])
+  [(schema/has-one :jsth/page (schema/is! jsth?))
+   (schema/has-one :jsth/step (schema/is! jsth?))
+   (schema/has-one :jsth/pattern (schema/is! jsth?))
+   (schema/has-one :jsth/branch (schema/is! jsth?))
+   (schema/has-one :jsth/guards (schema/is! jsth?))])
 
 (def data-rules
   [(rule [?e :data/nil _]
@@ -73,53 +76,47 @@
     (rule [?e :data/text ?text]
           :return
           [e :jsth/pattern `(if (= ::arg ~text) ::tail)])]
-   [(fn [kn]
-      (q* kn
-          [?e :pattern/vector ?elems]
-          (every? #(seq (datalog/has kn % :jsth/pattern)) elems) ;; hack to prevent q1 blowing up
-          :return
-          (let [jsth-elems (for [i (range (count elems))]
-                             (let [elem (nth elems i)]
-                               (q1 kn
-                                   [elem :jsth/pattern ?jsth-elem]
-                                   :return
+   [(rule
+     [?e :pattern/vector ?elems]
+     (:collect ?jsth-elems [(:in ?i (range (count ?elems)))
+                            [(nth elems i) :jsth/pattern ?jsth-elem]
+                            :return [i (nth elems i) jsth-elem]])
+     (= (count elems) (count jsth-elems))
+     :return
+     [e :jsth/pattern `(if (cljs.core.vector_QMARK_ ::arg)
+                         (if (= ~(count elems) (cljs.core.count ::arg))
+                           ~(apply chain
+                                   (for [[i elem jsth-elem] jsth-elems]
+                                     `(do
+                                        (let! ~(id->value elem) (cljs.core.nth ::arg ~i))
+                                        ~(postwalk-replace {::arg (id->value elem)} jsth-elem))))))])
+    (rule
+     [?e :pattern/map ?keys&vals]
+     (:collect ?jsth-keys&vals [(:in ?key (keys ?keys&vals))
+                                [?key :jsth/step ?jsth-key]
+                                [(get ?keys&vals ?key) :jsth/pattern ?jsth-val]
+                                :return
+                                [key jsth-key (get keys&vals key) jsth-val]])
+     (= (count keys&vals) (count jsth-keys&vals))
+     :return
+     [e :jsth/pattern `(if (cljs.core.map_QMARK_ ::arg)
+                         ~(apply chain
+                                 (for [[key jsth-key val jsth-val] jsth-keys&vals]
                                    `(do
-                                      (let! ~(id->value elem) (cljs.core.nth ::arg ~i))
-                                      ~(postwalk-replace {::arg (id->value elem)} jsth-elem)))))]
-            [e :jsth/pattern `(if (cljs.core.vector_QMARK_ ::arg)
-                                (if (= ~(count elems) (cljs.core.count ::arg))
-                                  ~(apply chain jsth-elems)))])))
-    (fn [kn]
-      (q* kn
-          [?e :pattern/map ?keys&vals]
-          (every? #(seq (datalog/has kn % :jsth/step)) (keys keys&vals)) ;; hack to prevent q1 blowing up
-          (every? #(seq (datalog/has kn % :jsth/pattern)) (vals keys&vals)) ;; hack to prevent q1 blowing up
-          :return
-          (let [jsth-vals (for [key (keys keys&vals)]
-                            (let [val (get keys&vals key)]
-                              (q1 kn
-                                  [key :jsth/step ?jsth-key]
-                                  [val :jsth/pattern ?jsth-val]
-                                  :return
-                                  `(do
-                                     (let! ~(id->value key) ~jsth-key)
-                                     (if (cljs.core.contains_QMARK_ ::arg ~(id->value key))
-                                       (do
-                                         (let! ~(id->value val) (cljs.core.get ::arg ~(id->value key)))
-                                         ~(postwalk-replace {::arg (id->value val)} jsth-val)))))))]
-            [e :jsth/pattern `(if (cljs.core.map_QMARK_ ::arg)
-                                ~(apply chain jsth-vals))])))]
-   [(fn [kn]
-      (q* kn
-          [?e :branch/guards ?guards]
-          (every? #(seq (datalog/has kn % :jsth/step)) guards) ;; hack to prevent q1 blowing up
-          :return
-          (let [jsth-guards (for [guard guards]
-                              (q1 kn
-                                  [guard :jsth/step ?jsth-guard]
-                                  :return
-                                  `(if ~jsth-guard ::tail)))]
-            [e :jsth/guards (apply chain (concat jsth-guards [::tail]))])))]
+                                      (let! ~(id->value key) ~jsth-key)
+                                      (if (cljs.core.contains_QMARK_ ::arg ~(id->value key))
+                                        (do
+                                          (let! ~(id->value val) (cljs.core.get ::arg ~(id->value key)))
+                                          ~(postwalk-replace {::arg (id->value val)} jsth-val)))))))])]
+   [(rule
+     [?e :branch/guards ?guards]
+     (:collect ?jsth-guards [(:in ?guard ?guards)
+                             [?guard :jsth/step ?jsth-guard]
+                             :return
+                             jsth-guard])
+     (= (count guards) (count jsth-guards))
+     :return
+     [e :jsth/guards (apply chain (for [jsth-guard jsth-guards] `(if ~jsth-guard ::tail)))])]
    [(rule [?e :branch/pattern ?pattern]
           [?pattern :jsth/pattern ?jsth-pattern]
           [?e :branch/guards ?guards]
@@ -130,20 +127,18 @@
           [e :jsth/branch `(do
                              ~(chain jsth-pattern jsth-guards `(return ~jsth-action))
                              ::tail)])]
-    [(fn [kn]
-      (q* kn
-          [?e :match/arg ?arg]
-          [?e :match/branches ?branches]
-          (every? #(seq (datalog/has kn % :jsth/branch)) branches) ;; hack to prevent q1 blowing up
-          :return
-          (let [jsth-branches (for [branch branches]
-                                (q1 kn
-                                    [branch :jsth/branch ?jsth-branch]
-                                    :return
-                                    jsth-branch))]
-            [e :jsth/step `((fn [~(id->value arg)]
-                              ~(postwalk-replace {::arg (id->value arg)} (apply chain (concat jsth-branches [`(throw "failed")]))))
-                            ~(id->value arg))])))]])
+   [(rule
+     [?e :match/arg ?arg]
+     [?e :match/branches ?branches]
+     (:collect ?jsth-branches [(:in ?branch ?branches)
+                               [?branch :jsth/branch ?jsth-branch]
+                               :return
+                               jsth-branch])
+     (= (count branches) (count jsth-branches))
+     :return
+     [e :jsth/step `((fn [~(id->value arg)]
+                       ~(postwalk-replace {::arg (id->value arg)} (apply chain (concat jsth-branches [`(throw "failed")]))))
+                     ~(id->value arg))])]])
 
 (def page-rules
   [(fn [kn]
@@ -167,25 +162,23 @@
     ~@match-rules
     ~page-rules])
 
-(defn one-rule [kn]
-  (let [primitives (q* kn
-                       [?e :js/name ?name]
-                       :return
-                       `(do
-                          (let! ~(id->value e) ~(symbol name))
-                          (set! (.. program ~(id->value e)) ~(id->value e))))
-        steps (q* kn
-                  [?e :jsth/page ?jsth-page]
-                  :return
-                  `(do
-                     ~jsth-page
-                     (set! (.. program ~(id->value e)) ~(id->value e))))]
-    `((fn []
-        (do
-          (let! program {})
-          ~@primitives
-          ~@steps
-          (return program))))))
+(def one-rule
+  (rule
+   (:collect ?primitives [[?e :js/name ?name] :return [e name]])
+   (:collect ?pages [[?e :jsth/page ?jsth-page] :return [e jsth-page]])
+   :return
+   `((fn []
+       (do
+         (let! program {})
+         ~@(for [[e name] primitives]
+             `(do
+                (let! ~(id->value e) ~(symbol name))
+                (set! (.. program ~(id->value e)) ~(id->value e))))
+         ~@(for [[e jsth-page] pages]
+             `(do
+                ~jsth-page
+                (set! (.. program ~(id->value e)) ~(id->value e))))
+         (return program))))))
 
 (defn compile [facts]
   (one-rule (datalog/knowledge facts (concat code/rules rules))))
@@ -193,6 +186,7 @@
 (-> (clojure.set/union code/stdlib code/example-a)
     (datalog/knowledge (concat code/rules rules))
     one-rule
+    first
     (jsth/expression->string)
     #_js/console.log
     js/eval
@@ -201,6 +195,7 @@
 (-> (clojure.set/union code/stdlib code/example-b)
     (datalog/knowledge (concat code/rules rules))
     one-rule
+    first
     (jsth/expression->string)
     #_js/console.log
     js/eval
@@ -209,6 +204,7 @@
 (-> (clojure.set/union code/stdlib code/example-b)
     (datalog/knowledge (concat code/rules rules))
     one-rule
+    first
     (jsth/expression->string)
     #_js/console.log
     js/eval
