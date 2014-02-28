@@ -115,7 +115,7 @@
         e->a->vs (gensym "e->a->vs")
         a->e->vs (gensym "a->e->vs")
         bound (atom #{})
-        bound-clauses (map #(bind-clause % bound) where)]
+        bound-clauses (doall (map #(bind-clause % bound) where))]
     `(let [{~cache-eavs :cache-eavs ~e->a->vs :e->a->vs ~a->e->vs :a->e->vs} ~knowledge
            ~@(interleave @bound (repeat nil))
            ~result (transient [])]
