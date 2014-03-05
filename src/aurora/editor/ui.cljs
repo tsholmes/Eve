@@ -68,32 +68,23 @@
 (defn click-add-notebook [e]
   (add-notebook! "untitled notebook"))
 
-(defdom notebooks-list [aurora]
-  [:ul {:className "notebooks"}
-   (each [notebook (cursors (:notebooks aurora))]
-         (let [click (fn []
-                       (swap! aurora-state assoc :notebook (:id @notebook) :screen :pages
-                              :stack (list [:notebook (:id @notebook)])))]
-           (if (input? (:id @notebook))
-             [:li {:className "notebook"}
-              [:input {:type "text" :defaultValue (:desc @notebook)
-                       :onKeyPress (fn [e]
-                                     (when (= 13 (.-charCode e))
-                                       (remove-input! (:id @notebook))
-                                       (swap! notebook assoc :desc (.-target.value e))
-                                       ))}]]
-             [:li {:className "notebook"
-                   :onContextMenu #(show-menu! % [{:label "Rename"
-                                                   :action (fn []
-                                                             (add-input! (:id @notebook) :desc)
-                                                             )}
-                                                  {:label "Remove"
-                                                   :action (fn []
-                                                             (remove-notebook! notebook))}])
-                   :onClick click}
-              (:desc @notebook)])))
-   [:li {:className "add-notebook"
-         :onClick click-add-notebook} "+"]])
+(defdom notebooks-list [knowledge]
+  (let [notebooks (q* knowledge
+                      [?id :notebook true]
+                      [?id :description ?desc]
+                      :return
+                      {:id id
+                       :desc desc})]
+    [:ul {:className "notebooks"}
+     (each [nb notebooks]
+           [:li {:onClick (fn []
+                            (println "swapped")
+                            (swap! (cursor [:app :app/stack []]) (constantly [(:id nb)]))
+                            )}
+            (:desc nb)]
+           )
+     [:li {:className "add-notebook"
+           :onClick click-add-notebook} "+"]]))
 
 ;;*********************************************************
 ;; Pages
@@ -104,33 +95,7 @@
 
 (defdom pages-list [notebook]
   [:ul {:className "notebooks"}
-   (each [page (filter #(get (:tags @%) :page) (cursors (:pages @notebook)))]
-         (let [click (fn []
-                       (swap! aurora-state assoc
-                              :page (:id @page)
-                              :editor-zoom :graph
-                              :stack (-> ()
-                                         (push notebook)
-                                         (push page)
-                                         )))]
-           (if (input? (:id @page))
-             [:li {:className "notebook"}
-              [:input {:type "text" :defaultValue (:desc @page)
-                       :onKeyPress (fn [e]
-                                     (when (= 13 (.-charCode e))
-                                       (remove-input! (:id @page))
-                                       (swap! page assoc :desc (.-target.value e))))}]]
-             [:li {:className "notebook"
-                   :onContextMenu (fn [e]
-                                    (show-menu! e [{:label "Rename"
-                                                                    :action (fn []
-                                                                              (add-input! (:id @page) :desc)
-                                                                              )}
-                                                                   {:label "Remove"
-                                                                    :action (fn []
-                                                                              (remove-page! notebook page))}]))
-                   :onClick click}
-              (:desc @page)])))
+   [:li "pages"]
    [:li {:className "add-notebook"
          :onClick #(click-add-page % notebook)} "+"]])
 
@@ -148,8 +113,12 @@
                            (.. (js/require "nw.gui") (Window.get) (showDevTools)))}  "D"]])
    (nav)
    [:div {:id "content"}
-    (steps-ui stack)
-
+    (condp = (first (q* stack [:app :app/screen ?screen] :return screen))
+      :steps (steps-ui stack)
+      :pages (pages-list stack)
+      :notebooks (notebooks-list stack)
+      (dom [:p "unknown yay"])
+     )
     ]])
 
 

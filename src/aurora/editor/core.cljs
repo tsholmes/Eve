@@ -46,6 +46,7 @@
   (let [stored (aget js/localStorage "aurora-state")]
     (if (and stored
              (not= "{}" stored)
+             (not= "#{}" stored)
              (not= "null" stored)
              (not= stored ""))
       (reset! aurora-state (thaw stored))

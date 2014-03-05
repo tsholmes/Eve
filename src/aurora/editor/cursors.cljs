@@ -19,17 +19,17 @@
 
   IReset
   (-reset! [o new-value]
-           (swap! knowledge batch new-value cur))
+           (swap! knowledge batch #{new-value} #{cur}))
 
   ISwap
   (-swap! [o f]
-          (-reset knowledge [(first cur) (second cur) (f (last cur))]))
+          (-reset! o [(first cur) (second cur) (f (last cur))]))
   (-swap! [o f a]
-          (-reset knowledge [(first cur) (second cur) (f (last cur) a)]))
+          (-reset! o [(first cur) (second cur) (f (last cur) a)]))
   (-swap! [o f a b]
-          (-reset knowledge [(first cur) (second cur) (f (last cur) a b)]))
+          (-reset! o [(first cur) (second cur) (f (last cur) a b)]))
   (-swap! [o f a b xs]
-          (-reset knowledge [(first cur) (second cur) (apply f (last cur) a b xs)]))
+          (-reset! o [(first cur) (second cur) (apply f (last cur) a b xs)]))
 
 
   IEquiv
