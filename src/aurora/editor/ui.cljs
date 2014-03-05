@@ -183,9 +183,6 @@
                        :return
                        [id :ui/notebook-item (notebook-item (cursor [id :notebook/description ?desc]))]))
 
-(swap! aurora-state datalog/dangerously-learn-rules [[r-screen]])
-
-
 ;;*********************************************************
 ;; Re-rendering
 ;;*********************************************************
@@ -220,3 +217,4 @@
 ;;*********************************************************
 
 (core/repopulate)
+(swap! aurora-state datalog/dangerously-learn-rules [[r-screen]])
