@@ -1,5 +1,6 @@
 (ns aurora.compiler.jsth
-  (:require [clojure.string :refer [join split-lines]])
+  (:require [clojure.string :refer [join split-lines]]
+            [aurora.util.core :as util])
   (:require-macros [aurora.macros :refer [check deftraced]]))
 
 (declare expression->string statement->string)

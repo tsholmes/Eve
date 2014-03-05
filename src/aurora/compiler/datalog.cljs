@@ -1,6 +1,7 @@
 (ns aurora.compiler.datalog
   (:require clojure.set
-            aurora.compiler.match)
+            aurora.compiler.match
+            [aurora.util.core :as util])
   (:require-macros [aurora.macros :refer [check deftraced]]
                    [aurora.compiler.match :refer [match]]
                    [aurora.compiler.datalog :refer [rule defrule q* q? q!]]))
@@ -45,6 +46,13 @@
 (defn unknow [knowledge & facts]
   (let [new-facts (clojure.set/difference (:axiom-eavs knowledge) facts)]
     (fixpoint (reduce add-eav (Knowledge. #{} #{} {} {} (:rules knowledge)) facts))))
+
+(defn batch [knowledge to-add to-remove]
+  (let [new-facts (clojure.set/difference (clojure.set/union (:axiom-eavs knowledge) to-add) to-remove)]
+    (fixpoint (reduce add-eav (Knowledge. #{} #{} {} {} (:rules knowledge)) new-facts))))
+
+(defn dangerously-learn-rules [knowledge rules]
+  (fixpoint (reduce #(update-in %1 [:rules] conj %2) knowledge rules)))
 
 ;; TODO needs auto stratification
 #_(defn learn [knowledge & rules]

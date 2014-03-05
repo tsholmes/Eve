@@ -1,12 +1,13 @@
 (ns aurora.compiler.code
-  (:require [aurora.compiler.datalog :as datalog]
+  (:require [aurora.util.core :as util]
+            [aurora.compiler.datalog :as datalog]
             [aurora.compiler.schema :as schema :refer [errors required exclusive group has-one id! ids! true! text! number! vector! map!]])
   (:require-macros [aurora.macros :refer [check]]
                    [aurora.compiler.datalog :refer [rule q1 q+ q* q?]]))
 
 (def rules
   ;; NOTE this is hand-stratified
-  [[(required :notebook :notebook/description :notebook/pages)
+  [[(required :notebook :description :notebook/pages)
     (required :page :page/args :page/steps)
     (required :match :match/arg :match/branches)
     (required :branch :branch/pattern :branch/guards :branch/action)
@@ -20,8 +21,8 @@
 
    [(rule [?notebook :notebook/pages ?pages] (:in ?page ?pages) :return [page :page/notebook notebook])]
 
-   [(rule [?page :page/args ?args] (:in ?arg ?args) :return [arg :arg page])
-    (rule [?page :page/steps ?steps] (:in ?step ?steps) :return [step :step page])]
+   [(rule [?page :page/args ?args] (:in ?arg ?args) :return [arg :arg/page page])
+    (rule [?page :page/steps ?steps] (:in ?step ?steps) :return [step :step/page page])]
 
    [(group :ref :step :arg :js :page :pattern)] ;; TODO check scoping (same page, def before ref, pattern only in branch)
 
@@ -73,6 +74,7 @@
 (def example-b
   #{[:root_notebook :notebook/description "wooohoo"]
     [:root_notebook :notebook/pages [:root :vec]]
+    [:root_notebook :active true]
     [:root :page/args [:arg_x]]
     [:root :page/steps [:result]]
     [:result :match/arg :arg_x]
@@ -115,4 +117,6 @@
 
 (errors (datalog/knowledge (clojure.set/union stdlib example-b) rules))
 
-(q* (datalog/knowledge (clojure.set/union stdlib example-b) rules) [:vec :notebook/page ?id] :return id)
+(def kn (datalog/knowledge (clojure.set/union stdlib example-b) rules))
+(time (dotimes [x 1] (apply datalog/know kn (for [z (range 20)] [z :foo "zomg"]))))
+(q* kn  [?id :step/page :vec] :return [id])

@@ -1,6 +1,7 @@
 (ns aurora.util.core)
 
 (set! js/self (js* "this"))
+(set! *print-fn* (fn []))
 
 (defn nw? []
   (boolean (aget js/self "require")))

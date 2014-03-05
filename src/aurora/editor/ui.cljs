@@ -1,43 +1,24 @@
 (ns aurora.editor.ui
   (:require [aurora.compiler.compiler :as compiler]
-            [aurora.util.core :as util :refer [cycling-move now]]
-            [aurora.compiler.jsth :as jsth]
-            [aurora.runtime.table :as table]
             [aurora.editor.dom :as dom]
-            [aurora.editor.core :as core :refer [from-cache assoc-cache! remove-input! input?
-                                                 add-page! add-notebook! remove-page! remove-notebook!
-                                                 add-input! add-step! remove-step!]]
+            [aurora.editor.core :as core :refer [aurora-state]]
+            [aurora.compiler.code :as code]
             [aurora.editor.running :as run]
-            [aurora.editor.lines :as lines]
             [aurora.editor.nodes :as nodes]
+            [aurora.compiler.datalog :as datalog]
             [clojure.string :as string]
-            [clojure.walk :as walk]
             [clojure.set :as set]
             [cljs.reader :as reader]
-            [aurora.editor.stack :refer [push stack->cursor set-stack! current-stack?]]
-            [aurora.editor.cursors :as cursors :refer [mutable? cursor cursors overlay-cursor value-cursor
-                                           cursor->id cursor->path swap!]]
-            [aurora.editor.core :refer [aurora-state default-state]])
-  (:require-macros [aurora.macros :refer [defdom dom mapv-indexed]]))
+            [aurora.util.core :as util :refer [now]]
+            [aurora.editor.cursors :as cursors :refer [cursor cursors]])
+  (:require-macros [aurora.macros :refer [defdom dom mapv-indexed]]
+                   [aurora.compiler.datalog :refer [rule q1 q+ q* q?]]))
 
 ;;*********************************************************
 ;; utils
 ;;*********************************************************
 
 ;(js/React.initializeTouchEvents true)
-
-(defn datatype-name [x]
-  (cond
-   (nil? x) "string"
-   (#{:ref/id :ref/js} (:type x)) "ref"
-   (:type x) (name (:type x))
-   (or (true? x) (false? x)) "boolean"
-   (keyword? x) "keyword"
-   (number? x) "number"
-   (string? x) "string"
-   (map? x) "map"
-   (vector? x) "list"
-   :else (str (type x))))
 
 (extend-type function
   Fn
@@ -167,12 +148,42 @@
                            (.. (js/require "nw.gui") (Window.get) (showDevTools)))}  "D"]])
    (nav)
    [:div {:id "content"}
-    (cond
-     (zero? (count stack)) (notebooks-list @aurora-state)
-     (stack->cursor stack :page) (steps-ui stack)
-     (stack->cursor stack :notebook) (pages-list (stack->cursor stack :notebook))
-     :else (notebooks-list @aurora-state))
+    (steps-ui stack)
+
     ]])
+
+
+;;*********************************************************
+;; Rules
+;;*********************************************************
+
+(def r-screen (rule [:app :app/stack ?stack]
+                    (:collect ?page [[?id :page true]
+                                     (:in ?id stack)
+                                     :return
+                                     id])
+                    (:collect ?notebooks [[?idn :notebook true]
+                                          (:in ?idn stack)
+                                         :return
+                                         idn])
+                    :return
+                    [:app :app/screen
+                     (cond
+                      (seq page) :steps
+                      (seq notebooks) :pages
+                      :else :notebooks)]))
+
+(def r-notebook-item (rule [?id :notebook true]
+                           [?id :description ?desc]
+                           :return
+                           [id :ui/notebook-item (notebook-item (cursor [id :notebook/description ?desc]))]))
+
+(def r-notebooks (rule [?id :notebook true]
+                       [?id :description ?desc]
+                       :return
+                       [id :ui/notebook-item (notebook-item (cursor [id :notebook/description ?desc]))]))
+
+(swap! aurora-state datalog/dangerously-learn-rules [[r-screen]])
 
 
 ;;*********************************************************
@@ -188,10 +199,9 @@
 
 (defn update []
   (let [start (now)
-        stack (:stack @aurora-state)
-        page (stack->cursor stack :page)]
+        knowledge @aurora-state]
     (js/React.renderComponent
-     (aurora-ui stack)
+     (aurora-ui knowledge)
      (js/document.getElementById "wrapper"))
     (focus!)
     (set! (.-innerHTML (js/document.getElementById "render-perf")) (- (now) start))
