@@ -1,25 +1,34 @@
 (ns aurora.editor.core
   (:require [aurora.compiler.compiler :as compiler]
             [aurora.compiler.code :as code]
+            [aurora.compiler.datalog :as datalog]
+            [aurora.compiler.schema :as schema]
             [cljs.reader :as reader]
-            [clojure.set :as set]))
+            [clojure.set :as set])
+  (:require-macros [aurora.compiler.datalog :refer [rule q1 q+ q* q?]]))
 
 (enable-console-print!)
+
+(def r-persistent (schema/group :persistent :notebook :page :step? :step :ref))
 
 ;;*********************************************************
 ;; Aurora state
 ;;*********************************************************
 
-(def aurora-state (atom nil))
-(def default-state #{[:app :app/stack '()]})
+(def default-state (datalog/knowledge #{[:app :app/stack []]} (concat code/rules [[r-persistent]])))
+(def aurora-state (atom default-state))
 
 ;;*********************************************************
 ;; Aurora state (storage!)
 ;;*********************************************************
 
-
 (defn freeze [state]
-  (-> state
+  (-> (q* state
+          [?id :persistent true]
+          [?id ?key ?value]
+          (not= key :persistent)
+          :return
+          [id key value])
       (pr-str)))
 
 (defn store! [state]
@@ -29,7 +38,9 @@
   (let [state (if (string? state)
                 (reader/read-string state)
                 state)]
-    (set/union state code/stdlib)))
+    (datalog/knowledge
+     (set/union state code/stdlib)
+     (concat code/rules [[r-persistent]]))))
 
 (defn repopulate []
   (let [stored (aget js/localStorage "aurora-state")]
@@ -38,7 +49,7 @@
              (not= "null" stored)
              (not= stored ""))
       (reset! aurora-state (thaw stored))
-      (reset! aurora-state (thaw default-state)))))
+      (reset! aurora-state default-state))))
 
 (defn clear-storage! []
   (aset js/localStorage "aurora-state" nil))

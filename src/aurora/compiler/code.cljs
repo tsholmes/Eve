@@ -7,7 +7,7 @@
 
 (def rules
   ;; NOTE this is hand-stratified
-  [[(required :notebook :description :notebook/pages)
+  [[(required :notebook :notebook/pages)
     (required :page :page/args :page/steps)
     (required :match :match/arg :match/branches)
     (required :branch :branch/pattern :branch/guards :branch/action)
@@ -21,12 +21,12 @@
 
    [(rule [?notebook :notebook/pages ?pages] (:in ?page ?pages) :return [page :page/notebook notebook])]
 
-   [(rule [?page :page/args ?args] (:in ?arg ?args) :return [arg :arg/page page])
-    (rule [?page :page/steps ?steps] (:in ?step ?steps) :return [step :step/page page])]
+   [(rule [?page :page/args ?args] (:in ?arg ?args) :return [arg :arg->page page])
+    (rule [?page :page/steps ?steps] (:in ?step ?steps) :return [step :step->page page])]
 
-   [(group :ref :step :arg :js :page :pattern)] ;; TODO check scoping (same page, def before ref, pattern only in branch)
+   [(group :ref :step->page :arg->page :js :page :pattern)] ;; TODO check scoping (same page, def before ref, pattern only in branch)
 
-   [(has-one :page/args (ids! :arg))
+   [(has-one :page/args (ids! :arg->page))
     (has-one :page/steps (ids! :step?))
     (has-one :match/arg (id! :ref))
     (has-one :match/branches (ids! :branch))
@@ -55,7 +55,7 @@
     })
 
 (def example-a
-  #{[:root_notebook :notebook/description "wooohoo"]
+  #{[:root_notebook :description "wooohoo"]
     [:root_notebook :notebook/pages [:root]]
     [:root :page/args [:arg_a :arg_b :arg_c]]
     [:root :page/steps [:b_squared :four :four_a_c :result]]
@@ -72,7 +72,7 @@
 (q* (datalog/knowledge (clojure.set/union stdlib example-a) rules) [?id :page true] :return id)
 
 (def example-b
-  #{[:root_notebook :notebook/description "wooohoo"]
+  #{[:root_notebook :description "wooohoo"]
     [:root_notebook :notebook/pages [:root :vec]]
     [:root_notebook :active true]
     [:root :page/args [:arg_x]]
@@ -119,4 +119,4 @@
 
 (def kn (datalog/knowledge (clojure.set/union stdlib example-b) rules))
 (time (dotimes [x 1] (apply datalog/know kn (for [z (range 20)] [z :foo "zomg"]))))
-(q* kn  [?id :step/page :vec] :return [id])
+(q* kn  [?id :step->page :vec] :return [id])
