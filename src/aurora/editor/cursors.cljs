@@ -1,6 +1,6 @@
 (ns aurora.editor.cursors
   (:require [aurora.editor.core :refer [aurora-state]]
-            [aurora.compiler.datalog :refer [batch]]))
+            [aurora.compiler.datalog :as datalog :refer [batch]]))
 
 ;;*********************************************************
 ;; Cursors
@@ -14,39 +14,52 @@
 (defn mutable? [cursor]
   (not (aget cursor "locked")))
 
-(deftype KnowledgeCursor [knowledge cur]
+(deftype KnowledgeCursor [knowledge entity attr value]
   ICursor
 
   IReset
   (-reset! [o new-value]
-           (swap! knowledge batch #{new-value} #{cur}))
+           (swap! knowledge batch #{[entity attr new-value]} #{[entity attr (.-value o)]})
+           (set! (.-value o) new-value))
+
+  ILookup
+  (-lookup [o k]
+           (cursor entity k))
 
   ISwap
   (-swap! [o f]
-          (-reset! o [(first cur) (second cur) (f (last cur))]))
+          (-reset! o (f value)))
   (-swap! [o f a]
-          (-reset! o [(first cur) (second cur) (f (last cur) a)]))
+          (-reset! o (f value a)))
   (-swap! [o f a b]
-          (-reset! o [(first cur) (second cur) (f (last cur) a b)]))
+          (-reset! o (f value a b)))
   (-swap! [o f a b xs]
-          (-reset! o [(first cur) (second cur) (apply f (last cur) a b xs)]))
+          (-reset! o (apply f value a b xs)))
 
 
   IEquiv
   (-equiv [o other] (identical? o other))
 
   IDeref
-  (-deref [this] (last cur))
+  (-deref [this] (.-value this))
 
   IPrintWithWriter
   (-pr-writer [this writer opts]
-    (-write writer (str "#<Cursor: " (pr-str cur) ">")))
+    (-write writer (str "#<Cursor: " (pr-str [entity attr value]) ">")))
 
   IHash
   (-hash [this] (goog.getUid this)))
 
-(defn cursor [cur]
-  (KnowledgeCursor. aurora-state cur))
 
-(defn cursors [ids]
-  (map cursor ids))
+(defn cursor! [entity attr value]
+  (let [cur (datalog/has @aurora-state entity attr)]
+    (KnowledgeCursor. aurora-state entity attr (first cur))))
+
+(defn cursor [entity attr]
+  (let [cur (datalog/has @aurora-state entity attr)]
+    (when cur
+      (KnowledgeCursor. aurora-state entity attr (first cur)))))
+
+(defn cursors [ids attr]
+  (filter identity (map #(cursor % attr) ids)))
+

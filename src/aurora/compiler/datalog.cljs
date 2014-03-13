@@ -60,11 +60,16 @@
 
 (defn has
   ([kn e]
-   (get-in kn [:e->a->vs e]))
+   (assoc
+     (get-in kn [:e->a->vs e])
+     :entity e))
   ([kn e a]
    (get-in kn [:e->a->vs e a]))
   ([kn e a v]
    (get-in kn [:e->a->vs e a v])))
+
+(defn all [kn e]
+  (keys (get-in kn [:a->e->vs e])))
 
 ;; tests
 

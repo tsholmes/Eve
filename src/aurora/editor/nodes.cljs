@@ -10,7 +10,15 @@
     {:id id
      :facts
      [[id :notebook/pages []]
-      [id :noteboook/description desc]]}))
+      [id :description desc]]}))
+
+(defn page [desc]
+  (let [id (new-id)]
+    {:id id
+     :facts
+     [[id :page/steps []]
+      [id :page/args []]
+      [id :description desc]]}))
 
 (defn scalar [x]
   (let [id (new-id)]

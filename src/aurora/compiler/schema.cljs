@@ -27,7 +27,8 @@
       (error "Value is missing attribute" :x x :missing-a a))))
 
 (defn id? [id]
-  (keyword? id))
+  (or(string? id)
+     (keyword? id)))
 
 (defn id! [& as]
   (all (is! id?) (apply has! as)))

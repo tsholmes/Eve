@@ -27,6 +27,7 @@
           [?id :persistent true]
           [?id ?key ?value]
           (not= key :persistent)
+          (= (.indexOf (str key) "ui/") -1)
           :return
           [id key value])
       (pr-str)))
@@ -39,8 +40,14 @@
                 (reader/read-string state)
                 state)]
     (datalog/knowledge
-     (set/union state code/stdlib)
-     (concat code/rules [[r-persistent]]))))
+     (set/union state code/stdlib #{[:app :app/stack []]})
+     (concat code/rules [[r-persistent]
+                         [js/aurora.editor.ui.r-screen]
+                         [js/aurora.editor.ui.r-nav-items]
+                         [js/aurora.editor.ui.r-nav-page
+                          js/aurora.editor.ui.r-nav-notebook]
+                         js/aurora.editor.ui.data-rules
+                         ]))))
 
 (defn repopulate []
   (let [stored (aget js/localStorage "aurora-state")]
