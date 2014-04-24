@@ -218,28 +218,62 @@
             (aset node->stats node "dupes" (+ (aget node->stats node "dupes") 1)))))
       (aset node->state node set))))
 
-(defn index-update! [key-ixes]
+(defn i-insert [index fact ixes]
+  (let [values (.-values fact)]
+    (loop [index index
+           i 0]
+      (if (>= i (alength ixes))
+        true ;; was already in index
+        (if-let [next (aget index (aget values (aget ixes i)))]
+          (recur next (+ i 1)) ;; keep looking
+          (loop [index index ;; start inserting
+                 i i]
+              (if (>= (+ i 1) (alength ixes))
+                (do (aset index (aget values (aget ixes i)) fact)
+                  false) ;; was added to index
+                (let [next #js {}]
+                  (aset index (aget values (aget ixes i)) next)
+                  (recur next (+ i 1))))))))))
+
+(defn index-update! [ixes]
   (fn [node node->state node->stats in-facts out-facts]
     (let [index (aget node->state node)]
       (dotimes [i (alength in-facts)]
-        (let [fact (aget in-facts i)
-              key (fact-ixes fact key-ixes)
-              facts (or (get index key) (transient #{}))]
-          (if (not (contains? facts fact))
-            (do
-              (assoc!! index key (conj! facts fact))
-              (apush out-facts fact))
-            (aset node->stats node "dupes" (+ (aget node->stats node "dupes") 1)))))
+        (let [fact (aget in-facts i)]
+          (if (i-insert index fact ixes)
+            (aset node->stats node "dupes" (+ (aget node->stats node "dupes") 1))
+            (apush out-facts fact))))
       (aset node->state node index))))
 
-(defn lookup-update! [index-node key-ixes val-ixes]
+;; order is join - left - right
+;; prefixes
+
+(defn i-seq [index index-len results]
+  (if (<= index-len 0)
+    (apush results index)
+    (js/goog.object.forEach index #(i-seq % (- index-len 1) results))))
+
+(defn i-get [index index-len fact ixes]
+  (let [values (.-values fact)]
+    (loop [index index
+           i 0]
+      (if (>= i (alength ixes))
+        (let [results #js []]
+          (i-seq index (- index-len (alength ixes)) results)
+          results)
+        (if-let [next (aget index (aget values (aget ixes i)))]
+          (recur next (+ i 1))
+          #js [])))))
+
+(defn lookup-update! [index-node index-len key-ixes val-ixes]
   (fn [node node->state node->stats in-facts out-facts]
     (let [index (aget node->state index-node)]
       (dotimes [i (alength in-facts)]
         (let [left-fact (aget in-facts i)
-              key (fact-ixes left-fact key-ixes)]
-          (doseq [right-fact (get index key)]
-              (apush out-facts (fact-join-ixes left-fact right-fact val-ixes))))))))
+              right-facts (i-get index index-len left-fact key-ixes)]
+          (dotimes [j (alength right-facts)]
+            (let [right-fact (aget right-facts j)]
+              (apush out-facts (fact-join-ixes left-fact right-fact val-ixes)))))))))
 
 (comment
 
@@ -278,7 +312,7 @@
 (defrecord Union [nodes])
 (defrecord FilterMap [nodes fun&args])
 (defrecord Index [nodes key-ixes])
-(defrecord Lookup [nodes index-node key-ixes val-ixes])
+(defrecord Lookup [nodes index-node index-len key-ixes val-ixes])
 
 (defn flow->nodes [flow]
   (:nodes flow))
@@ -303,7 +337,7 @@
               (condp = (type flow)
                 Union (transient #{})
                 FilterMap nil
-                Index (transient {})
+                Index #js {}
                 Lookup nil))
         (doseq [in-node (:nodes flow)]
           (apush (aget node->out-nodes in-node) node))
@@ -312,7 +346,7 @@
                 Union (union-update!)
                 FilterMap (filter-map-update! (apply (resolve (first (:fun&args flow))) (rest (:fun&args flow))))
                 Index (index-update! (:key-ixes flow))
-                Lookup (lookup-update! (:index-node flow) (:key-ixes flow) (:val-ixes flow))))
+                Lookup (lookup-update! (:index-node flow) (:index-len flow) (:key-ixes flow) (:val-ixes flow))))
         (aset node->stats node
               (condp = (type flow)
                 Union #js {:dupes 0}
@@ -337,7 +371,7 @@
               (condp = (type flow)
                 Union (transient #{})
                 FilterMap nil
-                Index (transient {})
+                Index #js {}
                 Lookup nil))
           (aset node->stats node
               (condp = (type flow)
@@ -613,21 +647,23 @@
 
 (defn join-clauses [plan nodes-a vars-a nodes-b vars-b]
   (let [key-vars (intersection (set vars-a) (set vars-b))
-        key-vars-a (sort-by #(ix-of vars-a %) key-vars)
-        key-vars-b (sort-by #(ix-of vars-b %) key-vars)
-        val-vars (union (set vars-a) (set vars-b))
-        index-ixes-a (ixes-of vars-a key-vars-a)
-        index-ixes-b (ixes-of vars-b key-vars-b)
+        key-vars-a (filter key-vars vars-a)
+        key-vars-b (filter key-vars vars-b)
+        non-key-vars-a (filter #(not (key-vars %)) vars-a)
+        non-key-vars-b (filter #(not (key-vars %)) vars-b)
+        val-vars (concat vars-a non-key-vars-b)
+        index-ixes-a (ixes-of vars-a (concat key-vars-a non-key-vars-a))
+        index-ixes-b (ixes-of vars-b (concat key-vars-b non-key-vars-b))
         lookup-ixes-a (ixes-of vars-a key-vars-b)
         lookup-ixes-b (ixes-of vars-b key-vars-a)
         val-ixes-a (ixes-of (concat vars-a vars-b) val-vars)
         val-ixes-b (ixes-of (concat vars-b vars-a) val-vars)
         [plan index-a] (add-flow plan (->Index nodes-a index-ixes-a))
         index-b (inc (count (:node->flow plan))) ;; gross :(
-        [plan lookup-a] (add-flow plan (->Lookup [index-a] index-b lookup-ixes-a val-ixes-a))
+        [plan lookup-a] (add-flow plan (->Lookup [index-a] index-b (count vars-b) lookup-ixes-a val-ixes-a))
         [plan index-b'] (add-flow plan (->Index nodes-b index-ixes-b))
         _ (assert (= index-b index-b'))
-        [plan lookup-b] (add-flow plan (->Lookup [index-b] index-a lookup-ixes-b val-ixes-b))]
+        [plan lookup-b] (add-flow plan (->Lookup [index-b] index-a (count vars-a) lookup-ixes-b val-ixes-b))]
     [plan [lookup-a lookup-b] (vec (distinct (concat vars-a vars-b)))]))
 
 (comment
@@ -717,6 +753,20 @@
     (add-facts state :known|pretended edge (into-array (for [i (range 100)]
                                                          (->edge i (inc i)))))
     (fixpoint! state)
+    (get-facts state :known|pretended connected))
+
+  (let [plan (-> empty-flow-plan
+                 (add-shape :known edge)
+                 (add-shape :pretended connected)
+                 (add-rules [(Rule. [(Recall. :known|pretended (->edge 'x 'y))
+                                     (Recall. :known|pretended (->edge 'w 'z))
+                                     (Recall. :known|pretended (->edge 'a 'b))
+                                     (Output. :pretended (->connected 'x 'x))
+                                     (Output. :pretended (->connected 'w 'w))
+                                     (Output. :pretended (->connected 'a 'a))])]))
+        state (flow-plan->flow-state plan)]
+    (add-facts state :known|pretended edge #js [(->edge 0 1) (->edge 1 2) (->edge 2 3) (->edge 3 1)])
+    (time (fixpoint! state))
     (get-facts state :known|pretended connected))
   )
 
@@ -855,3 +905,45 @@
                          (get-in old-state [:plan :kind->shape :known])))]
     (js/console.timeEnd "unchanged?")
     unchanged?))
+
+(comment
+
+  (def index #js {})
+
+  (insert? index (Fact. nil #js [1 1 1] nil) #js [0 1 2])
+
+  (contains? index (Fact. nil #js [1 2 3] nil) #js [0 1 2])
+
+  (let [index #js {}]
+    (time
+     (do
+       (dotimes [i 100000]
+         (let [fact (Fact. nil #js [(mod i 1000) (mod i 100) (mod i 10)] nil)]
+           (i-insert? index fact #js [0 1])))
+       (dotimes [i 100000]
+         (let [fact (Fact. nil #js [(mod i 1000) (mod i 100) (mod i 10)] nil)]
+           (i-contains? index fact #js [0 1]))))))
+
+  (def x #js {})
+
+  (aset x 1 :bad)
+
+  (aget x 1)
+
+  (let [index (transient {})]
+    (time
+     (do
+       (dotimes [i 100000]
+         (let [fact (Fact. nil #js [(mod i 1000) (mod i 100) (mod i 10)] nil)
+               key (fact-ixes fact #js [0 1])
+               facts (or (get index key)
+                         (let [facts (transient #{})]
+                           (assoc!! index key facts)
+                           facts))]
+           (if (not (cljs.core/contains? facts fact))
+             (conj!! facts fact))))
+       (dotimes [i 100000]
+         (let [fact (Fact. nil #js [(mod i 1000) (mod i 100) (mod i 10)] nil)]
+           (cljs.core/contains? index fact #js [0 1]))))))
+
+  )
