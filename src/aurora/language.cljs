@@ -275,11 +275,7 @@
         (let [fact (aget in-facts i)]
           (if (i-insert index fact ixes)
             (aset node->stats node "dupes" (+ (aget node->stats node "dupes") 1))
-            (apush out-facts fact))))
-      (aset node->state node index))))
-
-;; order is join - left - right
-;; prefixes
+            (apush out-facts fact)))))))
 
 (defn i-seq [index index-len results]
   (if (<= index-len 0)
@@ -864,6 +860,26 @@
   (fixpoint! state-0)
   (for [state (take 5 (iterate #(tick&fixpoint plan %) state-0))]
     (count (get-facts state :known|pretended connected))))
+
+  (let [plan (-> empty-flow-plan
+                 (add-shape :known edge)
+                 (add-rules
+                  [(Rule. [(Recall. :known|pretended (->edge 'x 'y))
+                           (Output. :forgotten (->edge 'x 'y))])]))
+        state-0 (flow-plan->flow-state plan)]
+    (add-facts state-0 :known|pretended edge #js [(->edge 0 1) (->edge 1 2) (->edge 2 3) (->edge 3 1)])
+    (fixpoint! state-0)
+    (let [state-1 (fixpoint! (tick plan state-0))]
+      (get-facts state-1 :known|pretended edge)))
+
+  (let [plan (-> empty-flow-plan
+                 (add-shape :pretended edge)
+                 )
+        state-0 (flow-plan->flow-state plan)]
+    (add-facts state-0 :known|pretended edge #js [(->edge 0 1) (->edge 1 2) (->edge 2 3) (->edge 3 1)])
+    (fixpoint! state-0)
+    (let [state-1 (fixpoint! (tick plan state-0))]
+      (get-facts state-1 :known|pretended edge)))
   )
 
 ;; RESOLVE
@@ -932,51 +948,7 @@
   (let [unchanged? (and (= (:plan old-state) (:plan new-state))
                         (every?
                          (fn [shape]
-                           (and (arr= (get-facts old-state :known|pretended shape) (get-facts new-state :known|pretended shape))
-                                (arr= (get-facts old-state :remembered shape) (get-facts new-state :remembered shape))
-                                (arr= (get-facts old-state :forgotten shape) (get-facts new-state :forgotten shape))))
+                           (arr= (get-facts old-state :known|pretended shape) (get-facts new-state :known|pretended shape)))
                          (get-in old-state [:plan :kind->shape :known])))]
     (js/console.timeEnd "unchanged?")
     unchanged?))
-
-(comment
-
-  (def index #js {})
-
-  (insert? index (Fact. nil #js [1 1 1] nil) #js [0 1 2])
-
-  (contains? index (Fact. nil #js [1 2 3] nil) #js [0 1 2])
-
-  (let [index #js {}]
-    (time
-     (do
-       (dotimes [i 100000]
-         (let [fact (Fact. nil #js [(mod i 1000) (mod i 100) (mod i 10)] nil)]
-           (i-insert? index fact #js [0 1])))
-       (dotimes [i 100000]
-         (let [fact (Fact. nil #js [(mod i 1000) (mod i 100) (mod i 10)] nil)]
-           (i-contains? index fact #js [0 1]))))))
-
-  (def x #js {})
-
-  (aset x 1 :bad)
-
-  (aget x 1)
-
-  (let [index (transient {})]
-    (time
-     (do
-       (dotimes [i 100000]
-         (let [fact (Fact. nil #js [(mod i 1000) (mod i 100) (mod i 10)] nil)
-               key (fact-ixes fact #js [0 1])
-               facts (or (get index key)
-                         (let [facts (transient #{})]
-                           (assoc!! index key facts)
-                           facts))]
-           (if (not (cljs.core/contains? facts fact))
-             (conj!! facts fact))))
-       (dotimes [i 100000]
-         (let [fact (Fact. nil #js [(mod i 1000) (mod i 100) (mod i 10)] nil)]
-           (cljs.core/contains? index fact #js [0 1]))))))
-
-  )
