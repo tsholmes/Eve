@@ -205,18 +205,51 @@
         (when-let [new-fact (.call fun nil fact)]
           (apush out-facts new-fact))))))
 
+(defn u-insert [index fact]
+  (let [values (.-values fact)]
+    (loop [index index
+           i 0]
+      (if (>= i (alength values))
+        true ;; was already in index
+        (if-let [next (aget index (aget values i))]
+          (recur next (+ i 1)) ;; keep looking
+          (loop [index index ;; start inserting
+                 i i]
+              (if (>= (+ i 1) (alength values))
+                (do (aset index (aget values i) fact)
+                  false) ;; was added to index
+                (let [next #js {}]
+                  (aset index (aget values i) next)
+                  (recur next (+ i 1))))))))))
+
+(defn u-contains? [index fact]
+  (let [values (.-values fact)]
+    (loop [index index
+           i 0]
+      (if (>= i (alength values))
+        true
+        (if-let [next (aget index (aget values i))]
+          (recur next (+ i 1))
+          false)))))
+
+(defn u-seq
+  ([index]
+   (let [results #js []]
+     (u-seq index results)
+     results))
+  ([index results]
+   (if (instance? Fact index) ;; TODO how safe is this?
+     (apush results index)
+     (js/goog.object.forEach index #(u-seq % results)))))
+
 (defn union-update! []
   (fn [node node->state node->stats in-facts out-facts]
-    (let [set (aget node->state node)]
+    (let [index (aget node->state node)]
       (dotimes [i (alength in-facts)]
         (let [fact (aget in-facts i)]
-          ;; TODO this double lookup is a bottleneck
-          (if (not (contains? set fact))
-            (do
-              (conj!! set fact)
-              (apush out-facts fact))
-            (aset node->stats node "dupes" (+ (aget node->stats node "dupes") 1)))))
-      (aset node->state node set))))
+          (if (u-insert index fact)
+            (aset node->stats node "dupes" (+ (aget node->stats node "dupes") 1))
+            (apush out-facts fact)))))))
 
 (defn i-insert [index fact ixes]
   (let [values (.-values fact)]
@@ -335,7 +368,7 @@
       (let [flow (nth node->flow node)]
         (aset node->state node
               (condp = (type flow)
-                Union (transient #{})
+                Union #js {}
                 FilterMap nil
                 Index #js {}
                 Lookup nil))
@@ -369,7 +402,7 @@
         (let [flow (nth node->flow node)]
           (aset node->state node
               (condp = (type flow)
-                Union (transient #{})
+                Union #js {}
                 FilterMap nil
                 Index #js {}
                 Lookup nil))
@@ -783,7 +816,7 @@
 (defn get-facts [state memory shape]
   (memory! memory)
   (let [node (get-memory (:plan state) memory shape)]
-    (into-array (aget (:node->state state) node))))
+    (u-seq (aget (:node->state state) node))))
 
 ;; TODO make this incremental
 (defn tick
@@ -798,11 +831,11 @@
              remembered (aget (:node->state state) (get-memory (:plan state) :remembered shape))
              forgotten (aget (:node->state state) (get-memory (:plan state) :forgotten shape))
              new-known (aget (:node->facts new-state) (get-memory (:plan new-state) :known|pretended shape))]
-         (doseq [fact known]
-           (when (or (not (contains? forgotten fact)) (contains? remembered fact))
+         (doseq [fact (u-seq known)]
+           (when (or (not (u-contains? forgotten fact)) (u-contains? remembered fact))
              (apush new-known fact)))
-         (doseq [fact remembered]
-           (when (and (not (contains? known fact)) (not (contains? forgotten fact)))
+         (doseq [fact (u-seq remembered)]
+           (when (and (not (u-contains? known fact)) (not (u-contains? forgotten fact)))
              (apush new-known fact)))))
      (js/console.timeEnd "tick")
      new-state)))
