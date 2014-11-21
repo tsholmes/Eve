@@ -180,3 +180,15 @@ var a = ZZTree.empty(1)
 var b = a
 .remove(["foo", 0])
 .remove(["foo", "bar"])
+
+function bench(n) {
+  console.time("insert");
+  var t = ZZTree.empty(4);
+  for(var i = 0; i < n; i++) {
+    t = t.insert([i + "zomg", i+ "foo" + i, i+"asdfasd" + i]);
+  }
+  console.timeEnd("insert");
+  return t;
+}
+
+// var x = bench(1000000);
