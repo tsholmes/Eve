@@ -7,8 +7,45 @@
 // how to walk up on delete? return true/false for empty?
 // leaves are just non-nodes?
 
-function ZZTree(branchLength, root) {
-  this.branchLength = branchLength;
+function hash(value) {
+  if (typeof(value) === 'number') {
+    return value;
+  } else if (typeof(value) === 'string') {
+    var hash = 0, i, chr, len;
+    if (value.length == 0) return hash;
+    for (i = 0, len = value.length; i < len; i++) {
+      hash = (((hash << 5) - hash) + value.charCodeAt(i)) | 0;
+    }
+    return hash;
+  } else {
+    throw new Error("What is " + typeof(value) + ": " + value);
+  }
+};
+
+function makePath(branchDepth, fact) {
+  var len = fact.length;
+  var hashes = [];
+  for (var i = 0; i < len; i++) {
+   hashes[i] = hash(fact[i]);
+  }
+  var path = [];
+  var pathBits = hashes.length * 32;
+  var pathChunks = pathBits / branchDepth;
+  for (var i = 0; i < pathChunks; i++) {
+    path[i] = 0;
+  }
+  for (var i = 0; i < pathBits; i++) {
+    var h = hashes[i % len];
+    var bit = (h >> ((i / len) | 0)) & 1;
+    var chunkIx = (i / branchDepth | 0);
+    path[chunkIx] = path[chunkIx] | (bit << (i % branchDepth));
+  }
+  return path;
+}
+
+function ZZTree(branchDepth, branchWidth, root) {
+  this.branchDepth = branchDepth
+  this.branchWidth = branchWidth;
   this.root = root;
 }
 
@@ -23,7 +60,7 @@ ZZTree.prototype = {
     var branches = [this.root];
     while (branches.length > 0) {
       var branch = branches.pop();
-      for (var i = 0; i < this.branchLength; i++) {
+      for (var i = 0; i < this.branchWidth; i++) {
         var child = branch[i];
         if (child === undefined) {
           // pass
@@ -57,7 +94,7 @@ ZZTree.prototype = {
           branch[branchIx] = new ZZLeaf(path, values);
           break down;
         } else {
-          var childBranch = Array(this.branchLength);
+          var childBranch = Array(this.branchWidth);
           childBranch[child.path[pathIx]] = child;
           branch[branchIx] = childBranch;
           branch = childBranch;
@@ -71,7 +108,7 @@ ZZTree.prototype = {
       }
     }
 
-    return new ZZTree(this.branchLength, root);
+    return new ZZTree(this.branchDepth, this.branchWidth, root);
   },
 
   remove: function(path, value) {
@@ -85,7 +122,7 @@ ZZTree.prototype = {
       pathIx++;
       var child = branch[branchIx];
       if (child === undefined) {
-        return new ZZTree(this.branchLength, root); // nothing to clean up
+        return new ZZTree(this.branchDepth, this.branchWidth, root); // nothing to clean up
       } else if (child.constructor === ZZLeaf) {
         var values = child.values.slice();
         splice: for (var i = 0; i < values.length; i++) {
@@ -96,7 +133,7 @@ ZZTree.prototype = {
         }
         if (values.length > 0) {
           branch[branchIx] = new ZZLeaf(child.path, values);
-          return new ZZTree(this.branchLength, root); // nothing to clean up
+          return new ZZTree(this.branchDepth, this.branchWidth, root); // nothing to clean up
         } else {
           delete branch[branchIx];
           break down;
@@ -114,22 +151,23 @@ ZZTree.prototype = {
       var branchIx = path[pathIx]
       pathIx--;
       delete branch[branchIx];
-      for (var i = 0; i < this.branchLength; i++) {
+      for (var i = 0; i < this.branchWidth; i++) {
         if (branch[i] !== undefined) {
           break up; // done cleaning up
         }
       }
     }
 
-    return new ZZTree(this.branchLength, root);
+    return new ZZTree(this.branchDepth, this.branchWidth, root);
   }
 }
 
-ZZTree.empty = function(branchLength) {
-  return new ZZTree(branchLength, Array(branchLength));
+ZZTree.empty = function(branchDepth) {
+  var branchWidth = Math.pow(2,branchDepth);
+  return new ZZTree(branchDepth, branchWidth, Array(branchWidth));
 }
 
-var a = ZZTree.empty(2).insert([0,0,0], "a");
+var a = ZZTree.empty(1).insert([0,0,0], "a");
 var b = a.insert([0,0,1], "b");
 var c = b.insert([1,0,1], "c");
 var d = c.insert([1,0,0], "d");
