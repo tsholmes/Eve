@@ -9,7 +9,7 @@
 
 function hash(value) {
   if (typeof(value) === 'number') {
-    return value;
+    return value|0; // TODO this is not the best hash...
   } else if (typeof(value) === 'string') {
     var hash = 0, i, chr, len;
     if (value.length == 0) return hash;
