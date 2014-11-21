@@ -11,22 +11,14 @@
 
 int_rotate_left = (function int_rotate_left(x,n){return ((x << n) | (x >>> (- n)));
 });
-if((typeof Math.imul !== 'undefined') && (!(((function (){var G__12618 = (4294967295);var G__12619 = (5);return (Math.imul.cljs$core$IFn$_invoke$arity$2 ? Math.imul.cljs$core$IFn$_invoke$arity$2(G__12618,G__12619) : Math.imul.call(null,G__12618,G__12619));
-})() === (0)))))
-{imul = (function imul(a,b){var G__12622 = a;var G__12623 = b;return (Math.imul.cljs$core$IFn$_invoke$arity$2 ? Math.imul.cljs$core$IFn$_invoke$arity$2(G__12622,G__12623) : Math.imul.call(null,G__12622,G__12623));
-});
-} else
-{imul = (function imul(a,b){var ah = ((a >>> (16)) & (65535));var al = (a & (65535));var bh = ((b >>> (16)) & (65535));var bl = (b & (65535));return (((al * bl) + ((((ah * bl) + (al * bh)) << (16)) >>> (0))) | (0));
-});
-}
 m3_seed = (0);
 m3_C1 = (3432918353);
 m3_C2 = (461845907);
-m3_mix_K1 = (function m3_mix_K1(k1){return imul(int_rotate_left(imul(k1,m3_C1),(15)),m3_C2);
+m3_mix_K1 = (function m3_mix_K1(k1){return Math.imul(int_rotate_left(Math.imul(k1,m3_C1),(15)),m3_C2);
 });
-m3_mix_H1 = (function m3_mix_H1(h1,k1){return (imul(int_rotate_left((h1 ^ k1),(13)),(5)) + (3864292196));
+m3_mix_H1 = (function m3_mix_H1(h1,k1){return (Math.imul(int_rotate_left((h1 ^ k1),(13)),(5)) + (3864292196));
 });
-m3_fmix = (function m3_fmix(h1,len){var h1__$1 = h1;var h1__$2 = (h1__$1 ^ len);var h1__$3 = (h1__$2 ^ (h1__$2 >>> (16)));var h1__$4 = imul(h1__$3,(2246822507));var h1__$5 = (h1__$4 ^ (h1__$4 >>> (13)));var h1__$6 = imul(h1__$5,(3266489909));var h1__$7 = (h1__$6 ^ (h1__$6 >>> (16)));return h1__$7;
+m3_fmix = (function m3_fmix(h1,len){var h1__$1 = h1;var h1__$2 = (h1__$1 ^ len);var h1__$3 = (h1__$2 ^ (h1__$2 >>> (16)));var h1__$4 = Math.imul(h1__$3,(2246822507));var h1__$5 = (h1__$4 ^ (h1__$4 >>> (13)));var h1__$6 = Math.imul(h1__$5,(3266489909));var h1__$7 = (h1__$6 ^ (h1__$6 >>> (16)));return h1__$7;
 });
 m3_hash_int = (function m3_hash_int(in$){if((in$ === (0)))
 {return in$;
@@ -48,7 +40,7 @@ continue;
 }
 break;
 }
-})();var h1__$1 = ((((in$.length & (1)) === (1)))?(h1 ^ m3_mix_K1(in$.charCodeAt((in$.length - (1))))):h1);return m3_fmix(h1__$1,imul((2),in$.length));
+})();var h1__$1 = ((((in$.length & (1)) === (1)))?(h1 ^ m3_mix_K1(in$.charCodeAt((in$.length - (1))))):h1);return m3_fmix(h1__$1,Math.imul((2),in$.length));
 });
 hash_string = (function hash_string(s){if(!((s == null)))
 {var len = s.length;if((len > (0)))
@@ -56,7 +48,7 @@ hash_string = (function hash_string(s){if(!((s == null)))
 if((i < len))
 {{
 var G__12628 = (i + (1));
-var G__12629 = (imul((31),hash) + s.charCodeAt(i));
+var G__12629 = (Math.imul((31),hash) + s.charCodeAt(i));
 i = G__12628;
 hash = G__12629;
 continue;
@@ -100,10 +92,31 @@ if(typeof o === 'number')
 
 // --- end of cljs.core ---
 
+function pathEqual(a, b) {
+  var len = a.length;
+  for(var i = 0; i < len; i++) {
+    if(a[i] !== b[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function comparePath(as, bs) {
+  var len = as.length;
+  for(var i = 0; i < len; i++) {
+    var a = as[i];
+    var b = bs[i];
+    if (a < b) return -1;
+    if (a > b) return 1;
+  }
+  return 0;
+}
+
 function makePath(branchDepth, fact) {
   assert(branchDepth <= 8);
   var len = fact.length;
-  var hashes = [];
+  var hashes = new Int32Array(fact.length);
   for (var i = 0; i < len; i++) {
    hashes[i] = hash(fact[i]);
   }
@@ -114,7 +127,7 @@ function makePath(branchDepth, fact) {
   for (var i = 0; i < pathBits; i++) {
     var h = hashes[i % len];
     var bit = (h >> ((i / len) | 0)) & 1;
-    var chunkIx = (i / branchDepth | 0);
+    var chunkIx = (i / branchDepth) | 0;
     path[chunkIx] = path[chunkIx] | (bit << (i % branchDepth));
   }
   return path;
@@ -127,9 +140,13 @@ function ZZTree(branchDepth, branchWidth, root) {
   this.root = root;
 }
 
-function ZZLeaf(path, facts) {
+function ZZLeaf(path, fact) {
   this.path = path;
-  this.facts = facts;
+  this.fact = fact;
+}
+
+function compareLeaf(a, b) {
+  return comparePath(a.path, b.path);
 }
 
 ZZTree.prototype = {
@@ -144,7 +161,7 @@ ZZTree.prototype = {
           // pass
         }
         else if (child.constructor === ZZLeaf) {
-          Array.prototype.push.apply(facts, child.facts);
+          facts.push(child.fact);
         } else {
           branches.push(child);
         }
@@ -153,40 +170,48 @@ ZZTree.prototype = {
     return facts;
   },
 
-  insert: function(fact) {
-    var path = makePath(this.branchDepth, fact);
-    var pathIx = 0;
-    var root = this.root.slice();
-    var branch = root;
-
-    down: while (true) {
-      var branchIx = path[pathIx];
-      pathIx++;
+  bulkInsertToBranch: function(branch, pathIx, leaves, lo, hi) {
+    assert(pathIx < leaves[lo].path.length); // TODO handle collisions
+    var childLo = lo;
+    var childHi = lo;
+    while (childLo <= hi) {
+      var branchIx = leaves[childLo].path[pathIx];
+      while ((childHi < hi) && (leaves[childHi+1].path[pathIx] === branchIx)) childHi++;
       var child = branch[branchIx];
       if (child === undefined) {
-        branch[branchIx] = new ZZLeaf(path, [fact]);
-        break down;
-      } else if (child.constructor === ZZLeaf) {
-        if (arrayEqual(path, child.path)) { // TODO this is an expensive check?
-          var facts = child.facts.slice();
-          facts.push(fact);
-          branch[branchIx] = new ZZLeaf(path, facts);
-          break down;
+        if (childLo === childHi) {
+          branch[branchIx] = leaves[childLo];
         } else {
           var childBranch = Array(this.branchWidth);
-          childBranch[child.path[pathIx]] = child;
           branch[branchIx] = childBranch;
-          branch = childBranch;
-          continue down;
+          this.bulkInsertToBranch(childBranch, pathIx+1, leaves, childLo, childHi);
         }
+      } else if (child.constructor === ZZLeaf) {
+        var childBranch = Array(this.branchWidth);
+        assert(pathIx+1 < leaves[lo].path.length); // TODO handle collisions
+        branch[branchIx] = childBranch;
+        childBranch[child.path[pathIx+1]] = child;
+        this.bulkInsertToBranch(childBranch, pathIx+1, leaves, childLo, childHi);
       } else {
         var childBranch = child.slice();
         branch[branchIx] = childBranch;
-        branch = childBranch;
-        continue down;
+        this.bulkInsertToBranch(childBranch, pathIx+1, leaves, childLo, childHi);
       }
+      childLo = childHi + 1;
+      childHi = childLo;
     }
+  },
 
+  bulkInsert: function(facts) {
+    var leaves = [];
+    var branchDepth = this.branchDepth;
+    for (var i = 0, len = facts.length; i < len; i++) {
+      var fact = facts[i];
+      leaves[i] = new ZZLeaf(makePath(branchDepth, fact), fact);
+    }
+    leaves.sort(compareLeaf);
+    var root = this.root.slice();
+    this.bulkInsertToBranch(root, 0, leaves, 0, leaves.length - 1);
     return new ZZTree(this.branchDepth, this.branchWidth, root);
   },
 
@@ -242,31 +267,31 @@ ZZTree.prototype = {
   }
 }
 
+// TODO zztree.validate
+
 ZZTree.empty = function(branchDepth) {
   var branchWidth = Math.pow(2,branchDepth);
   return new ZZTree(branchDepth, branchWidth, Array(branchWidth));
 }
 
-var a = ZZTree.empty(1)
-.insert(["foo", 0])
-.insert(["bar", 0])
-.insert([0, 0])
-.insert(["foo", "bar"])
-.insert(["foo", "bar"])
-.insert(["foo", "bar"])
+var a = ZZTree.empty(1).bulkInsert([["foo", 0],
+                                    ["bar", 0],
+                                    [0, 0],
+                                    ["foo", "bar"]]);
 
-var b = a
-.remove(["foo", 0])
-.remove(["foo", "bar"])
+// var b = a
+// .remove(["foo", 0])
+// .remove(["foo", "bar"])
 
 function bench(n) {
-  console.time("insert");
-  //console.profile("insert");
-  var t = ZZTree.empty(4);
+  var facts = [];
   for(var i = 0; i < n; i++) {
-    t = t.insert([i + "zomg", i + "foo" + i, i + "asdfasd" + i]);
+    facts.push([i + "zomg", i + "foo" + i, i + "asdfasd" + i]);
   }
-  //console.profileEnd("insert");
+  console.time("insert");
+  console.profile("insert");
+  var t = ZZTree.empty(4).bulkInsert(facts);
+  console.profileEnd("insert");
   console.timeEnd("insert");
   return t;
 }
