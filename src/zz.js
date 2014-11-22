@@ -1,13 +1,4 @@
-// 4 bits
-// array 16
-// no path compression
-// mix bytes
-// entirely persistent, bulk update- sort by path and return finish ix
-// counting of values
-// how to walk up on delete? return true/false for empty?
-// leaves are just non-nodes?
-
-// --- start of cljs.core ---
+// --- from cljs.core ---
 
 function int_rotate_left(x,n) {
   return ((x << n) | (x >>> (- n)));
