@@ -9,86 +9,60 @@
 
 // --- start of cljs.core ---
 
-int_rotate_left = (function int_rotate_left(x,n){return ((x << n) | (x >>> (- n)));
-});
-m3_seed = (0);
-m3_C1 = (3432918353);
-m3_C2 = (461845907);
-m3_mix_K1 = (function m3_mix_K1(k1){return Math.imul(int_rotate_left(Math.imul(k1,m3_C1),(15)),m3_C2);
-});
-m3_mix_H1 = (function m3_mix_H1(h1,k1){return (Math.imul(int_rotate_left((h1 ^ k1),(13)),(5)) + (3864292196));
-});
-m3_fmix = (function m3_fmix(h1,len){var h1__$1 = h1;var h1__$2 = (h1__$1 ^ len);var h1__$3 = (h1__$2 ^ (h1__$2 >>> (16)));var h1__$4 = Math.imul(h1__$3,(2246822507));var h1__$5 = (h1__$4 ^ (h1__$4 >>> (13)));var h1__$6 = Math.imul(h1__$5,(3266489909));var h1__$7 = (h1__$6 ^ (h1__$6 >>> (16)));return h1__$7;
-});
-m3_hash_int = (function m3_hash_int(in$){if((in$ === (0)))
-{return in$;
-} else
-{var k1 = m3_mix_K1(in$);var h1 = m3_mix_H1(m3_seed,k1);return m3_fmix(h1,(4));
-}
-});
-m3_hash_unencoded_chars = (function m3_hash_unencoded_chars(in$){var h1 = (function (){var i = (1);var h1 = m3_seed;while(true){
-if((i < in$.length))
-{{
-var G__12624 = (i + (2));
-var G__12625 = m3_mix_H1(h1,m3_mix_K1((in$.charCodeAt((i - (1))) | (in$.charCodeAt(i) << (16)))));
-i = G__12624;
-h1 = G__12625;
-continue;
-}
-} else
-{return h1;
-}
-break;
-}
-})();var h1__$1 = ((((in$.length & (1)) === (1)))?(h1 ^ m3_mix_K1(in$.charCodeAt((in$.length - (1))))):h1);return m3_fmix(h1__$1,Math.imul((2),in$.length));
-});
-hash_string = (function hash_string(s){if(!((s == null)))
-{var len = s.length;if((len > (0)))
-{var i = (0);var hash = (0);while(true){
-if((i < len))
-{{
-var G__12628 = (i + (1));
-var G__12629 = (Math.imul((31),hash) + s.charCodeAt(i));
-i = G__12628;
-hash = G__12629;
-continue;
-}
-} else
-{return hash;
-}
-break;
-}
-} else
-{return (0);
-}
-} else
-{return (0);
-}
-});
-hash = (function hash(o){
-if(typeof o === 'number')
-{return Math.floor(o) % (2147483647);
-} else
-{if(o === true)
-{return (1);
-} else
-{if(o === false)
-{return (0);
-} else
-{if(typeof o === 'string')
-{return m3_hash_int(hash_string(o));
-} else
-{if((o == null))
-{return (0);
-} else
-{throw new Error("Cannot hash: " + typeof(o) + " " + o);
+function int_rotate_left(x,n) {
+  return ((x << n) | (x >>> (- n)));
+};
 
+var m3_seed = 0;
+var m3_C1 = 3432918353;
+var m3_C2 = 461845907;
+
+function m3_mix_K1(k1) {
+  return Math.imul(int_rotate_left(Math.imul(k1,m3_C1),(15)),m3_C2);
 }
+
+function m3_mix_H1(h1,k1) {
+  return (Math.imul(int_rotate_left((h1 ^ k1),(13)),(5)) + (3864292196));
 }
+
+function m3_fmix(h1,len) {
+  var h1__$1 = h1;
+  var h1__$2 = (h1__$1 ^ len);
+  var h1__$3 = (h1__$2 ^ (h1__$2 >>> (16)));
+  var h1__$4 = Math.imul(h1__$3,(2246822507));
+  var h1__$5 = (h1__$4 ^ (h1__$4 >>> (13)));
+  var h1__$6 = Math.imul(h1__$5,(3266489909));
+  var h1__$7 = (h1__$6 ^ (h1__$6 >>> (16)));
+  return h1__$7;
 }
+
+function m3_hash_int(in$) {
+  var k1 = m3_mix_K1(in$);
+  var h1 = m3_mix_H1(m3_seed,k1);
+  return m3_fmix(h1,(4));
 }
+
+function hash_string(s) {
+  var hash = 0;
+  for (var i = 0, len = s.length; i < len; i++) {
+    hash = Math.imul((31),hash) + s.charCodeAt(i);
+  }
+  return hash;
+};
+
+function hash(o) {
+  if(typeof o === 'number') {
+    return Math.floor(o) % (2147483647);
+  } else if (o === true) {
+    return 1;
+  } else if (o === false) {
+    return (0);
+  } else if(typeof o === 'string') {
+    return m3_hash_int(hash_string(o));
+  } else {
+    throw new Error("Cannot hash: " + typeof(o) + " " + o);
+  }
 }
-});
 
 // --- end of cljs.core ---
 
