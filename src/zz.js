@@ -51,14 +51,14 @@ function hash_string(s) {
 };
 
 function hash(o) {
-  if(typeof o === 'number') {
-    return Math.floor(o) % (2147483647);
+  if (typeof o === 'number') {
+    return Math.floor(o) % 2147483647;
+  } else if (typeof o === 'string') {
+    return m3_hash_int(hash_string(o));
   } else if (o === true) {
     return 1;
   } else if (o === false) {
-    return (0);
-  } else if(typeof o === 'string') {
-    return m3_hash_int(hash_string(o));
+    return 0;
   } else {
     throw new Error("Cannot hash: " + typeof(o) + " " + o);
   }
