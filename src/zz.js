@@ -36,7 +36,7 @@ function m3_hash_int(in$) {
 function hash_string(s) {
   var hash = 0;
   for (var i = 0, len = s.length; i < len; i++) {
-    hash = Math.imul((31),hash) + s.charCodeAt(i);
+    hash = Math.imul(31,hash) + s.charCodeAt(i);
   }
   return hash;
 };
@@ -110,10 +110,6 @@ function ZZLeaf(path, fact) {
   this.fact = fact;
 }
 
-function compareLeaf(a, b) {
-  return comparePath(a.path, b.path);
-}
-
 ZZTree.prototype = {
   facts: function() {
     var facts = [];
@@ -135,35 +131,41 @@ ZZTree.prototype = {
     return facts;
   },
 
-  bulkInsertToBranch: function(branch, pathIx, leaves, lo, hi) {
-    assert(pathIx < leaves[lo].path.length); // TODO handle collisions
-    var childLo = lo;
-    var childHi = lo;
-    while (childLo <= hi) {
-      var branchIx = leaves[childLo].path[pathIx];
-      while ((childHi < hi) && (leaves[childHi+1].path[pathIx] === branchIx)) childHi++;
-      var child = branch[branchIx];
-      if (child === undefined) {
-        if (childLo === childHi) {
-          branch[branchIx] = leaves[childLo];
-        } else {
+  bulkInsertToBranch: function(branch, pathIx, leaves) {
+    assert(pathIx < leaves[0].path.length); // TODO handle collisions
+    var buckets = [];
+    for (var branchIx = 0; branchIx < this.branchWidth; branchIx++) {
+      buckets[branchIx] = [];
+    }
+    for (var i = 0, len = leaves.length; i < len; i++) {
+      var leaf = leaves[i];
+      var branchIx = leaf.path[pathIx];
+      buckets[branchIx].push(leaf);
+    }
+    for (var branchIx = 0; branchIx < this.branchWidth; branchIx++) {
+      var bucket = buckets[branchIx];
+      if (bucket.length > 0) {
+        var child = branch[branchIx];
+        if (child === undefined) {
+          if (bucket.length === 1) {
+            branch[branchIx] = bucket[0];
+          } else {
+            var childBranch = Array(this.branchWidth);
+            branch[branchIx] = childBranch;
+            this.bulkInsertToBranch(childBranch, pathIx+1, bucket);
+          }
+        } else if (child.constructor === ZZLeaf) {
           var childBranch = Array(this.branchWidth);
+          assert(pathIx+1 < leaves[0].path.length); // TODO handle collisions
           branch[branchIx] = childBranch;
-          this.bulkInsertToBranch(childBranch, pathIx+1, leaves, childLo, childHi);
+          childBranch[child.path[pathIx+1]] = child;
+          this.bulkInsertToBranch(childBranch, pathIx+1, bucket);
+        } else {
+          var childBranch = child.slice();
+          branch[branchIx] = childBranch;
+          this.bulkInsertToBranch(childBranch, pathIx+1, bucket);
         }
-      } else if (child.constructor === ZZLeaf) {
-        var childBranch = Array(this.branchWidth);
-        assert(pathIx+1 < leaves[lo].path.length); // TODO handle collisions
-        branch[branchIx] = childBranch;
-        childBranch[child.path[pathIx+1]] = child;
-        this.bulkInsertToBranch(childBranch, pathIx+1, leaves, childLo, childHi);
-      } else {
-        var childBranch = child.slice();
-        branch[branchIx] = childBranch;
-        this.bulkInsertToBranch(childBranch, pathIx+1, leaves, childLo, childHi);
       }
-      childLo = childHi + 1;
-      childHi = childLo;
     }
   },
 
@@ -174,9 +176,8 @@ ZZTree.prototype = {
       var fact = facts[i];
       leaves[i] = new ZZLeaf(makePath(branchDepth, fact), fact);
     }
-    leaves.sort(compareLeaf);
     var root = this.root.slice();
-    this.bulkInsertToBranch(root, 0, leaves, 0, leaves.length - 1);
+    this.bulkInsertToBranch(root, 0, leaves);
     return new ZZTree(this.branchDepth, this.branchWidth, root);
   },
 
@@ -253,11 +254,18 @@ function bench(n) {
   for(var i = 0; i < n; i++) {
     facts.push([i + "zomg", i + "foo" + i, i + "asdfasd" + i]);
   }
+  var time = now();
   console.time("insert");
-  console.profile("insert");
+  console.profile("insert" + time);
   var t = ZZTree.empty(4).bulkInsert(facts);
-  console.profileEnd("insert");
+  console.profileEnd("insert" + time);
   console.timeEnd("insert");
+//   console.time("obj");
+//   var x = {};
+//   for (var i = 0; i < n; i++) {
+//     x[facts[i]] = true;
+//   }
+//   console.timeEnd("obj");
   return t;
 }
 
