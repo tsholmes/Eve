@@ -252,13 +252,16 @@ var a = ZZTree.empty(1).bulkInsert([["foo", 0],
 function bench(n) {
   var facts = [];
   for(var i = 0; i < n; i++) {
-    facts.push([i + "zomg", i + "foo" + i, i + "asdfasd" + i]);
+    facts.push([i + "zomg", i + "foo" + i, i]);
   }
-  var time = now();
+  var facts2 = [];
+  for(var i = 0; i < n; i++) {
+    facts2.push([i + "bar", i + "quux" + i, i]);
+  }
   console.time("insert");
-  console.profile("insert" + time);
-  var t = ZZTree.empty(4).bulkInsert(facts);
-  console.profileEnd("insert" + time);
+//  console.profile();
+  var t = ZZTree.empty(4).bulkInsert(facts).bulkInsert(facts2);
+//  console.profileEnd();
   console.timeEnd("insert");
 //   console.time("obj");
 //   var x = {};
