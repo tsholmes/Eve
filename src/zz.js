@@ -258,7 +258,7 @@ function bench(n) {
 //     x[facts[i]] = true;
 //   }
 //   console.timeEnd("obj");
-  return t;
+  return t.constructor;
 }
 
 // var x = bench(1000000);
