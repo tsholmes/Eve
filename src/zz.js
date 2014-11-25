@@ -67,37 +67,6 @@ function pathEqual(a, b) {
   return true;
 }
 
-function comparePath(as, bs) {
-  var len = as.length;
-  for(var i = 0; i < len; i++) {
-    var a = as[i];
-    var b = bs[i];
-    if (a < b) return -1;
-    if (a > b) return 1;
-  }
-  return 0;
-}
-
-function makePath(branchDepth, fact) {
-  assert(branchDepth <= 8);
-  var len = fact.length;
-  var hashes = new Int32Array(fact.length);
-  for (var i = 0; i < len; i++) {
-   hashes[i] = hash(fact[i]);
-  }
-  var path = [];
-  var pathBits = hashes.length * 32;
-  var pathChunks = pathBits / branchDepth;
-  var path = new Uint8Array(pathChunks);
-  for (var i = 0; i < pathBits; i++) {
-    var h = hashes[i % len];
-    var bit = (h >> ((i / len) | 0)) & 1;
-    var chunkIx = (i / branchDepth) | 0;
-    path[chunkIx] = path[chunkIx] | (bit << (i % branchDepth));
-  }
-  return path;
-}
-
 function ZZTree(branchDepth, branchWidth, root) {
   assert(branchDepth <= 8);
   this.branchDepth = branchDepth
@@ -105,9 +74,30 @@ function ZZTree(branchDepth, branchWidth, root) {
   this.root = root;
 }
 
-function ZZLeaf(path, fact) {
-  this.path = path;
+function ZZLeaf(fact, hashes) {
   this.fact = fact;
+  this.hashes = hashes;
+}
+
+function ZZLeaf$fromFact(branchDepth, fact) {
+  var hashes = new Int32Array(fact.length);
+  for (var i = 0, len = fact.length; i < len; i++) {
+    hashes[i] = hash(fact[i]);
+  }
+  return new ZZLeaf(fact, hashes);
+}
+
+function ZZLeaf$path(leaf, depth, pathIx) {
+  var hashes = leaf.hashes;
+  var path = 0;
+  var length = hashes.length;
+  for (var i = 0; i < depth; i++) {
+    var bitIx = (pathIx * depth) + i;
+    var hash = hashes[bitIx % length];
+    var bit = (hash >> ((bitIx / length) | 0)) & 1;
+    path = path | (bit << i);
+  }
+  return path;
 }
 
 ZZTree.prototype = {
@@ -131,15 +121,26 @@ ZZTree.prototype = {
     return facts;
   },
 
+  bulkInsert: function(facts) {
+    var leaves = [];
+    var branchDepth = this.branchDepth;
+    for (var i = 0, len = facts.length; i < len; i++) {
+      leaves[i] = ZZLeaf$fromFact(branchDepth, facts[i]);
+    }
+    var root = this.root.slice();
+    this.bulkInsertToBranch(root, 0, leaves);
+    return new ZZTree(this.branchDepth, this.branchWidth, root);
+  },
+
   bulkInsertToBranch: function(branch, pathIx, leaves) {
-    assert(pathIx < leaves[0].path.length); // TODO handle collisions
+    // assert(pathIx < leaves[0].path.length); // TODO handle collisions
     var buckets = [];
     for (var branchIx = 0; branchIx < this.branchWidth; branchIx++) {
       buckets[branchIx] = [];
     }
     for (var i = 0, len = leaves.length; i < len; i++) {
       var leaf = leaves[i];
-      var branchIx = leaf.path[pathIx];
+      var branchIx = ZZLeaf$path(leaf, this.branchDepth, pathIx);
       buckets[branchIx].push(leaf);
     }
     for (var branchIx = 0; branchIx < this.branchWidth; branchIx++) {
@@ -156,9 +157,9 @@ ZZTree.prototype = {
           }
         } else if (child.constructor === ZZLeaf) {
           var childBranch = Array(this.branchWidth);
-          assert(pathIx+1 < leaves[0].path.length); // TODO handle collisions
+          // assert(pathIx+1 < leaves[0].path.length); // TODO handle collisions
           branch[branchIx] = childBranch;
-          childBranch[child.path[pathIx+1]] = child;
+          bucket.push(child);
           this.bulkInsertToBranch(childBranch, pathIx+1, bucket);
         } else {
           var childBranch = child.slice();
@@ -167,18 +168,6 @@ ZZTree.prototype = {
         }
       }
     }
-  },
-
-  bulkInsert: function(facts) {
-    var leaves = [];
-    var branchDepth = this.branchDepth;
-    for (var i = 0, len = facts.length; i < len; i++) {
-      var fact = facts[i];
-      leaves[i] = new ZZLeaf(makePath(branchDepth, fact), fact);
-    }
-    var root = this.root.slice();
-    this.bulkInsertToBranch(root, 0, leaves);
-    return new ZZTree(this.branchDepth, this.branchWidth, root);
   },
 
   remove: function(fact) {
