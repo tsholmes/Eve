@@ -231,7 +231,80 @@ ZZTree.empty = function(factLength, branchDepth) {
   return new ZZTree(factLength, branchDepth, branchWidth, Array(branchWidth));
 }
 
-var a = ZZTree.empty(1).bulkInsert([["foo", 0],
+// SOLVER
+
+// split for hash -> value?
+
+// instead of los/his - bits and ixes
+// could also split by picking random bit?
+
+// use recursion for tracking stack
+// copy constraints on split?
+
+function ZZContains(tree, branch, pathIx, bindings) {
+  this.tree = tree;
+  this.branch = branch;
+  this.pathIx = pathIx;
+  this.bindings = bindings;
+}
+
+ZZContains.prototype.path = function(hashes) {
+  var bindings = this.bindings;
+  var pathIx = this.pathIx;
+  var depth = this.tree.branchDepth;
+  var length = this.bindings.length / 2;
+  var path = 0;
+  var length = hashes.length;
+  for (var i = 0; i < depth; i++) {
+    var bitIx = (pathIx * depth) + i;
+    var hash = hashes[bitIx % length];
+    var bit = (hash >> ((bitIx / length) | 0)) & 1;
+    path = path | (bit << i);
+  }
+  return path;
+}
+
+ZZContains.prototype.copy = function () {
+  return new ZZContains(this.tree, this.branch, this.pathIx, this.bindings);
+}
+
+ZZContains.prototype.propagate = function (los, his) {
+  propagate: while (true) {
+    // find pattern from los/his
+    // count all children that match pattern
+    // if one child, set bits and descend
+    // if > 1, wait for more bits
+    // if 0, fail
+  }
+}
+
+ZZContains.prototype.split = function (los, his) {
+  var branch = this.branch;
+  if (branch.constructor === ZZLeaf) {
+    return [branch]; // cant split a leaf
+  } else {
+    var branchWidth = this.tree.branchWidth;
+    var pathIx = this.pathIx;
+    var bindings = this.bindings;
+    var children = [];
+    for (var i = 0; i < this.tree.branchWidth; i++) {
+      var child = branch[i];
+      if (child === undefined) {
+        // pass
+      } else {
+        // TODO is this good enough? what exactly are the constraints?
+        if (containsPath(los, his, bindings, i, pathIx)) {
+          children.push(child);
+        }
+      }
+    }
+  }
+  return children;
+}
+
+// STUFF
+
+var a = ZZTree.empty(2, 1).bulkInsert([["foo", 0],
                                     ["bar", 0],
                                     [0, 0],
                                     ["foo", "bar"]]);
