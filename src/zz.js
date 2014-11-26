@@ -67,8 +67,9 @@ function pathEqual(a, b) {
   return true;
 }
 
-function ZZTree(branchDepth, branchWidth, root) {
+function ZZTree(factLength, branchDepth, branchWidth, root) {
   assert(branchDepth <= 8);
+  this.factLength = factLength;
   this.branchDepth = branchDepth
   this.branchWidth = branchWidth;
   this.root = root;
@@ -79,18 +80,19 @@ function ZZLeaf(fact, hashes) {
   this.hashes = hashes;
 }
 
-function ZZLeaf$fromFact(branchDepth, fact) {
+ZZLeaf.fromFact = function(factLength, branchDepth, fact) {
+  assert(fact.length === factLength);
   var hashes = new Int32Array(fact.length);
   for (var i = 0, len = fact.length; i < len; i++) {
     hashes[i] = hash(fact[i]);
   }
   return new ZZLeaf(fact, hashes);
-}
+};
 
-function ZZLeaf$path(leaf, depth, pathIx) {
-  var hashes = leaf.hashes;
-  var path = 0;
+ZZLeaf.prototype.path = function (depth, pathIx) {
+  var hashes = this.hashes;
   var length = hashes.length;
+  var path = 0;
   for (var i = 0; i < depth; i++) {
     var bitIx = (pathIx * depth) + i;
     var hash = hashes[bitIx % length];
@@ -98,135 +100,135 @@ function ZZLeaf$path(leaf, depth, pathIx) {
     path = path | (bit << i);
   }
   return path;
-}
+};
 
-ZZTree.prototype = {
-  facts: function() {
-    var facts = [];
-    var branches = [this.root];
-    while (branches.length > 0) {
-      var branch = branches.pop();
-      for (var i = 0; i < this.branchWidth; i++) {
-        var child = branch[i];
-        if (child === undefined) {
-          // pass
-        }
-        else if (child.constructor === ZZLeaf) {
-          facts.push(child.fact);
-        } else {
-          branches.push(child);
-        }
+ZZTree.prototype.facts = function() {
+  var facts = [];
+  var branches = [this.root];
+  while (branches.length > 0) {
+    var branch = branches.pop();
+    for (var i = 0; i < this.branchWidth; i++) {
+      var child = branch[i];
+      if (child === undefined) {
+        // pass
+      }
+      else if (child.constructor === ZZLeaf) {
+        facts.push(child.fact);
+      } else {
+        branches.push(child);
       }
     }
-    return facts;
-  },
+  }
+  return facts;
+};
 
-  bulkInsert: function(facts) {
-    var leaves = [];
-    var branchDepth = this.branchDepth;
-    for (var i = 0, len = facts.length; i < len; i++) {
-      leaves[i] = ZZLeaf$fromFact(branchDepth, facts[i]);
-    }
-    var root = this.root.slice();
-    this.bulkInsertToBranch(root, 0, leaves);
-    return new ZZTree(this.branchDepth, this.branchWidth, root);
-  },
+ZZTree.prototype.bulkInsert = function(facts) {
+  var leaves = [];
+  var factLength = this.factLength;
+  var branchDepth = this.branchDepth;
+  for (var i = 0, len = facts.length; i < len; i++) {
+    leaves[i] = ZZLeaf.fromFact(factLength, branchDepth, facts[i]);
+  }
+  var root = this.root.slice();
+  this.bulkInsertToBranch(root, 0, leaves);
+  return new ZZTree(this.factLength, this.branchDepth, this.branchWidth, root);
+};
 
-  bulkInsertToBranch: function(branch, pathIx, leaves) {
-    // assert(pathIx < leaves[0].path.length); // TODO handle collisions
-    var buckets = [];
-    for (var branchIx = 0; branchIx < this.branchWidth; branchIx++) {
-      buckets[branchIx] = [];
-    }
-    for (var i = 0, len = leaves.length; i < len; i++) {
-      var leaf = leaves[i];
-      var branchIx = ZZLeaf$path(leaf, this.branchDepth, pathIx);
-      buckets[branchIx].push(leaf);
-    }
-    for (var branchIx = 0; branchIx < this.branchWidth; branchIx++) {
-      var bucket = buckets[branchIx];
-      if (bucket.length > 0) {
-        var child = branch[branchIx];
-        if (child === undefined) {
-          if (bucket.length === 1) {
-            branch[branchIx] = bucket[0];
-          } else {
-            var childBranch = Array(this.branchWidth);
-            branch[branchIx] = childBranch;
-            this.bulkInsertToBranch(childBranch, pathIx+1, bucket);
-          }
-        } else if (child.constructor === ZZLeaf) {
-          var childBranch = Array(this.branchWidth);
-          // assert(pathIx+1 < leaves[0].path.length); // TODO handle collisions
-          branch[branchIx] = childBranch;
-          bucket.push(child);
-          this.bulkInsertToBranch(childBranch, pathIx+1, bucket);
-        } else {
-          var childBranch = child.slice();
-          branch[branchIx] = childBranch;
-          this.bulkInsertToBranch(childBranch, pathIx+1, bucket);
-        }
-      }
-    }
-  },
-
-  remove: function(fact) {
-    var path = makePath(this.branchDepth, fact);
-    var pathIx = 0;
-    var root = this.root.slice();
-    var branch = root;
-    var branches = [];
-
-    down: while (true) {
-      var branchIx = path[pathIx];
-      pathIx++;
+ZZTree.prototype.bulkInsertToBranch = function(branch, pathIx, leaves) {
+  // assert(pathIx < leaves[0].path.length); // TODO handle collisions
+  var buckets = [];
+  for (var branchIx = 0; branchIx < this.branchWidth; branchIx++) {
+    buckets[branchIx] = [];
+  }
+  for (var i = 0, len = leaves.length; i < len; i++) {
+    var leaf = leaves[i];
+    var branchIx = leaf.path(this.branchDepth, pathIx);
+    buckets[branchIx].push(leaf);
+  }
+  for (var branchIx = 0; branchIx < this.branchWidth; branchIx++) {
+    var bucket = buckets[branchIx];
+    if (bucket.length > 0) {
       var child = branch[branchIx];
       if (child === undefined) {
-        return new ZZTree(this.branchDepth, this.branchWidth, root); // nothing to clean up
-      } else if (child.constructor === ZZLeaf) {
-        var facts = child.facts.slice();
-        splice: for (var i = 0; i < facts.length; i++) {
-          if (arrayEqual(facts[i], fact)) {
-            facts.splice(i, 1);
-            break splice;
-          }
-        }
-        if (facts.length > 0) {
-          branch[branchIx] = new ZZLeaf(child.path, facts);
-          return new ZZTree(this.branchDepth, this.branchWidth, root); // nothing to clean up
+        if (bucket.length === 1) {
+          branch[branchIx] = bucket[0];
         } else {
-          break down; // go clean up
+          var childBranch = Array(this.branchWidth);
+          branch[branchIx] = childBranch;
+          this.bulkInsertToBranch(childBranch, pathIx+1, bucket);
         }
+      } else if (child.constructor === ZZLeaf) {
+        var childBranch = Array(this.branchWidth);
+        // assert(pathIx+1 < leaves[0].path.length); // TODO handle collisions
+        branch[branchIx] = childBranch;
+        bucket.push(child);
+        this.bulkInsertToBranch(childBranch, pathIx+1, bucket);
       } else {
-        branches.push(branch);
         var childBranch = child.slice();
         branch[branchIx] = childBranch;
-        branch = childBranch;
-        continue down;
+        this.bulkInsertToBranch(childBranch, pathIx+1, bucket);
       }
     }
-
-    up: while (true) {
-      pathIx--;
-      var branchIx = path[pathIx]
-      delete branch[branchIx];
-      for (var i = 0; i < this.branchWidth; i++) {
-        if (branch[i] !== undefined) {
-          break up; // done cleaning up
-        }
-      }
-      branch = branches.pop();
-    }
-
-    return new ZZTree(this.branchDepth, this.branchWidth, root);
   }
-}
+};
+
+//   remove: function(fact) {
+//     var path = makePath(this.branchDepth, fact);
+//     var pathIx = 0;
+//     var root = this.root.slice();
+//     var branch = root;
+//     var branches = [];
+
+//     down: while (true) {
+//       var branchIx = path[pathIx];
+//       pathIx++;
+//       var child = branch[branchIx];
+//       if (child === undefined) {
+//         return new ZZTree(this.branchDepth, this.branchWidth, root); // nothing to clean up
+//       } else if (child.constructor === ZZLeaf) {
+//         var facts = child.facts.slice();
+//         splice: for (var i = 0; i < facts.length; i++) {
+//           if (arrayEqual(facts[i], fact)) {
+//             facts.splice(i, 1);
+//             break splice;
+//           }
+//         }
+//         if (facts.length > 0) {
+//           branch[branchIx] = new ZZLeaf(child.path, facts);
+//           return new ZZTree(this.branchDepth, this.branchWidth, root); // nothing to clean up
+//         } else {
+//           break down; // go clean up
+//         }
+//       } else {
+//         branches.push(branch);
+//         var childBranch = child.slice();
+//         branch[branchIx] = childBranch;
+//         branch = childBranch;
+//         continue down;
+//       }
+//     }
+
+//     up: while (true) {
+//       pathIx--;
+//       var branchIx = path[pathIx]
+//       delete branch[branchIx];
+//       for (var i = 0; i < this.branchWidth; i++) {
+//         if (branch[i] !== undefined) {
+//           break up; // done cleaning up
+//         }
+//       }
+//       branch = branches.pop();
+//     }
+
+//     return new ZZTree(this.branchDepth, this.branchWidth, root);
+//   }
+// }
 
 // TODO zztree.validate
 
-ZZTree.empty = function(branchDepth) {
+ZZTree.empty = function(factLength, branchDepth) {
   var branchWidth = Math.pow(2,branchDepth);
-  return new ZZTree(branchDepth, branchWidth, Array(branchWidth));
+  return new ZZTree(factLength, branchDepth, branchWidth, Array(branchWidth));
 }
 
 var a = ZZTree.empty(1).bulkInsert([["foo", 0],
@@ -248,16 +250,19 @@ function bench(n) {
     facts2.push([i + "bar", i + "quux" + i, i]);
   }
   console.time("insert");
-//  console.profile();
-  var t = ZZTree.empty(4).bulkInsert(facts).bulkInsert(facts2);
-//  console.profileEnd();
+  console.profile();
+  var t = ZZTree.empty(3, 4).bulkInsert(facts).bulkInsert(facts2);
+  console.profileEnd();
   console.timeEnd("insert");
-//   console.time("obj");
-//   var x = {};
-//   for (var i = 0; i < n; i++) {
-//     x[facts[i]] = true;
-//   }
-//   console.timeEnd("obj");
+  console.time("obj");
+  var x = {};
+  for (var i = 0; i < n; i++) {
+    x[facts[i]] = true;
+  }
+  for (var i = 0; i < n; i++) {
+    x[facts2[i]] = true;
+  }
+  console.timeEnd("obj");
   return t.constructor;
 }
 
