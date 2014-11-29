@@ -1,7 +1,7 @@
 // --- from cljs.core ---
 
-function int_rotate_left(x,n) {
-  return ((x << n) | (x >>> (- n)));
+function int_rotate_left(x, n) {
+  return ((x << n) | (x >>> (-n)));
 }
 
 var m3_seed = 0;
@@ -9,34 +9,34 @@ var m3_C1 = 3432918353;
 var m3_C2 = 461845907;
 
 function m3_mix_K1(k1) {
-  return Math.imul(int_rotate_left(Math.imul(k1,m3_C1),(15)),m3_C2);
+  return Math.imul(int_rotate_left(Math.imul(k1, m3_C1), (15)), m3_C2);
 }
 
-function m3_mix_H1(h1,k1) {
-  return (Math.imul(int_rotate_left((h1 ^ k1),(13)),(5)) + (3864292196));
+function m3_mix_H1(h1, k1) {
+  return (Math.imul(int_rotate_left((h1 ^ k1), (13)), (5)) + (3864292196));
 }
 
-function m3_fmix(h1,len) {
+function m3_fmix(h1, len) {
   var h1__$1 = h1;
   var h1__$2 = (h1__$1 ^ len);
   var h1__$3 = (h1__$2 ^ (h1__$2 >>> (16)));
-  var h1__$4 = Math.imul(h1__$3,(2246822507));
+  var h1__$4 = Math.imul(h1__$3, (2246822507));
   var h1__$5 = (h1__$4 ^ (h1__$4 >>> (13)));
-  var h1__$6 = Math.imul(h1__$5,(3266489909));
+  var h1__$6 = Math.imul(h1__$5, (3266489909));
   var h1__$7 = (h1__$6 ^ (h1__$6 >>> (16)));
   return h1__$7;
 }
 
 function m3_hash_int(in$) {
   var k1 = m3_mix_K1(in$);
-  var h1 = m3_mix_H1(m3_seed,k1);
-  return m3_fmix(h1,(4));
+  var h1 = m3_mix_H1(m3_seed, k1);
+  return m3_fmix(h1, (4));
 }
 
 function hash_string(s) {
   var hash = 0;
   for (var i = 0, len = s.length; i < len; i++) {
-    hash = Math.imul(31,hash) + s.charCodeAt(i);
+    hash = Math.imul(31, hash) + s.charCodeAt(i);
   }
   return hash;
 }
@@ -61,8 +61,8 @@ function hash(o) {
 
 function pathEqual(a, b) {
   var len = a.length;
-  for(var i = 0; i < len; i++) {
-    if(a[i] !== b[i]) {
+  for (var i = 0; i < len; i++) {
+    if (a[i] !== b[i]) {
       return false;
     }
   }
@@ -91,7 +91,7 @@ ZZLeaf.fromFact = function(factLength, branchDepth, fact) {
   return new ZZLeaf(fact, hashes);
 };
 
-ZZLeaf.prototype.path = function (depth, pathIx) {
+ZZLeaf.prototype.path = function(depth, pathIx) {
   var hashes = this.hashes;
   var length = hashes.length;
   var path = 0;
@@ -113,8 +113,7 @@ ZZTree.prototype.facts = function() {
       var child = branch[i];
       if (child === undefined) {
         // pass
-      }
-      else if (child.constructor === ZZLeaf) {
+      } else if (child.constructor === ZZLeaf) {
         facts.push(child.fact);
       } else {
         branches.push(child);
@@ -157,18 +156,18 @@ ZZTree.prototype.bulkInsertToBranch = function(branch, pathIx, leaves) {
         } else {
           var childBranch = new Array(this.branchWidth);
           branch[branchIx] = childBranch;
-          this.bulkInsertToBranch(childBranch, pathIx+1, bucket);
+          this.bulkInsertToBranch(childBranch, pathIx + 1, bucket);
         }
       } else if (child.constructor === ZZLeaf) {
         var childBranch = new Array(this.branchWidth);
         // assert(pathIx+1 < leaves[0].path.length); // TODO handle collisions
         branch[branchIx] = childBranch;
         bucket.push(child);
-        this.bulkInsertToBranch(childBranch, pathIx+1, bucket);
+        this.bulkInsertToBranch(childBranch, pathIx + 1, bucket);
       } else {
         var childBranch = child.slice();
         branch[branchIx] = childBranch;
-        this.bulkInsertToBranch(childBranch, pathIx+1, bucket);
+        this.bulkInsertToBranch(childBranch, pathIx + 1, bucket);
       }
     }
   }
@@ -229,7 +228,7 @@ ZZTree.prototype.bulkInsertToBranch = function(branch, pathIx, leaves) {
 // TODO zztree.validate
 
 ZZTree.empty = function(factLength, branchDepth) {
-  var branchWidth = Math.pow(2,branchDepth);
+  var branchWidth = Math.pow(2, branchDepth);
   return new ZZTree(factLength, branchDepth, branchWidth, new Array(branchWidth));
 };
 
@@ -259,7 +258,7 @@ ZZContains.fromTree = function(tree, bindings) {
   return new ZZContains(tree, tree.root, 0, bindings);
 };
 
-ZZContains.prototype.copy = function () {
+ZZContains.prototype.copy = function() {
   return new ZZContains(this.tree, this.branch, this.pathIx, this.bindings);
 };
 
@@ -296,7 +295,7 @@ ZZContains.prototype.setBounds = function(los, his, newlo, newhi) {
     var lobit = (newlo >> i) & 1;
     los[bindingIx] = los[bindingIx] | (lobit << hashIx);
     var hibit = (newhi >> i) & 1;
-    his[bindingIx] = his[bindingIx] ^ ((1-hibit) << hashIx);
+    his[bindingIx] = his[bindingIx] ^ ((1 - hibit) << hashIx);
   }
 };
 
@@ -314,8 +313,8 @@ ZZContains.prototype.setValue = function(los, his, values) {
 };
 
 // TODO return changed bitmask
-ZZContains.prototype.propagate = function (los, his, values) {
-  var depth= this.tree.branchDepth;
+ZZContains.prototype.propagate = function(los, his, values) {
+  var depth = this.tree.branchDepth;
   var width = this.tree.branchWidth;
   var branch = this.branch;
   if (branch.constructor === ZZLeaf) return UNCHANGED; // have already fixed a value, nothing left to do
@@ -336,7 +335,7 @@ ZZContains.prototype.propagate = function (los, his, values) {
         // if i has 1s where lo has 1s and 0s where hi has 0s
         // and there is a branch for i
         if ((((lo & ~i) | (~hi & i)) === 0) &&
-            (branch[i] !== undefined)) {
+          (branch[i] !== undefined)) {
           newlo = newlo & i; // drop lo to 0 wherever i has a 0
           newhi = newhi | i; // raise hi to 1 wherever i has a 1
         }
@@ -360,7 +359,7 @@ ZZContains.prototype.propagate = function (los, his, values) {
   }
 };
 
-ZZContains.prototype.split = function (los, his) {
+ZZContains.prototype.split = function(los, his) {
   var branch = this.branch;
   if (branch.constructor === ZZLeaf) {
     return [branch]; // cant split a leaf
@@ -373,7 +372,7 @@ ZZContains.prototype.split = function (los, his) {
     for (var i = 0; i < this.tree.branchWidth; i++) {
       var child = branch[i];
       if ((((lo & ~i) | (~hi & i)) === 0) &&
-          (child !== undefined)) {
+        (child !== undefined)) {
         children.push(child);
       }
     }
@@ -383,10 +382,13 @@ ZZContains.prototype.split = function (los, his) {
 
 // STUFF
 
-var a = ZZTree.empty(2, 1).bulkInsert([["foo", 0],
-                                    ["bar", 0],
-                                    [0, 0],
-                                    ["foo", "bar"]]);
+var a = ZZTree.empty(2, 4).bulkInsert(
+  [
+    ["foo", 0],
+    ["bar", 0],
+    [0, 0],
+    ["foo", "bar"]
+  ]);
 
 var los = [0, 0];
 var his = [-1, -1];
@@ -400,11 +402,11 @@ c.propagate(los, his, values);
 
 function bench(n) {
   var facts = [];
-  for(var i = 0; i < n; i++) {
+  for (var i = 0; i < n; i++) {
     facts.push([i + "zomg", i + "foo" + i, i]);
   }
   var facts2 = [];
-  for(var i = 0; i < n; i++) {
+  for (var i = 0; i < n; i++) {
     facts2.push([i + "bar", i + "quux" + i, i]);
   }
   console.time("insert");
