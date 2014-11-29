@@ -256,10 +256,7 @@ function ZZContains(tree, branch, pathIx, bindings) {
 }
 
 ZZContains.fromTree = function(tree, bindings) {
-  this.tree = tree;
-  this.branch = tree.root;
-  this.pathIx = 0;
-  this.bindings = bindings;
+  return new ZZContains(tree, tree.root, 0, bindings);
 };
 
 ZZContains.prototype.copy = function () {
@@ -271,8 +268,8 @@ ZZContains.prototype.getBounds = function(los, his) {
   var pathIx = this.pathIx;
   var depth = this.tree.branchDepth;
   var length = this.bindings.length;
-  var lo = 0; // all 0s
-  var hi = Math.pow(2, depth) - 1; // all 1s
+  var lo = 0;
+  var hi = 0;
   for (var i = 0; i < depth; i++) {
     var bitIx = (pathIx * depth) + i;
     var bindingIx = bindings[bitIx % length];
@@ -282,7 +279,7 @@ ZZContains.prototype.getBounds = function(los, his) {
     var lo = lo | (lobit << i);
     var hihash = his[bindingIx];
     var hibit = (hihash >> hashIx) & 1;
-    var hi = hi & (hibit << i);
+    var hi = hi | (hibit << i);
   }
   return [lo, hi];
 };
@@ -299,7 +296,7 @@ ZZContains.prototype.setBounds = function(los, his, newlo, newhi) {
     var lobit = (newlo >> i) & 1;
     los[bindingIx] = los[bindingIx] | (lobit << hashIx);
     var hibit = (newhi >> i) & 1;
-    his[bindingIx] = his[bindingIx] & (hibit << hashIx);
+    his[bindingIx] = his[bindingIx] ^ ((1-hibit) << hashIx);
   }
 };
 
@@ -333,12 +330,12 @@ ZZContains.prototype.propagate = function (los, his, values) {
       var bounds = this.getBounds(los, his);
       var lo = bounds[0];
       var hi = bounds[1];
-      var newlo = Math.pow(2, depth) - 1; // all 1s
+      var newlo = -1; // all 1s
       var newhi = 0; // all 0s
       for (var i = 0; i < width; i++) {
         // if i has 1s where lo has 1s and 0s where hi has 0s
         // and there is a branch for i
-        if ((((lo & ~i) | (~hi & i)) === 0) && 
+        if ((((lo & ~i) | (~hi & i)) === 0) &&
             (branch[i] !== undefined)) {
           newlo = newlo & i; // drop lo to 0 wherever i has a 0
           newhi = newhi | i; // raise hi to 1 wherever i has a 1
@@ -350,13 +347,14 @@ ZZContains.prototype.propagate = function (los, his, values) {
         return FAILED;
       } else if (newlo === newhi) {
         // only one matching child
+        this.setBounds(los, his, newlo, newhi);
         branch = branch[newlo];
         this.branch = branch;
-        this.setBounds(los, his, newlo, newhi);
+        this.pathIx++;
         continue propagate;
       } else {
         this.setBounds(los, his, newlo, newhi);
-        return UNCHANGED; // TODO need to carry changed bits through setbounds
+        return UNCHANGED;
       }
     }
   }
@@ -374,7 +372,7 @@ ZZContains.prototype.split = function (los, his) {
     var children = [];
     for (var i = 0; i < this.tree.branchWidth; i++) {
       var child = branch[i];
-      if ((((lo & ~i) | (~hi & i)) === 0) && 
+      if ((((lo & ~i) | (~hi & i)) === 0) &&
           (child !== undefined)) {
         children.push(child);
       }
@@ -391,8 +389,10 @@ var a = ZZTree.empty(2, 1).bulkInsert([["foo", 0],
                                     ["foo", "bar"]]);
 
 var los = [0, 0];
-var his = [Math.pow(2, 32) - 1, Math.pow(2, 32) - 1];
+var his = [-1, -1];
+var values = [];
 var c = ZZContains.fromTree(a, [0, 1]);
+c.propagate(los, his, values);
 
 // var b = a
 // .remove(["foo", 0])
@@ -425,3 +425,11 @@ function bench(n) {
 }
 
 // var x = bench(1000000);
+
+function bits(n) {
+  var s = "";
+  for (var i = 31; i >= 0; i--) {
+    s += (n >> i) & 1;
+  }
+  return s;
+}
