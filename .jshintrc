@@ -1,0 +1,18 @@
+{
+      "eqeqeq": true,
+      "immed": true,
+      "latedef": true,
+      "newcap": true,
+      "noarg": true,
+      "undef": true,
+      "unused": true,
+      "maxparams": false,
+      "evil": true,
+      "eqnull": true,
+      "funcscope": true,
+      "shadow": true,
+      "sub": true,
+      "devel": true,
+      "browser": true,
+      "node": true
+}
