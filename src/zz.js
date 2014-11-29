@@ -2,7 +2,7 @@
 
 function int_rotate_left(x,n) {
   return ((x << n) | (x >>> (- n)));
-};
+}
 
 var m3_seed = 0;
 var m3_C1 = 3432918353;
@@ -39,7 +39,7 @@ function hash_string(s) {
     hash = Math.imul(31,hash) + s.charCodeAt(i);
   }
   return hash;
-};
+}
 
 function hash(o) {
   if (typeof o === 'number') {
@@ -57,6 +57,8 @@ function hash(o) {
 
 // --- end of cljs.core ---
 
+// TODO try varying depth dynamically to maintain branch occupancy
+
 function pathEqual(a, b) {
   var len = a.length;
   for(var i = 0; i < len; i++) {
@@ -70,7 +72,7 @@ function pathEqual(a, b) {
 function ZZTree(factLength, branchDepth, branchWidth, root) {
   assert(branchDepth <= 8);
   this.factLength = factLength;
-  this.branchDepth = branchDepth
+  this.branchDepth = branchDepth;
   this.branchWidth = branchWidth;
   this.root = root;
 }
@@ -153,12 +155,12 @@ ZZTree.prototype.bulkInsertToBranch = function(branch, pathIx, leaves) {
         if (bucket.length === 1) {
           branch[branchIx] = bucket[0];
         } else {
-          var childBranch = Array(this.branchWidth);
+          var childBranch = new Array(this.branchWidth);
           branch[branchIx] = childBranch;
           this.bulkInsertToBranch(childBranch, pathIx+1, bucket);
         }
       } else if (child.constructor === ZZLeaf) {
-        var childBranch = Array(this.branchWidth);
+        var childBranch = new Array(this.branchWidth);
         // assert(pathIx+1 < leaves[0].path.length); // TODO handle collisions
         branch[branchIx] = childBranch;
         bucket.push(child);
@@ -228,8 +230,8 @@ ZZTree.prototype.bulkInsertToBranch = function(branch, pathIx, leaves) {
 
 ZZTree.empty = function(factLength, branchDepth) {
   var branchWidth = Math.pow(2,branchDepth);
-  return new ZZTree(factLength, branchDepth, branchWidth, Array(branchWidth));
-}
+  return new ZZTree(factLength, branchDepth, branchWidth, new Array(branchWidth));
+};
 
 // SOLVER
 
@@ -239,7 +241,12 @@ ZZTree.empty = function(factLength, branchDepth) {
 // could also split by picking random bit?
 
 // use recursion for tracking stack
-// copy constraints on split?
+// pass solver and solver state to constraint to split
+// constraint can modify state and call solve multiple times
+
+var FAILED = -1;
+var UNCHANGED = 0;
+// use bitflag to indicate which vars changed
 
 function ZZContains(tree, branch, pathIx, bindings) {
   this.tree = tree;
@@ -248,59 +255,133 @@ function ZZContains(tree, branch, pathIx, bindings) {
   this.bindings = bindings;
 }
 
-ZZContains.prototype.path = function(hashes) {
-  var bindings = this.bindings;
-  var pathIx = this.pathIx;
-  var depth = this.tree.branchDepth;
-  var length = this.bindings.length / 2;
-  var path = 0;
-  var length = hashes.length;
-  for (var i = 0; i < depth; i++) {
-    var bitIx = (pathIx * depth) + i;
-    var hash = hashes[bitIx % length];
-    var bit = (hash >> ((bitIx / length) | 0)) & 1;
-    path = path | (bit << i);
-  }
-  return path;
-}
+ZZContains.fromTree = function(tree, bindings) {
+  this.tree = tree;
+  this.branch = tree.root;
+  this.pathIx = 0;
+  this.bindings = bindings;
+};
 
 ZZContains.prototype.copy = function () {
   return new ZZContains(this.tree, this.branch, this.pathIx, this.bindings);
-}
+};
 
-ZZContains.prototype.propagate = function (los, his) {
-  propagate: while (true) {
-    // find pattern from los/his
-    // count all children that match pattern
-    // if one child, set bits and descend
-    // if > 1, wait for more bits
-    // if 0, fail
+ZZContains.prototype.getBounds = function(los, his) {
+  var bindings = this.bindings;
+  var pathIx = this.pathIx;
+  var depth = this.tree.branchDepth;
+  var length = this.bindings.length;
+  var lo = 0; // all 0s
+  var hi = Math.pow(2, depth) - 1; // all 1s
+  for (var i = 0; i < depth; i++) {
+    var bitIx = (pathIx * depth) + i;
+    var bindingIx = bindings[bitIx % length];
+    var hashIx = ((bitIx / length) | 0);
+    var lohash = los[bindingIx];
+    var lobit = (lohash >> hashIx) & 1;
+    var lo = lo | (lobit << i);
+    var hihash = his[bindingIx];
+    var hibit = (hihash >> hashIx) & 1;
+    var hi = hi & (hibit << i);
   }
-}
+  return [lo, hi];
+};
+
+ZZContains.prototype.setBounds = function(los, his, newlo, newhi) {
+  var bindings = this.bindings;
+  var pathIx = this.pathIx;
+  var depth = this.tree.branchDepth;
+  var length = this.bindings.length;
+  for (var i = 0; i < depth; i++) {
+    var bitIx = (pathIx * depth) + i;
+    var bindingIx = bindings[bitIx % length];
+    var hashIx = ((bitIx / length) | 0);
+    var lobit = (newlo >> i) & 1;
+    los[bindingIx] = los[bindingIx] | (lobit << hashIx);
+    var hibit = (newhi >> i) & 1;
+    his[bindingIx] = his[bindingIx] & (hibit << hashIx);
+  }
+};
+
+ZZContains.prototype.setValue = function(los, his, values) {
+  var bindings = this.bindings;
+  var leaf = this.branch;
+  var hashes = leaf.hashes;
+  var fact = leaf.fact;
+  for (var i = 0, len = hashes.length; i < len; i++) {
+    var bindingIx = bindings[i];
+    los[bindingIx] = hashes[i];
+    his[bindingIx] = hashes[i];
+    values[bindingIx] = fact[i];
+  }
+};
+
+// TODO return changed bitmask
+ZZContains.prototype.propagate = function (los, his, values) {
+  var depth= this.tree.branchDepth;
+  var width = this.tree.branchWidth;
+  var branch = this.branch;
+  if (branch.constructor === ZZLeaf) return UNCHANGED; // have already fixed a value, nothing left to do
+  propagate: while (true) {
+    if (branch.constructor === ZZLeaf) {
+      // fixing a value now
+      this.setValue(los, his, values);
+      return UNCHANGED;
+    } else {
+
+      // figure out which children are in bounds
+      var bounds = this.getBounds(los, his);
+      var lo = bounds[0];
+      var hi = bounds[1];
+      var newlo = Math.pow(2, depth) - 1; // all 1s
+      var newhi = 0; // all 0s
+      for (var i = 0; i < width; i++) {
+        // if i has 1s where lo has 1s and 0s where hi has 0s
+        // and there is a branch for i
+        if ((((lo & ~i) | (~hi & i)) === 0) && 
+            (branch[i] !== undefined)) {
+          newlo = newlo & i; // drop lo to 0 wherever i has a 0
+          newhi = newhi | i; // raise hi to 1 wherever i has a 1
+        }
+      }
+
+      if ((newlo === Math.pow(2, depth) - 1) && (newhi === 0)) {
+        // no matching children
+        return FAILED;
+      } else if (newlo === newhi) {
+        // only one matching child
+        branch = branch[newlo];
+        this.branch = branch;
+        this.setBounds(los, his, newlo, newhi);
+        continue propagate;
+      } else {
+        this.setBounds(los, his, newlo, newhi);
+        return UNCHANGED; // TODO need to carry changed bits through setbounds
+      }
+    }
+  }
+};
 
 ZZContains.prototype.split = function (los, his) {
   var branch = this.branch;
   if (branch.constructor === ZZLeaf) {
     return [branch]; // cant split a leaf
   } else {
-    var branchWidth = this.tree.branchWidth;
-    var pathIx = this.pathIx;
-    var bindings = this.bindings;
+    // figure out which children are in bounds
+    var bounds = this.getBounds(los, his);
+    var lo = bounds[0];
+    var hi = bounds[1];
     var children = [];
     for (var i = 0; i < this.tree.branchWidth; i++) {
       var child = branch[i];
-      if (child === undefined) {
-        // pass
-      } else {
-        // TODO is this good enough? what exactly are the constraints?
-        if (containsPath(los, his, bindings, i, pathIx)) {
-          children.push(child);
-        }
+      if ((((lo & ~i) | (~hi & i)) === 0) && 
+          (child !== undefined)) {
+        children.push(child);
       }
     }
+    return children;
   }
-  return children;
-}
+};
 
 // STUFF
 
@@ -308,6 +389,10 @@ var a = ZZTree.empty(2, 1).bulkInsert([["foo", 0],
                                     ["bar", 0],
                                     [0, 0],
                                     ["foo", "bar"]]);
+
+var los = [0, 0];
+var his = [Math.pow(2, 32) - 1, Math.pow(2, 32) - 1];
+var c = ZZContains.fromTree(a, [0, 1]);
 
 // var b = a
 // .remove(["foo", 0])
