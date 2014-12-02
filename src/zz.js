@@ -245,26 +245,25 @@ ZZTree.empty = function(factLength, branchDepth) {
 
 var FAILED = -1;
 var UNCHANGED = 0;
-// use bitflag to indicate which vars changed
+var CHANGED = 1;
+// TODO use bitflag to indicate which vars changed
 
-function ZZContains(tree, branch, pathIx, bindings) {
+function ZZContains(tree, bindings) {
   this.tree = tree;
-  this.branch = branch;
-  this.pathIx = pathIx;
   this.bindings = bindings;
 }
 
-ZZContains.fromTree = function(tree, bindings) {
-  return new ZZContains(tree, tree.root, 0, bindings);
+function ZZContainsState(branch, pathIx) {
+  this.branch = branch;
+  this.pathIx = pathIx;
+}
+
+ZZContains.prototype.init = function() {
+  return new ZZContainsState(this.tree.root, 0);
 };
 
-ZZContains.prototype.copy = function() {
-  return new ZZContains(this.tree, this.branch, this.pathIx, this.bindings);
-};
-
-ZZContains.prototype.getBounds = function(los, his) {
+ZZContains.prototype.getBounds = function(pathIx, los, his) {
   var bindings = this.bindings;
-  var pathIx = this.pathIx;
   var depth = this.tree.branchDepth;
   var length = this.bindings.length;
   var lo = 0;
@@ -283,46 +282,62 @@ ZZContains.prototype.getBounds = function(los, his) {
   return [lo, hi];
 };
 
-ZZContains.prototype.setBounds = function(los, his, newlo, newhi) {
+ZZContains.prototype.setBounds = function(pathIx, los, his, newlo, newhi) {
   var bindings = this.bindings;
-  var pathIx = this.pathIx;
   var depth = this.tree.branchDepth;
   var length = this.bindings.length;
+  var changed = false;
   for (var i = 0; i < depth; i++) {
     var bitIx = (pathIx * depth) + i;
     var bindingIx = bindings[bitIx % length];
     var hashIx = ((bitIx / length) | 0);
+
     var lobit = (newlo >> i) & 1;
-    los[bindingIx] = los[bindingIx] | (lobit << hashIx);
+    var oldlo = los[bindingIx];
+    var newlo = oldlo | (lobit << hashIx);
+    changed = changed | (oldlo !== newlo);
+    los[bindingIx] = newlo;
+
     var hibit = (newhi >> i) & 1;
-    his[bindingIx] = his[bindingIx] ^ ((1 - hibit) << hashIx);
+    var oldhi = his[bindingIx];
+    var newhi = oldhi | (hibit << hashIx);
+    changed = changed | (oldhi !== newhi);
+    his[bindingIx] = newhi;
   }
+  return changed;
 };
 
-ZZContains.prototype.setValue = function(los, his, values) {
+ZZContains.prototype.setValue = function(leaf, los, his, values) {
   var bindings = this.bindings;
-  var leaf = this.branch;
   var hashes = leaf.hashes;
   var fact = leaf.fact;
+  var changed = false;
   for (var i = 0, len = hashes.length; i < len; i++) {
     var bindingIx = bindings[i];
-    los[bindingIx] = hashes[i];
-    his[bindingIx] = hashes[i];
+    var hash = hashes[i];
+    var changed = changed | (los[bindingIx] !== hash) | (his[bindingIx] !== hash);
+    los[bindingIx] = hash;
+    his[bindingIx] = hash;
     values[bindingIx] = fact[i];
   }
+  return changed;
 };
 
 // TODO return changed bitmask
-ZZContains.prototype.propagate = function(los, his, values) {
+ZZContains.prototype.propagate = function(states, myIx, los, his, values) {
   var depth = this.tree.branchDepth;
   var width = this.tree.branchWidth;
-  var branch = this.branch;
+  var state = states[myIx];
+  var branch = state.branch;
+  var pathIx = state.pathIx;
+  var changed = false;
   if (branch.constructor === ZZLeaf) return UNCHANGED; // have already fixed a value, nothing left to do
   propagate: while (true) {
     if (branch.constructor === ZZLeaf) {
       // fixing a value now
-      this.setValue(los, his, values);
-      return UNCHANGED;
+      changed = changed | this.setValue(los, his, values);
+      states[myIx] = new ZZContainsState(branch, pathIx);
+      return changed ? CHANGED : UNCHANGED;
     } else {
 
       // figure out which children are in bounds
@@ -346,39 +361,74 @@ ZZContains.prototype.propagate = function(los, his, values) {
         return FAILED;
       } else if (newlo === newhi) {
         // only one matching child
-        this.setBounds(los, his, newlo, newhi);
+        changed = changed | this.setBounds(los, his, newlo, newhi);
         branch = branch[newlo];
-        this.branch = branch;
-        this.pathIx++;
+        pathIx++;
         continue propagate;
       } else {
-        this.setBounds(los, his, newlo, newhi);
-        return UNCHANGED;
+        changed = changed | this.setBounds(los, his, newlo, newhi);
+        states[myIx] = new ZZContainsState(branch, pathIx);
+        return changed ? CHANGED : UNCHANGED;
       }
     }
   }
 };
 
-ZZContains.prototype.split = function(los, his) {
-  var branch = this.branch;
-  if (branch.constructor === ZZLeaf) {
-    return [branch]; // cant split a leaf
-  } else {
-    // figure out which children are in bounds
-    var bounds = this.getBounds(los, his);
-    var lo = bounds[0];
-    var hi = bounds[1];
-    var children = [];
-    for (var i = 0; i < this.tree.branchWidth; i++) {
-      var child = branch[i];
-      if ((((lo & ~i) | (~hi & i)) === 0) &&
-        (child !== undefined)) {
-        children.push(child);
+function solve(numVars, constraints) {
+  var states = [];
+  var los = [];
+  var his = [];
+  var values = [];
+  for (var i = 0; i < numVars; i++) {
+    states[i] = constraints[i].init();
+    los[i] = 0;
+    his[i] = -1;
+    values[i] = undefined;
+  }
+
+  var results = [];
+  solveMore(numVars, constraints, states, los, his, values, results);
+}
+
+function solveMore(numVars, constraints, states, los, his, values, results) {
+
+  // propagate until stable
+  var numConstraints = constraints.length;
+  var lastChanged = numConstraints - 1;
+  var currentConstraint = 0;
+  propagate: while (true) {
+    if (lastChanged === currentConstraint) break propagate;
+    var result = constraints[currentConstraint].propagate(states, currentConstraint, los, his, values);
+    if (result === FAILED) return;
+    if (result === CHANGED) lastChanged = currentConstraint;
+    currentConstraint = (currentConstraint + 1) % numConstraints;
+    continue propagate;
+  }
+
+  // look for an unknown bit to split on
+  // TODO we should do this fairly?
+  for (var hashIx = 0; hashIx < numVars; hashIx++) {
+    var lo = los[hashIx];
+    var hi = his[hashIx];
+    if (lo !== hi) {
+      for (var bitIx = 0; bitIx < 32; bitIx++) {
+        if ((lo & (1 << bitIx)) !== (hi & (1 << bitIx))) {
+          // split
+          var newlos = los.slice();
+          newlos[hashIx] = lo | (1 << bitIx);
+          solveMore(numVars, constraints, states.slice(), newlos, his.slice(), values.slice(), results);
+          his[hashIx] = hi & ~(1 << bitIx);
+          solveMore(numVars, constraints, states, los, his, values, results);
+          return;
+        }
       }
     }
-    return children;
   }
-};
+
+  // if we reach here, then all bits are known
+  // TODO how do we guarantee that all values have been set?
+  results.push(values);
+}
 
 // STUFF
 
