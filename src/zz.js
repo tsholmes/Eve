@@ -458,19 +458,19 @@ function solve(numVars, constraints) {
 
 // STUFF
 
-var a = ZZTree.empty(2, 4).bulkInsert([
-  ["foo", "bar"],
-  ["bad", "quux"],
-]);
-var b = ZZTree.empty(2, 4).bulkInsert([
-  ["bar", "quux"],
-  ["bar", "hullabaloo"],
-  ["baz", "panic"],
-]);
+// var a = ZZTree.empty(2, 4).bulkInsert([
+//   ["foo", "bar"],
+//   ["bad", "quux"],
+// ]);
+// var b = ZZTree.empty(2, 4).bulkInsert([
+//   ["bar", "quux"],
+//   ["bar", "hullabaloo"],
+//   ["baz", "panic"],
+// ]);
 
-console.time("solve");
-var s = solve(3, [new ZZContains(a, [0, 1]), new ZZContains(b, [1, 2])]);
-console.timeEnd("solve");
+// console.time("solve");
+// var s = solve(3, [new ZZContains(a, [0, 1]), new ZZContains(b, [1, 2])]);
+// console.timeEnd("solve");
 
 function bench(n) {
   var facts = [];
@@ -479,23 +479,18 @@ function bench(n) {
   }
   var facts2 = [];
   for (var i = 0; i < n; i++) {
-    facts2.push([i + "bar", i + "quux" + i, i]);
+    facts2.push([i, i + "bar", i + "quux" + i]);
   }
   console.time("insert");
-  console.profile();
-  var t = ZZTree.empty(3, 4).bulkInsert(facts).bulkInsert(facts2);
-  console.profileEnd();
+  var a = ZZTree.empty(3, 4).bulkInsert(facts);
+  var b = ZZTree.empty(3, 4).bulkInsert(facts2);
   console.timeEnd("insert");
-  console.time("obj");
-  var x = {};
-  for (var i = 0; i < n; i++) {
-    x[facts[i]] = true;
-  }
-  for (var i = 0; i < n; i++) {
-    x[facts2[i]] = true;
-  }
-  console.timeEnd("obj");
-  return t.constructor;
+  console.time("solve");
+  console.profile();
+  var s = solve(5, [new ZZContains(a, [0, 1, 2]), new ZZContains(b, [2, 3, 4])]);
+  console.profileEnd();
+  console.timeEnd("solve");
+  return s.length;
 }
 
 // var x = bench(1000000);
