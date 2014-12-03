@@ -398,7 +398,7 @@ function solveMore(numVars, constraints, states, splits, los, his, values, resul
 
   // propagate until stable
   var numConstraints = constraints.length;
-  var lastChanged = (lastSplit - 1 + numConstraints) % numConstraints;
+  var lastChanged = lastSplit;
   var currentConstraint = lastSplit;
   propagate: while (true) {
     var result = constraints[currentConstraint].propagate(states, splits, currentConstraint, los, his, values);
@@ -481,6 +481,7 @@ function bench(n) {
   for (var i = 0; i < n; i++) {
     facts2.push([i, i + "bar", i + "quux" + i]);
   }
+
   console.time("insert");
   var a = ZZTree.empty(3, 4).bulkInsert(facts);
   var b = ZZTree.empty(3, 4).bulkInsert(facts2);
@@ -490,7 +491,39 @@ function bench(n) {
   var s = solve(5, [new ZZContains(a, [0, 1, 2]), new ZZContains(b, [2, 3, 4])]);
   console.profileEnd();
   console.timeEnd("solve");
-  return s.length;
+
+  console.time("insert obj");
+  var index = {};
+  for (var i = 0; i < n; i++) {
+    var fact = facts[i];
+    index[fact[2]] = fact;
+  }
+  var index2 = {};
+  for (var i = 0; i < n; i++) {
+    var fact = facts2[i];
+    index2[fact[2]] = fact;
+  }
+  console.timeEnd("insert obj");
+  console.time("solve obj");
+  var s2 = [];
+  for (var i = 0; i < n; i++) {
+    var fact = facts[i];
+    var fact2 = index[fact[2]];
+    s2.push([fact[0], fact[1], fact[2], fact2[1], fact2[2]]);
+  }
+  console.timeEnd("solve obj");
+  console.time("solve array");
+  var s3 = [];
+  for (var i = 0; i < n; i++) {
+    for (var j = 0; j < n; j++) {
+      var fact = facts[i];
+      var fact2 = facts2[i];
+      if (fact[2] === fact2[0]) s3.push([fact[0], fact[1], fact[2], fact2[1], fact2[2]]);
+    }
+  }
+  console.timeEnd("solve array");
+
+  return s.slice(0, 10);
 }
 
 // var x = bench(1000000);
