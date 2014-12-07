@@ -57,16 +57,19 @@ function hash(o) {
 
 // --- end of cljs.core ---
 
-// TODO try varying depth dynamically to maintain branch occupancy
+var minHash = Math.pow(2, 31) | 0;
+var maxHash = (Math.pow(2, 31) - 1) | 0;
 
-function pathEqual(a, b) {
-  var len = a.length;
-  for (var i = 0; i < len; i++) {
-    if (a[i] !== b[i]) {
-      return false;
-    }
+function minInto(runningMin, value) {
+  for (var j = 0, len = runningMin.length; j < len; j++) {
+    runningMin[j] = Math.min(runningMin[j], value[j]);
   }
-  return true;
+}
+
+function maxInto(runningMax, value) {
+  for (var j = 0, len = runningMax.length; j < len; j++) {
+    runningMax[j] = Math.max(runningMax[j], value[j]);
+  }
 }
 
 function ZZTree(factLength, branchDepth, branchWidth, root) {
@@ -88,12 +91,17 @@ function ZZBranch(los, his, children) {
   this.children = children;
 }
 
-var minHash = Math.pow(2, 31) | 0;
-var maxHash = (Math.pow(2, 31) - 1) | 0;
+function nodeLos(node) {
+  return (node.constructor === ZZLeaf) ? node.hashes : node.los;
+}
+
+function nodeHis(node) {
+  return (node.constructor === ZZLeaf) ? node.hashes : node.his;
+}
 
 ZZBranch.fromChildren = function(factLength, branchWidth, children) {
-  var los = [];
-  var his = [];
+  var los = new Int32Array(factLength);
+  var his = new Int32Array(factLength);
   for (var i = 0; i < factLength; i++) {
     los[i] = maxHash;
     his[i] = minHash;
@@ -102,17 +110,8 @@ ZZBranch.fromChildren = function(factLength, branchWidth, children) {
     var child = children[i];
     var childLos, childHis;
     if (child !== undefined) {
-      if (child.constructor === ZZLeaf) {
-        childLos = child.hashes;
-        childHis = child.hashes;
-      } else {
-        childLos = child.los;
-        childHis = child.his;
-      }
-      for (var j = 0; j < factLength; j++) {
-        los[j] = Math.min(los[j], childLos[j]);
-        his[j] = Math.max(his[j], childHis[j]);
-      }
+      minInto(los, nodeLos(child));
+      maxInto(his, nodeHis(child));
     }
   }
   return new ZZBranch(los, his, children);
@@ -120,8 +119,8 @@ ZZBranch.fromChildren = function(factLength, branchWidth, children) {
 
 ZZLeaf.fromFact = function(factLength, branchDepth, fact) {
   assert(fact.length === factLength);
-  var hashes = new Int32Array(fact.length);
-  for (var i = 0, len = fact.length; i < len; i++) {
+  var hashes = new Int32Array(factLength);
+  for (var i = 0; i < factLength; i++) {
     hashes[i] = hash(fact[i]);
   }
   return new ZZLeaf(fact, hashes);
@@ -189,6 +188,7 @@ ZZTree.prototype.bulkInsertToChildren = function(children, pathIx, leaves) {
     if (bucket.length > 0) {
       var child = children[branchIx];
       if (child === undefined) {
+        // make a child
         if (bucket.length === 1) {
           children[branchIx] = bucket[0];
         } else {
@@ -197,11 +197,13 @@ ZZTree.prototype.bulkInsertToChildren = function(children, pathIx, leaves) {
           children[branchIx] = ZZBranch.fromChildren(this.factLength, this.branchWidth, grandchildren);
         }
       } else if (child.constructor === ZZLeaf) {
+        // make a branch and carry the leaf down
         var grandchildren = new Array(this.branchWidth);
         bucket.push(child);
         this.bulkInsertToChildren(grandchildren, pathIx + 1, bucket);
         children[branchIx] = ZZBranch.fromChildren(this.factLength, this.branchWidth, grandchildren);
       } else {
+        // insert into branch
         var grandchildren = child.children.slice();
         this.bulkInsertToChildren(grandchildren, pathIx + 1, bucket);
         children[branchIx] = ZZBranch.fromChildren(this.factLength, this.branchWidth, grandchildren);
@@ -209,60 +211,6 @@ ZZTree.prototype.bulkInsertToChildren = function(children, pathIx, leaves) {
     }
   }
 };
-
-//   remove: function(fact) {
-//     var path = makePath(this.branchDepth, fact);
-//     var pathIx = 0;
-//     var root = this.root.slice();
-//     var branch = root;
-//     var branches = [];
-
-//     down: while (true) {
-//       var branchIx = path[pathIx];
-//       pathIx++;
-//       var child = branch[branchIx];
-//       if (child === undefined) {
-//         return new ZZTree(this.branchDepth, this.branchWidth, root); // nothing to clean up
-//       } else if (child.constructor === ZZLeaf) {
-//         var facts = child.facts.slice();
-//         splice: for (var i = 0; i < facts.length; i++) {
-//           if (arrayEqual(facts[i], fact)) {
-//             facts.splice(i, 1);
-//             break splice;
-//           }
-//         }
-//         if (facts.length > 0) {
-//           branch[branchIx] = new ZZLeaf(child.path, facts);
-//           return new ZZTree(this.branchDepth, this.branchWidth, root); // nothing to clean up
-//         } else {
-//           break down; // go clean up
-//         }
-//       } else {
-//         branches.push(branch);
-//         var childBranch = child.slice();
-//         branch[branchIx] = childBranch;
-//         branch = childBranch;
-//         continue down;
-//       }
-//     }
-
-//     up: while (true) {
-//       pathIx--;
-//       var branchIx = path[pathIx]
-//       delete branch[branchIx];
-//       for (var i = 0; i < this.branchWidth; i++) {
-//         if (branch[i] !== undefined) {
-//           break up; // done cleaning up
-//         }
-//       }
-//       branch = branches.pop();
-//     }
-
-//     return new ZZTree(this.branchDepth, this.branchWidth, root);
-//   }
-// }
-
-// TODO zztree.validate
 
 ZZTree.empty = function(factLength, branchDepth) {
   var branchWidth = Math.pow(2, branchDepth);
@@ -272,239 +220,160 @@ ZZTree.empty = function(factLength, branchDepth) {
 
 // SOLVER
 
-// split for hash -> value?
-
-// instead of los/his - bits and ixes
-// could also split by picking random bit?
-
-// use recursion for tracking stack
-// pass solver and solver state to constraint to split
-// constraint can modify state and call solve multiple times
-
 var FAILED = -1;
 var UNCHANGED = 0;
 var CHANGED = 1;
 // TODO use bitflag to indicate which vars changed
-
-function inBounds(lo, value, hi) {
-  return ((lo & ~value) | (~hi & value)) === 0;
-}
 
 function ZZContains(tree, bindings) {
   this.tree = tree;
   this.bindings = bindings;
 }
 
-function ZZContainsState(branch, pathIx) {
-  this.branch = branch;
-  this.pathIx = pathIx;
-  this.children = 0;
+ZZContains.prototype.init = function() {
+  return [this.tree.root];
+};
+
+var INSIDE = 0;
+var OVERLAPPING = 1;
+var OUTSIDE = 2;
+
+function compareBounds(innerLos, innerHis, outerLos, outerHis) {
+  var inside = true;
+  var outside = true;
+  for (var i = 0, len = innerLos.length; i < len; i++) {
+    outside &= (innerLos[i] > outerHis[i]) | (innerHis[i] < outerLos[i]);
+    inside &= (innerLos[i] >= outerLos[i]) & (innerHis[i] <= outerHis[i]);
+  }
+  return inside ? INSIDE : (outside ? OUTSIDE : OVERLAPPING);
 }
 
-ZZContains.prototype.init = function() {
-  return new ZZContainsState(this.tree.root, 0);
-};
-
-ZZContains.prototype.getBounds = function(pathIx, los, his) {
+ZZContains.prototype.propagate = function(states, myIx, los, his, values) {
+  // pull out bounds
   var bindings = this.bindings;
-  var depth = this.tree.branchDepth;
-  var length = this.bindings.length;
-  var lo = 0;
-  var hi = 0;
-  for (var i = 0; i < depth; i++) {
-    var bitIx = (pathIx * depth) + i;
-    var bindingIx = bindings[bitIx % length];
-    var hashIx = ((bitIx / length) | 0);
-    var lohash = los[bindingIx];
-    var lobit = (lohash >> hashIx) & 1;
-    var lo = lo | (lobit << i);
-    var hihash = his[bindingIx];
-    var hibit = (hihash >> hashIx) & 1;
-    var hi = hi | (hibit << i);
-  }
-  return [lo, hi];
-};
-
-ZZContains.prototype.setBounds = function(pathIx, los, his, setlo, sethi) {
-  var bindings = this.bindings;
-  var depth = this.tree.branchDepth;
-  var length = this.bindings.length;
-  var changed = false;
-  for (var i = 0; i < depth; i++) {
-    var bitIx = (pathIx * depth) + i;
-    var bindingIx = bindings[bitIx % length];
-    var hashIx = ((bitIx / length) | 0);
-
-    var lobit = (setlo >> i) & 1;
-    var oldlo = los[bindingIx];
-    var newlo = oldlo | (lobit << hashIx);
-    changed = changed || (oldlo !== newlo);
-    los[bindingIx] = newlo;
-
-    var hibit = (sethi >> i) & 1;
-    var oldhi = his[bindingIx];
-    var newhi = oldhi & ~((1 - hibit) << hashIx);
-    changed = changed || (oldhi !== newhi);
-    his[bindingIx] = newhi;
-  }
-  return changed;
-};
-
-ZZContains.prototype.setValue = function(leaf, los, his, values, changed) {
-  var bindings = this.bindings;
-  var hashes = leaf.hashes;
-  var fact = leaf.fact;
-  var changed = changed;
-  for (var i = 0, len = hashes.length; i < len; i++) {
+  var oldLos = new Int32Array(bindings.length);
+  var oldHis = new Int32Array(bindings.length);
+  for (var i = 0, len = bindings.length; i < len; i++) {
     var bindingIx = bindings[i];
-    var hash = hashes[i];
-    var lo = los[bindingIx];
-    var hi = his[bindingIx];
-    if (!inBounds(lo, hash, hi)) return FAILED;
-    var changed = changed || (lo !== hash) || (hi !== hash);
-    los[bindingIx] = hash;
-    his[bindingIx] = hash;
-    values[bindingIx] = fact[i];
+    oldLos[i] = los[bindingIx];
+    oldHis[i] = his[bindingIx];
+  }
+
+  // find nodes contain in bounds
+  var oldNodes = states[myIx].slice();
+  var newNodes = [];
+  while (oldNodes.length > 0) {
+    var node = oldNodes.pop();
+    var comparison = compareBounds(nodeLos(node), nodeHis(node), oldLos, oldHis);
+    if (comparison === INSIDE) {
+      // totally in bounds - keep branch
+      newNodes.push(node);
+    } else if ((comparison === OVERLAPPING) && (node.constructor === ZZBranch)) {
+      // partially in bounds - explore children
+      var children = node.children;
+      for (var i = 0, len = children.length; i < len; i++) {
+        var child = children[i];
+        if (child !== undefined) oldNodes.push(child);
+      }
+    } else {
+      // totally out of bounds, discard branch
+    }
+  }
+  states[myIx] = newNodes;
+
+  // figure out new bounds
+  var newLos = oldHis;
+  var newHis = oldLos;
+  for (var i = 0, len = newNodes.length; i < len; i++) {
+    var node = newNodes[i];
+    minInto(newLos, nodeLos(node));
+    maxInto(newHis, nodeHis(node));
+  }
+
+  // update bounds
+  if (newNodes.length === 0) return FAILED;
+  var changed = false;
+  for (var i = 0, len = bindings.length; i < len; i++) {
+    var bindingIx = bindings[i];
+    var oldLo = los[bindingIx];
+    var oldHi = his[bindingIx];
+    var newLo = newLos[i];
+    var newHi = newHis[i];
+    // TODO if (newLo === newHi) set value / handle collisions
+    // TODO return changed bitmask for watches
+    changed = changed || (oldLo !== newLo) || (oldHi !== newHi);
+    los[bindingIx] = newLo;
+    his[bindingIx] = newHi;
   }
   return changed ? CHANGED : UNCHANGED;
 };
 
-// TODO return changed bitmask
-ZZContains.prototype.propagate = function(states, splits, myIx, los, his, values) {
-  var width = this.tree.branchWidth;
-  var state = states[myIx];
-  var branch = state.branch;
-  var pathIx = state.pathIx;
-  var changed = false;
-  propagate: while (true) {
-    if (branch.constructor === ZZLeaf) {
-      // fix the value
-      states[myIx] = new ZZContainsState(branch, pathIx);
-      splits[myIx] = [];
-      return this.setValue(branch, los, his, values, changed);
-    } else {
-
-      // figure out which children are in bounds
-      var bounds = this.getBounds(pathIx, los, his);
-      var lo = bounds[0];
-      var hi = bounds[1];
-      var newlo = -1; // all 1s
-      var newhi = 0; // all 0s
-      var children = [];
-      for (var i = 0; i < width; i++) {
-        // if i has 1s where lo has 1s and 0s where hi has 0s
-        // and there is a branch for i
-        if (inBounds(lo, i, hi) &&
-          (branch[i] !== undefined)) {
-          newlo = newlo & i; // drop lo to 0 wherever i has a 0
-          newhi = newhi | i; // raise hi to 1 wherever i has a 1
-          children.push(i);
-        }
-      }
-
-      if (children.length === 0) {
-        // no matching children
-        return FAILED;
-      } else if (children.length === 1) {
-        // only one matching child
-        changed = changed || this.setBounds(pathIx, los, his, newlo, newhi);
-        branch = branch[newlo];
-        pathIx++;
-        continue propagate;
-      } else {
-        changed = changed || this.setBounds(pathIx, los, his, newlo, newhi);
-        states[myIx] = new ZZContainsState(branch, pathIx);
-        splits[myIx] = children;
-        return changed ? CHANGED : UNCHANGED;
-      }
-    }
-  }
-};
-
-ZZContains.prototype.split = function(states, splits, myIx, los, his, values, children) {
-  var state = states[myIx];
-  var branch = state.branch;
-  var pathIx = state.pathIx;
-  var child = children.pop();
-  this.setBounds(pathIx, los, his, child, child);
-  branch = branch[child];
-  pathIx++;
-  states[myIx] = new ZZContainsState(branch, pathIx);
-};
-
-function solveMore(numVars, constraints, states, splits, los, his, values, results, lastSplit) {
+function solveMore(numVars, constraints, states, los, his, values, results, lastSplit) {
 
   // propagate until stable
   var numConstraints = constraints.length;
-  var lastChanged = lastSplit;
-  var currentConstraint = lastSplit;
+  var lastChanged = 0;
+  var currentConstraint = 0;
   propagate: while (true) {
-    var result = constraints[currentConstraint].propagate(states, splits, currentConstraint, los, his, values);
+    var result = constraints[currentConstraint].propagate(states, currentConstraint, los, his, values);
     if (result === FAILED) return;
     if (result === CHANGED) lastChanged = currentConstraint;
     currentConstraint = (currentConstraint + 1) % numConstraints;
     if (lastChanged === currentConstraint) break propagate;
   }
 
-
   // look for something to split
-  var currentConstraint = (lastSplit + 1) % numConstraints;
+  var currentVar = (lastSplit + 1) % numVars;
   split: while (true) {
-      var split = splits[currentConstraint];
-      if (split.length > 0) {
-        var constraint = constraints[currentConstraint];
-        splits[currentConstraint] = [];
-        while (split.length > 0) {
-          var newStates = states.slice();
-          var newSplits = splits.slice();
-          var newLos = los.slice();
-          var newHis = his.slice();
-          var newValues = values.slice();
-          constraint.split(newStates, newSplits, currentConstraint, newLos, newHis, newValues, split);
-          solveMore(numVars, constraints, newStates, newSplits, newLos, newHis, newValues, results, currentConstraint);
-        }
+      var lo = los[currentVar];
+      var hi = his[currentVar];
+      if (lo !== hi) {
+        var mid = (lo + (hi - lo) / 2) | 0;
+        var splitHis = new Int32Array(his);
+        splitHis[currentVar] = mid;
+        solveMore(numVars, constraints, states.slice(), new Int32Array(los), splitHis, values.slice(), results, currentVar);
+        los[currentVar] = mid + 1;
+        solveMore(numVars, constraints, states, los, his, values, results, currentVar);
         return;
       }
-      if (currentConstraint === lastSplit) break split; // TODO this just assumes that we're done now
-      currentConstraint = (currentConstraint + 1) % numConstraints;
+      if (currentVar === lastSplit) break split; // TODO this just assumes that we're done now
+      currentVar = (currentVar + 1) % numVars;
     }
     // if we reach here, then all bits are known
     // TODO how do we guarantee that all values have been set?
-  results.push(values);
+  results.push([los, his]); // TODO results.push(values);
 }
 
 function solve(numVars, constraints) {
   var states = [];
-  var splits = [];
-  var los = [];
-  var his = [];
+  var los = new Int32Array(numVars);
+  var his = new Int32Array(numVars);
   var values = [];
   for (var i = 0, len = constraints.length; i < len; i++) {
     states[i] = constraints[i].init();
-    splits[i] = [];
   }
   for (var i = 0; i < numVars; i++) {
-    los[i] = 0;
-    his[i] = -1;
+    los[i] = minHash;
+    his[i] = maxHash;
     values[i] = undefined;
   }
 
   var results = [];
-  solveMore(numVars, constraints, states, splits, los, his, values, results, 0);
+  solveMore(numVars, constraints, states, los, his, values, results, 0);
   return results;
 }
 
 // STUFF
 
-// var a = ZZTree.empty(2, 4).bulkInsert([
-//   ["foo", "bar"],
-//   ["bad", "quux"],
-// ]);
-// var b = ZZTree.empty(2, 4).bulkInsert([
-//   ["bar", "quux"],
-//   ["bar", "hullabaloo"],
-//   ["baz", "panic"],
-// ]);
+var a = ZZTree.empty(2, 4).bulkInsert([
+  ["foo", "bar"],
+  ["bad", "quux"],
+]);
+var b = ZZTree.empty(2, 4).bulkInsert([
+  ["bar", "quux"],
+  ["bar", "hullabaloo"],
+  ["baz", "panic"],
+]);
 
 // console.time("solve");
 // var s = solve(3, [new ZZContains(a, [0, 1]), new ZZContains(b, [1, 2])]);
@@ -550,16 +419,16 @@ function bench(n) {
     s2.push([fact[0], fact[1], fact[2], fact2[1], fact2[2]]);
   }
   console.timeEnd("solve obj");
-  console.time("solve array");
-  var s3 = [];
-  for (var i = 0; i < n; i++) {
-    for (var j = 0; j < n; j++) {
-      var fact = facts[i];
-      var fact2 = facts2[i];
-      if (fact[2] === fact2[0]) s3.push([fact[0], fact[1], fact[2], fact2[1], fact2[2]]);
-    }
-  }
-  console.timeEnd("solve array");
+  // console.time("solve array");
+  // var s3 = [];
+  // for (var i = 0; i < n; i++) {
+  //   for (var j = 0; j < n; j++) {
+  //     var fact = facts[i];
+  //     var fact2 = facts2[i];
+  //     if (fact[2] === fact2[0]) s3.push([fact[0], fact[1], fact[2], fact2[1], fact2[2]]);
+  //   }
+  // }
+  // console.timeEnd("solve array");
 
   return s.slice(0, 10);
 }
