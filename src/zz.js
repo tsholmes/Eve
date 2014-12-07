@@ -382,11 +382,11 @@ var b = ZZTree.empty(2, 4).bulkInsert([
 function bench(n) {
   var facts = [];
   for (var i = 0; i < n; i++) {
-    facts.push([i + "zomg", i + "foo" + i, i]);
+    facts.push([i + "zomg", i + "foo" + i, "beebs" + i]);
   }
   var facts2 = [];
   for (var i = 0; i < n; i++) {
-    facts2.push([i, i + "bar", i + "quux" + i]);
+    facts2.push(["beebs" + i, i + "bar", i + "quux" + i]);
   }
 
   console.time("insert");
