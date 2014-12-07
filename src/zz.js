@@ -214,7 +214,7 @@ ZZTree.prototype.bulkInsertToChildren = function(children, pathIx, leaves) {
 
 ZZTree.empty = function(factLength, branchDepth) {
   var branchWidth = Math.pow(2, branchDepth);
-  var root = ZZBranch.fromChildren(this.factLength, this.branchWidth, new Array(branchWidth));
+  var root = ZZBranch.fromChildren(factLength, branchWidth, new Array(branchWidth));
   return new ZZTree(factLength, branchDepth, branchWidth, root);
 };
 
