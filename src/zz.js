@@ -219,15 +219,12 @@ ZZTree.empty = function(factLength, branchDepth) {
 };
 
 // SOLVER
+// volume layout is los, his, states
 
-var FAILED = -1;
-var UNCHANGED = 0;
-var CHANGED = 1;
-// TODO use bitflag to indicate which vars changed
-
-function ZZContains(tree, bindings) {
+function ZZContains(tree, hashIxes, valueIxes) {
   this.tree = tree;
-  this.bindings = bindings;
+  this.hashIxes = hashIxes;
+  this.valueIxes = valueIxes;
 }
 
 ZZContains.prototype.init = function() {
@@ -248,64 +245,33 @@ function compareBounds(innerLos, innerHis, outerLos, outerHis) {
   return inside ? INSIDE : (outside ? OUTSIDE : OVERLAPPING);
 }
 
-ZZContains.prototype.propagate = function(states, myIx, los, his, values) {
-  // pull out bounds
-  var bindings = this.bindings;
-  var oldLos = new Int32Array(bindings.length);
-  var oldHis = new Int32Array(bindings.length);
-  for (var i = 0, len = bindings.length; i < len; i++) {
-    var bindingIx = bindings[i];
-    oldLos[i] = los[bindingIx];
-    oldHis[i] = his[bindingIx];
+function write(fromArray, toArray, fromIx, toIx, len) {
+  for (var i = 0; i < len; i++) {
+    toArray[toIx + i] = fromArray[fromIx + i];
   }
+}
 
-  // find nodes contain in bounds
-  var oldNodes = states[myIx].slice();
-  var newNodes = [];
-  while (oldNodes.length > 0) {
-    var node = oldNodes.pop();
-    var comparison = compareBounds(nodeLos(node), nodeHis(node), oldLos, oldHis);
-    if (comparison === INSIDE) {
-      // totally in bounds - keep branch
-      newNodes.push(node);
-    } else if ((comparison === OVERLAPPING) && (node.constructor === ZZBranch)) {
-      // partially in bounds - explore children
-      var children = node.children;
-      for (var i = 0, len = children.length; i < len; i++) {
-        var child = children[i];
-        if (child !== undefined) oldNodes.push(child);
-      }
+ZZContains.prototype.init = function() {
+  return this.tree.root;
+};
+
+ZZContains.prototype.propagate = function(inVolumes, outVolumes, numInVolumes, numVars, numConstraints, myIx) {
+  var volumeLength = numVars + numVars + numConstraints; // los, his, states
+  var maxLength = volumeLength * numInVolumes;
+  var stateOffset = numVars + numVars + myIx;
+  var numOutVolumes = 0;
+  for (var i = 0; i < maxLength; i += volumeLength) {
+    var node = inVolumes[i + stateOffset];
+    if (node.constructor === ZZLeaf) {
+      write(inVolumes, outVolumes, i, numOutVolumes * volumeLength, volumeLength);
     } else {
-      // totally out of bounds, discard branch
+      var branchWidth = this.tree.branchWidth;
+      var children = node.children;
+      for (var i = 0; i < branchWidth; i++) {
+
+      }
     }
   }
-  states[myIx] = newNodes;
-
-  // figure out new bounds
-  var newLos = oldHis;
-  var newHis = oldLos;
-  for (var i = 0, len = newNodes.length; i < len; i++) {
-    var node = newNodes[i];
-    minInto(newLos, nodeLos(node));
-    maxInto(newHis, nodeHis(node));
-  }
-
-  // update bounds
-  if (newNodes.length === 0) return FAILED;
-  var changed = false;
-  for (var i = 0, len = bindings.length; i < len; i++) {
-    var bindingIx = bindings[i];
-    var oldLo = los[bindingIx];
-    var oldHi = his[bindingIx];
-    var newLo = newLos[i];
-    var newHi = newHis[i];
-    // TODO if (newLo === newHi) set value / handle collisions
-    // TODO return changed bitmask for watches
-    changed = changed || (oldLo !== newLo) || (oldHi !== newHi);
-    los[bindingIx] = newLo;
-    his[bindingIx] = newHi;
-  }
-  return changed ? CHANGED : UNCHANGED;
 };
 
 function solveMore(numVars, constraints, states, los, his, values, results, lastSplit) {
@@ -394,9 +360,9 @@ function bench(n) {
   var b = ZZTree.empty(3, 4).bulkInsert(facts2);
   console.timeEnd("insert");
   console.time("solve");
-  console.profile();
+  // console.profile();
   var s = solve(5, [new ZZContains(a, [0, 1, 2]), new ZZContains(b, [2, 3, 4])]);
-  console.profileEnd();
+  // console.profileEnd();
   console.timeEnd("solve");
 
   console.time("insert obj");
@@ -419,18 +385,36 @@ function bench(n) {
     s2.push([fact[0], fact[1], fact[2], fact2[1], fact2[2]]);
   }
   console.timeEnd("solve obj");
-  // console.time("solve array");
-  // var s3 = [];
-  // for (var i = 0; i < n; i++) {
-  //   for (var j = 0; j < n; j++) {
-  //     var fact = facts[i];
-  //     var fact2 = facts2[i];
-  //     if (fact[2] === fact2[0]) s3.push([fact[0], fact[1], fact[2], fact2[1], fact2[2]]);
-  //   }
-  // }
-  // console.timeEnd("solve array");
 
-  return s.slice(0, 10);
+  console.time("insert sort");
+  facts.sort(function(a, b) {
+    return a[2] < b[2] ? -1 : (a[2] > b[2] ? 1 : 0);
+  });
+  facts2.sort(function(a, b) {
+    return a[0] < b[0] ? -1 : (a[0] > b[0] ? 1 : 0);
+  });
+  console.timeEnd("insert sort");
+  console.time("solve sort");
+  var s3 = [];
+  var ix = 0;
+  var ix2 = 0;
+  while ((ix < n) && (ix2 < n)) {
+    var fact = facts[ix];
+    var fact2 = facts2[ix2];
+    var join = fact[2];
+    var join2 = fact2[0];
+    if (join === join2) {
+      s3.push([fact[0], fact[1], fact[2], fact2[1], fact2[2]]);
+      ix++;
+    } else if (join < join2) {
+      ix++;
+    } else {
+      ix2++;
+    }
+  }
+  console.timeEnd("solve sort");
+
+  return [s.slice(0, 10), s2.slice(0, 10), s3.slice(0, 10)];
 }
 
 // var x = bench(1000000);
