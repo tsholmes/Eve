@@ -283,16 +283,6 @@ ZZContains.prototype.propagate = function(inVolumes, outVolumes, stableVolumes, 
       // nothing left to do
       write(inVolumes, outVolumes, inVolumeStart, outVolumesEnd, volumeLength);
       outVolumesEnd += volumeLength;
-    } else if (node.constructor === ZZLeaf) {
-      // check if stable
-      inVolumes[inVolumeStart + stateOffset] = null;
-      if (isStable(inVolumes, inVolumeStart, numVars, numConstraints)) {
-        write(inVolumes, stableVolumes, inVolumeStart, stableVolumesEnd, volumeLength);
-        stableVolumesEnd += volumeLength;
-      } else {
-        write(inVolumes, outVolumes, inVolumeStart, outVolumesEnd, volumeLength);
-        outVolumesEnd += volumeLength;
-      }
     } else {
       // check the child hashes
       var branchWidth = this.tree.branchWidth;
@@ -303,9 +293,22 @@ ZZContains.prototype.propagate = function(inVolumes, outVolumes, stableVolumes, 
           var los = nodeLos(child);
           var his = nodeHis(child);
           if (intersects(inVolumes, inVolumeStart, hashIxes, los, his, numVars)) {
-            write(inVolumes, outVolumes, inVolumeStart, outVolumesEnd, volumeLength);
-            overwrite(outVolumes, outVolumesEnd, hashIxes, los, his, child, numVars, myIx);
-            outVolumesEnd += volumeLength;
+            if (child.constructor === ZZLeaf) {
+              inVolumes[inVolumeStart + stateOffset] = null;
+              if (isStable(inVolumes, inVolumeStart, numVars, numConstraints)) {
+                write(inVolumes, stableVolumes, inVolumeStart, stableVolumesEnd, volumeLength);
+                overwrite(stableVolumes, stableVolumesEnd, hashIxes, los, his, null, numVars, myIx);
+                stableVolumesEnd += volumeLength;
+              } else {
+                write(inVolumes, outVolumes, inVolumeStart, outVolumesEnd, volumeLength);
+                overwrite(outVolumes, outVolumesEnd, hashIxes, los, his, null, numVars, myIx);
+                outVolumesEnd += volumeLength;
+              }
+            } else {
+              write(inVolumes, outVolumes, inVolumeStart, outVolumesEnd, volumeLength);
+              overwrite(outVolumes, outVolumesEnd, hashIxes, los, his, child, numVars, myIx);
+              outVolumesEnd += volumeLength;
+            }
           }
         }
       }
@@ -330,7 +333,9 @@ function solve(numVars, constraints) {
   var inVolumesEnd = numVars + numVars + numConstraints;
 
   var constraint = 0;
+  var volumeLength = numVars + numVars + numConstraints;
   while (inVolumesEnd > 0) {
+    console.log((inVolumes.length / volumeLength) + " volumes");
     inVolumesEnd = constraints[constraint].propagate(inVolumes, outVolumes, stableVolumes, inVolumesEnd, numVars, numConstraints, constraint);
     var tmp = outVolumes;
     outVolumes = inVolumes;
