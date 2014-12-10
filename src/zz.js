@@ -72,12 +72,13 @@ function maxInto(runningMax, value) {
   }
 }
 
-function ZZTree(factLength, branchDepth, branchWidth, root) {
+function ZZTree(factLength, branchDepth, branchWidth, root, ixes) {
   assert(branchDepth <= 8);
   this.factLength = factLength;
   this.branchDepth = branchDepth;
   this.branchWidth = branchWidth;
   this.root = root;
+  this.ixes = ixes;
 }
 
 function ZZLeaf(fact, hashes) {
@@ -108,7 +109,6 @@ ZZBranch.fromChildren = function(factLength, branchWidth, children) {
   }
   for (var i = 0; i < branchWidth; i++) {
     var child = children[i];
-    var childLos, childHis;
     if (child !== undefined) {
       minInto(los, nodeLos(child));
       maxInto(his, nodeHis(child));
@@ -126,15 +126,16 @@ ZZLeaf.fromFact = function(factLength, branchDepth, fact) {
   return new ZZLeaf(fact, hashes);
 };
 
-ZZLeaf.prototype.path = function(depth, pathIx) {
+ZZLeaf.prototype.path = function(depth, pathIx, ixes) {
   var hashes = this.hashes;
-  var length = hashes.length;
+  var length = ixes.length;
   var path = 0;
+  var maxBitIx = length * 32;
   for (var i = 0; i < depth; i++) {
-    var bitIx = (pathIx * depth) + i;
-    var hash = hashes[bitIx % length];
+    var bitIx = maxBitIx - ((pathIx * depth) + i) - 1;
+    var hash = hashes[ixes[bitIx % length]];
     var bit = (hash >> ((bitIx / length) | 0)) & 1;
-    path = path | (bit << i);
+    path = path | (bit << (depth - i - 1));
   }
   return path;
 };
@@ -173,12 +174,13 @@ ZZTree.prototype.bulkInsert = function(facts) {
 ZZTree.prototype.bulkInsertToChildren = function(children, pathIx, leaves) {
   // bucket sort the leaves
   var buckets = [];
+  var ixes = this.ixes;
   for (var branchIx = 0; branchIx < this.branchWidth; branchIx++) {
     buckets[branchIx] = [];
   }
   for (var i = 0, len = leaves.length; i < len; i++) {
     var leaf = leaves[i];
-    var branchIx = leaf.path(this.branchDepth, pathIx);
+    var branchIx = leaf.path(this.branchDepth, pathIx, ixes);
     buckets[branchIx].push(leaf);
   }
 
@@ -212,10 +214,10 @@ ZZTree.prototype.bulkInsertToChildren = function(children, pathIx, leaves) {
   }
 };
 
-ZZTree.empty = function(factLength, branchDepth) {
+ZZTree.empty = function(factLength, branchDepth, ixes) {
   var branchWidth = Math.pow(2, branchDepth);
   var root = ZZBranch.fromChildren(factLength, branchWidth, new Array(branchWidth));
-  return new ZZTree(factLength, branchDepth, branchWidth, root);
+  return new ZZTree(factLength, branchDepth, branchWidth, root, ixes);
 };
 
 // SOLVER
@@ -356,11 +358,11 @@ function solve(numVars, constraints) {
 
 // STUFF
 
-var a = ZZTree.empty(2, 4).bulkInsert([
+var a = ZZTree.empty(2, 4, [0, 1]).bulkInsert([
   ["foo", "bar"],
   ["bad", "quux"],
 ]);
-var b = ZZTree.empty(2, 4).bulkInsert([
+var b = ZZTree.empty(2, 4, [0, 1]).bulkInsert([
   ["bar", "quux"],
   ["bar", "hullabaloo"],
   ["baz", "panic"],
@@ -381,13 +383,14 @@ function bench(n) {
   }
 
   console.time("insert");
-  var a = ZZTree.empty(3, 4).bulkInsert(facts);
-  var b = ZZTree.empty(3, 4).bulkInsert(facts2);
+  var a = ZZTree.empty(3, 4, [2]).bulkInsert(facts);
+  var b = ZZTree.empty(3, 4, [0]).bulkInsert(facts2);
   console.timeEnd("insert");
+  console.log(a, b);
   console.time("solve");
-  // console.profile();
+  console.profile();
   var s = solve(5, [new ZZContains(a, [0, 1, 2]), new ZZContains(b, [2, 3, 4])]);
-  // console.profileEnd();
+  console.profileEnd();
   console.timeEnd("solve");
 
   console.time("insert obj");
