@@ -231,102 +231,114 @@ ZZContains.prototype.init = function() {
   return [this.tree.root];
 };
 
-var INSIDE = 0;
-var OVERLAPPING = 1;
-var OUTSIDE = 2;
-
-function compareBounds(innerLos, innerHis, outerLos, outerHis) {
-  var inside = true;
-  var outside = true;
-  for (var i = 0, len = innerLos.length; i < len; i++) {
-    outside &= (innerLos[i] > outerHis[i]) | (innerHis[i] < outerLos[i]);
-    inside &= (innerLos[i] >= outerLos[i]) & (innerHis[i] <= outerHis[i]);
-  }
-  return inside ? INSIDE : (outside ? OUTSIDE : OVERLAPPING);
-}
-
 function write(fromArray, toArray, fromIx, toIx, len) {
   for (var i = 0; i < len; i++) {
     toArray[toIx + i] = fromArray[fromIx + i];
   }
 }
 
+function overwrite(volumes, volumeStart, ixes, los, his, state, numVars, myIx) {
+  for (var i = 0, len = ixes.length; i < len; i++) {
+    var ix = ixes[i];
+    var loIx = volumeStart + ix;
+    volumes[loIx] = Math.max(volumes[loIx], los[i]);
+    var hiIx = volumeStart + numVars + ix;
+    volumes[hiIx] = Math.min(volumes[hiIx], his[i]);
+  }
+  volumes[volumeStart + numVars + numVars + myIx] = state;
+}
+
+function intersects(volumes, volumeStart, ixes, los, his, numVars) {
+  var outOfBounds = false;
+  for (var i = 0, len = ixes.length; i < len; i++) {
+    var ix = ixes[i];
+    outOfBounds = outOfBounds ||
+      (his[i] < volumes[volumeStart + ix]) ||
+      (los[i] > volumes[volumeStart + numVars + ix]);
+  }
+  return !outOfBounds;
+}
+
+function isStable(volumes, volumeStart, numVars, numConstraints) {
+  var isStable = true;
+  for (var i = 0; i < numConstraints; i++) {
+    isStable = isStable && (volumes[volumeStart + numVars + numVars + i] === null);
+  }
+  return isStable;
+}
+
 ZZContains.prototype.init = function() {
   return this.tree.root;
 };
 
-ZZContains.prototype.propagate = function(inVolumes, outVolumes, numInVolumes, numVars, numConstraints, myIx) {
+ZZContains.prototype.propagate = function(inVolumes, outVolumes, stableVolumes, inVolumesEnd, numVars, numConstraints, myIx) {
   var volumeLength = numVars + numVars + numConstraints; // los, his, states
-  var maxLength = volumeLength * numInVolumes;
   var stateOffset = numVars + numVars + myIx;
-  var numOutVolumes = 0;
-  for (var i = 0; i < maxLength; i += volumeLength) {
-    var node = inVolumes[i + stateOffset];
-    if (node.constructor === ZZLeaf) {
-      write(inVolumes, outVolumes, i, numOutVolumes * volumeLength, volumeLength);
+  var outVolumesEnd = 0;
+  var stableVolumesEnd = stableVolumes.length;
+  var hashIxes = this.hashIxes;
+  for (var inVolumeStart = 0; inVolumeStart < inVolumesEnd; inVolumeStart += volumeLength) {
+    var node = inVolumes[inVolumeStart + stateOffset];
+    if (node === null) {
+      // nothing left to do
+      write(inVolumes, outVolumes, inVolumeStart, outVolumesEnd, volumeLength);
+      outVolumesEnd += volumeLength;
+    } else if (node.constructor === ZZLeaf) {
+      // check if stable
+      inVolumes[inVolumeStart + stateOffset] = null;
+      if (isStable(inVolumes, inVolumeStart, numVars, numConstraints)) {
+        write(inVolumes, stableVolumes, inVolumeStart, stableVolumesEnd, volumeLength);
+        stableVolumesEnd += volumeLength;
+      } else {
+        write(inVolumes, outVolumes, inVolumeStart, outVolumesEnd, volumeLength);
+        outVolumesEnd += volumeLength;
+      }
     } else {
+      // check the child hashes
       var branchWidth = this.tree.branchWidth;
       var children = node.children;
       for (var i = 0; i < branchWidth; i++) {
-
+        var child = children[i];
+        if (child !== undefined) {
+          var los = nodeLos(child);
+          var his = nodeHis(child);
+          if (intersects(inVolumes, inVolumeStart, hashIxes, los, his, numVars)) {
+            write(inVolumes, outVolumes, inVolumeStart, outVolumesEnd, volumeLength);
+            overwrite(outVolumes, outVolumesEnd, hashIxes, los, his, child, numVars, myIx);
+            outVolumesEnd += volumeLength;
+          }
+        }
       }
     }
   }
+  return outVolumesEnd;
 };
 
-function solveMore(numVars, constraints, states, los, his, values, results, lastSplit) {
-
-  // propagate until stable
-  var numConstraints = constraints.length;
-  var lastChanged = 0;
-  var currentConstraint = 0;
-  propagate: while (true) {
-    var result = constraints[currentConstraint].propagate(states, currentConstraint, los, his, values);
-    if (result === FAILED) return;
-    if (result === CHANGED) lastChanged = currentConstraint;
-    currentConstraint = (currentConstraint + 1) % numConstraints;
-    if (lastChanged === currentConstraint) break propagate;
-  }
-
-  // look for something to split
-  var currentVar = (lastSplit + 1) % numVars;
-  split: while (true) {
-      var lo = los[currentVar];
-      var hi = his[currentVar];
-      if (lo !== hi) {
-        var mid = (lo + (hi - lo) / 2) | 0;
-        var splitHis = new Int32Array(his);
-        splitHis[currentVar] = mid;
-        solveMore(numVars, constraints, states.slice(), new Int32Array(los), splitHis, values.slice(), results, currentVar);
-        los[currentVar] = mid + 1;
-        solveMore(numVars, constraints, states, los, his, values, results, currentVar);
-        return;
-      }
-      if (currentVar === lastSplit) break split; // TODO this just assumes that we're done now
-      currentVar = (currentVar + 1) % numVars;
-    }
-    // if we reach here, then all bits are known
-    // TODO how do we guarantee that all values have been set?
-  results.push([los, his]); // TODO results.push(values);
-}
-
 function solve(numVars, constraints) {
-  var states = [];
-  var los = new Int32Array(numVars);
-  var his = new Int32Array(numVars);
-  var values = [];
-  for (var i = 0, len = constraints.length; i < len; i++) {
-    states[i] = constraints[i].init();
-  }
+  var numConstraints = constraints.length;
+  var inVolumes = [];
+  var outVolumes = [];
+  var stableVolumes = [];
+
   for (var i = 0; i < numVars; i++) {
-    los[i] = minHash;
-    his[i] = maxHash;
-    values[i] = undefined;
+    inVolumes[i] = minHash;
+    inVolumes[numVars + i] = maxHash;
+  }
+  for (var i = 0; i < numConstraints; i++) {
+    inVolumes[numVars + numVars + i] = constraints[i].init();
+  }
+  var inVolumesEnd = numVars + numVars + numConstraints;
+
+  var constraint = 0;
+  while (inVolumesEnd > 0) {
+    inVolumesEnd = constraints[constraint].propagate(inVolumes, outVolumes, stableVolumes, inVolumesEnd, numVars, numConstraints, constraint);
+    var tmp = outVolumes;
+    outVolumes = inVolumes;
+    inVolumes = tmp;
+    constraint = (constraint + 1) % numConstraints;
   }
 
-  var results = [];
-  solveMore(numVars, constraints, states, los, his, values, results, 0);
-  return results;
+  return stableVolumes;
 }
 
 // STUFF
@@ -414,7 +426,7 @@ function bench(n) {
   }
   console.timeEnd("solve sort");
 
-  return [s.slice(0, 10), s2.slice(0, 10), s3.slice(0, 10)];
+  return [s.slice(0, 10 * 12), s2.slice(0, 10), s3.slice(0, 10)];
 }
 
 // var x = bench(1000000);
