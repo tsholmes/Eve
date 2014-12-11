@@ -346,9 +346,9 @@ function solve(numVars, constraints) {
   var constraint = 0;
   var iteration = 0;
   while (inVolumesEnd > 0) {
-    console.log((inVolumes.length / volumeLength) + " volumes");
-    drawVolumes(iteration, inVolumes, 1, 2, numVars, numConstraints, "#FF0000");
-    drawVolumes(iteration, stableVolumes, 1, 2, numVars, numConstraints, "#0000FF");
+    console.log((inVolumesEnd / volumeLength) + " volumes");
+    drawVolumes(iteration, inVolumes, inVolumesEnd, 1, 2, numVars, numConstraints, "#FF0000");
+    drawVolumes(iteration, stableVolumes, stableVolumes.length, 1, 2, numVars, numConstraints, "#0000FF");
     iteration++;
     inVolumesEnd = constraints[constraint].propagate(inVolumes, outVolumes, stableVolumes, inVolumesEnd, numVars, numConstraints, constraint);
     var tmp = outVolumes;
@@ -366,7 +366,7 @@ function solve(numVars, constraints) {
 var size = 1000;
 var border = 10;
 
-function drawVolumes(iteration, volumes, ixA, ixB, numVars, numConstraints, color) {
+function drawVolumes(iteration, volumes, volumesEnd, ixA, ixB, numVars, numConstraints, color) {
   var canvas = document.getElementById("volumes");
   var context = canvas.getContext("2d");
   var start = (size + border) * iteration;
@@ -375,7 +375,7 @@ function drawVolumes(iteration, volumes, ixA, ixB, numVars, numConstraints, colo
   var volumeLength = numVars + numVars + numConstraints + 1;
   var scale = (maxHash - minHash) / size;
   var adjust = -minHash;
-  for (var volumeStart = 0, volumesEnd = volumes.length; volumeStart < volumesEnd; volumeStart += volumeLength) {
+  for (var volumeStart = 0; volumeStart < volumesEnd; volumeStart += volumeLength) {
     var x = volumes[volumeStart + ixA];
     var w = volumes[volumeStart + numVars + ixA] - x;
     var y = volumes[volumeStart + ixB];
