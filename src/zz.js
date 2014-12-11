@@ -358,91 +358,81 @@ function solve(numVars, constraints) {
 
 // STUFF
 
-var a = ZZTree.empty(2, 4, [0, 1]).bulkInsert([
-  ["foo", "bar"],
-  ["bad", "quux"],
-]);
-var b = ZZTree.empty(2, 4, [0, 1]).bulkInsert([
-  ["bar", "quux"],
-  ["bar", "hullabaloo"],
-  ["baz", "panic"],
-]);
-
-// console.time("solve");
-// var s = solve(3, [new ZZContains(a, [0, 1]), new ZZContains(b, [1, 2])]);
-// console.timeEnd("solve");
-
-function bench(n) {
-  var facts = [];
-  for (var i = 0; i < n; i++) {
-    facts.push([i + "zomg", i + "foo" + i, "beebs" + i]);
+function index(facts, ix) {
+  var index = {};
+  for (var i = 0, len = facts.length; i < len; i++) {
+    var fact = facts[i];
+    var value = fact[ix];
+    var bucket = index[value] || (index[value] = []);
+    bucket.push(fact);
   }
-  var facts2 = [];
-  for (var i = 0; i < n; i++) {
-    facts2.push(["beebs" + i, i + "bar", i + "quux" + i]);
+  return index;
+}
+
+function lookup(facts, ix, index) {
+  var results = [];
+  for (var i = 0, factsLen = facts.length; i < factsLen; i++) {
+    var fact = facts[i];
+    var value = fact[ix];
+    var bucket = index[value];
+    if (bucket !== undefined) {
+      for (var j = 0, bucketLen = bucket.length; j < bucketLen; j++) {
+        results.push(fact.concat(bucket[j]));
+      }
+    }
+  }
+  return results;
+}
+
+function bench(a, b, c) {
+  var users = [];
+  for (var i = 0; i < a; i++) {
+    users.push([i + "email", "user" + i]);
+  }
+  var logins = [];
+  for (var i = 0; i < b; i++) {
+    logins.push(["user" + i, i + "ip"]);
+  }
+  var bans = [];
+  for (var i = 0; i < c; i++) {
+    bans.push([i + "ip"]);
   }
 
   console.time("insert");
-  var a = ZZTree.empty(3, 4, [2]).bulkInsert(facts);
-  var b = ZZTree.empty(3, 4, [0]).bulkInsert(facts2);
+  var usersTree = ZZTree.empty(2, 4, [1]).bulkInsert(users);
+  var loginsTree = ZZTree.empty(2, 4, [0, 1]).bulkInsert(logins);
+  var bansTree = ZZTree.empty(1, 4, [0]).bulkInsert(bans);
   console.timeEnd("insert");
-  console.log(a, b);
+  //console.log(a, b, c);
   console.time("solve");
-  console.profile();
-  var s = solve(5, [new ZZContains(a, [0, 1, 2]), new ZZContains(b, [2, 3, 4])]);
-  console.profileEnd();
+  //console.profile();
+  var solverResults = solve(3, [
+    new ZZContains(usersTree, [0, 1]),
+    new ZZContains(loginsTree, [1, 2]),
+    new ZZContains(bansTree, [2])
+  ]);
+  //console.profileEnd();
   console.timeEnd("solve");
 
-  console.time("insert obj");
-  var index = {};
-  for (var i = 0; i < n; i++) {
-    var fact = facts[i];
-    index[fact[2]] = fact;
-  }
-  var index2 = {};
-  for (var i = 0; i < n; i++) {
-    var fact = facts2[i];
-    index2[fact[2]] = fact;
-  }
-  console.timeEnd("insert obj");
-  console.time("solve obj");
-  var s2 = [];
-  for (var i = 0; i < n; i++) {
-    var fact = facts[i];
-    var fact2 = index[fact[2]];
-    s2.push([fact[0], fact[1], fact[2], fact2[1], fact2[2]]);
-  }
-  console.timeEnd("solve obj");
+  console.time("insert forward");
+  var loginsIndex = index(logins, 0);
+  var bansIndex = index(bans, 0);
+  console.timeEnd("insert forward");
+  console.log(loginsIndex, bansIndex);
+  console.log(lookup(users, 1, loginsIndex));
+  console.time("solve forward");
+  var forwardResults = lookup(lookup(users, 1, loginsIndex), 3, bansIndex);
+  console.timeEnd("solve forward");
 
-  console.time("insert sort");
-  facts.sort(function(a, b) {
-    return a[2] < b[2] ? -1 : (a[2] > b[2] ? 1 : 0);
-  });
-  facts2.sort(function(a, b) {
-    return a[0] < b[0] ? -1 : (a[0] > b[0] ? 1 : 0);
-  });
-  console.timeEnd("insert sort");
-  console.time("solve sort");
-  var s3 = [];
-  var ix = 0;
-  var ix2 = 0;
-  while ((ix < n) && (ix2 < n)) {
-    var fact = facts[ix];
-    var fact2 = facts2[ix2];
-    var join = fact[2];
-    var join2 = fact2[0];
-    if (join === join2) {
-      s3.push([fact[0], fact[1], fact[2], fact2[1], fact2[2]]);
-      ix++;
-    } else if (join < join2) {
-      ix++;
-    } else {
-      ix2++;
-    }
-  }
-  console.timeEnd("solve sort");
+  console.time("insert backward");
+  var usersIndex = index(users, 1);
+  var loginsIndex = index(logins, 1);
+  console.timeEnd("insert backward");
+  console.time("solve backward");
+  var backwardResults = lookup(lookup(bans, 0, loginsIndex), 1, usersIndex);
+  console.timeEnd("solve backward");
 
-  return [s.slice(0, 10 * 12), s2.slice(0, 10), s3.slice(0, 10)];
+  return [solverResults, forwardResults, backwardResults];
 }
 
 // var x = bench(1000000);
