@@ -417,17 +417,17 @@ function lookup(facts, ix, index) {
   return results;
 }
 
-function bench(a, b, c) {
+function bench(numUsers, numLogins, numBans) {
   var users = [];
-  for (var i = 0; i < a; i++) {
+  for (var i = 0; i < numUsers; i++) {
     users.push([i + "email", "user" + i]);
   }
   var logins = [];
-  for (var i = 0; i < b; i++) {
+  for (var i = 0; i < numLogins; i++) {
     logins.push(["user" + i, i + "ip"]);
   }
   var bans = [];
-  for (var i = 0; i < c; i++) {
+  for (var i = 0; i < numBans; i++) {
     bans.push([i + "ip"]);
   }
 
