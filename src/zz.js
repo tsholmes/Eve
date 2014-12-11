@@ -368,27 +368,27 @@ var size = 1000;
 var border = 10;
 
 function clearVolumes() {
-  var canvas = document.getElementById("volumes");
-  canvas.width = canvas.width;
+  // var canvas = document.getElementById("volumes");
+  // canvas.width = canvas.width;
 }
 
 function drawVolumes(iteration, volumes, volumesEnd, ixA, ixB, numVars, numConstraints, color) {
-  var canvas = document.getElementById("volumes");
-  var context = canvas.getContext("2d");
-  var start = (size + border) * iteration;
-  context.fillStyle = "#000000";
-  context.fillRect(0, start - border, size, border);
-  var volumeLength = numVars + numVars + numConstraints + 1;
-  var scale = (maxHash - minHash) / size;
-  var adjust = -minHash;
-  for (var volumeStart = 0; volumeStart < volumesEnd; volumeStart += volumeLength) {
-    var x = volumes[volumeStart + ixA];
-    var w = volumes[volumeStart + numVars + ixA] - x;
-    var y = volumes[volumeStart + ixB];
-    var h = volumes[volumeStart + numVars + ixB] - y;
-    context.fillStyle = color;
-    context.fillRect((x + adjust) / scale, start + (y + adjust) / scale, (w / scale) + 1, (h / scale) + 1);
-  }
+  // var canvas = document.getElementById("volumes");
+  // var context = canvas.getContext("2d");
+  // var start = (size + border) * iteration;
+  // context.fillStyle = "#000000";
+  // context.fillRect(0, start - border, size, border);
+  // var volumeLength = numVars + numVars + numConstraints + 1;
+  // var scale = (maxHash - minHash) / size;
+  // var adjust = -minHash;
+  // for (var volumeStart = 0; volumeStart < volumesEnd; volumeStart += volumeLength) {
+  //   var x = volumes[volumeStart + ixA];
+  //   var w = volumes[volumeStart + numVars + ixA] - x;
+  //   var y = volumes[volumeStart + ixB];
+  //   var h = volumes[volumeStart + numVars + ixB] - y;
+  //   context.fillStyle = color;
+  //   context.fillRect((x + adjust) / scale, start + (y + adjust) / scale, (w / scale) + 1, (h / scale) + 1);
+  // }
 }
 
 function index(facts, ix) {
@@ -417,18 +417,78 @@ function lookup(facts, ix, index) {
   return results;
 }
 
+var counts = new Int32Array(10000);
+
+function zzlookup(facts, keyIx, indexIx, index) {
+  var results = [];
+  var branchWidth = index.branchWidth;
+  for (var i = 0, factsLen = facts.length; i < factsLen; i++) {
+    var fact = facts[i];
+    var key = hash(fact[keyIx]);
+    var nodes = [index.root];
+    var count = 1;
+    while (nodes.length > 0) {
+      var node = nodes.pop();
+      if ((key >= nodeLos(node)[indexIx]) && (key <= nodeHis(node)[indexIx])) {
+        if (node.constructor === ZZLeaf) {
+          results.push(fact.concat(node.fact));
+        } else {
+          var children = node.children;
+          for (var j = 0; j < branchWidth; j++) {
+            var child = children[j];
+            if (child !== undefined) {
+              nodes.push(child);
+              count++;
+            }
+          }
+        }
+      }
+    }
+    counts[Math.floor(Math.log(count) / Math.log(2))] += 1;
+  }
+  return results;
+}
+
+function numNodes(tree) {
+  var leaves = 0;
+  var branches = 0;
+  var nodes = [tree.root];
+  while (nodes.length > 0) {
+    var node = nodes.pop();
+    if (node.constructor === ZZLeaf) {
+      leaves += 1;
+    } else {
+      branches += 1;
+      var children = node.children;
+      for (var i = 0; i < tree.branchWidth; i++) {
+        var child = children[i];
+        if (child !== undefined) nodes.push(child);
+      }
+    }
+  }
+  return {
+    leaves: leaves,
+    branches: branches
+  };
+}
+
 function bench(numUsers, numLogins, numBans) {
   var users = [];
   for (var i = 0; i < numUsers; i++) {
-    users.push([i + "email", "user" + i]);
+    var email = i;
+    var user = i;
+    users.push(["email" + email, "user" + user]);
   }
   var logins = [];
   for (var i = 0; i < numLogins; i++) {
-    logins.push(["user" + i, i + "ip"]);
+    var user = Math.floor(Math.random() * numUsers);
+    var ip = i;
+    logins.push(["user" + user, "ip" + ip]);
   }
   var bans = [];
   for (var i = 0; i < numBans; i++) {
-    bans.push([i + "ip"]);
+    var ip = i;
+    bans.push(["ip" + ip]);
   }
 
   console.time("insert");
@@ -436,7 +496,7 @@ function bench(numUsers, numLogins, numBans) {
   var loginsTree = ZZTree.empty(2, 4, [0, 1]).bulkInsert(logins);
   var bansTree = ZZTree.empty(1, 4, [0]).bulkInsert(bans);
   console.timeEnd("insert");
-  console.log(usersTree, loginsTree, bansTree);
+  console.log(usersTree, numNodes(loginsTree), numNodes(bansTree));
   console.time("solve");
   //console.profile();
   var solverResults = solve(3, [
@@ -451,11 +511,15 @@ function bench(numUsers, numLogins, numBans) {
   var loginsIndex = index(logins, 0);
   var bansIndex = index(bans, 0);
   console.timeEnd("insert forward");
-  console.log(loginsIndex, bansIndex);
-  console.log(lookup(users, 1, loginsIndex));
   console.time("solve forward");
   var forwardResults = lookup(lookup(users, 1, loginsIndex), 3, bansIndex);
   console.timeEnd("solve forward");
+
+  console.time("solve zz");
+  //console.profile();
+  var zzResults = zzlookup(zzlookup(bans, 0, 1, loginsTree), 1, 1, usersTree);
+  //console.profileEnd();
+  console.timeEnd("solve zz");
 
   console.time("insert backward");
   var usersIndex = index(users, 1);
@@ -465,7 +529,7 @@ function bench(numUsers, numLogins, numBans) {
   var backwardResults = lookup(lookup(bans, 0, loginsIndex), 1, usersIndex);
   console.timeEnd("solve backward");
 
-  return [solverResults, forwardResults, backwardResults];
+  return [solverResults, forwardResults, zzResults, backwardResults];
 }
 
 // var x = bench(1000000);
