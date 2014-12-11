@@ -345,6 +345,7 @@ function solve(numVars, constraints) {
 
   var constraint = 0;
   var iteration = 0;
+  clearVolumes();
   while (inVolumesEnd > 0) {
     console.log((inVolumesEnd / volumeLength) + " volumes");
     drawVolumes(iteration, inVolumes, inVolumesEnd, 1, 2, numVars, numConstraints, "#FF0000");
@@ -365,6 +366,11 @@ function solve(numVars, constraints) {
 
 var size = 1000;
 var border = 10;
+
+function clearVolumes() {
+  var canvas = document.getElementById("volumes");
+  canvas.width = canvas.width;
+}
 
 function drawVolumes(iteration, volumes, volumesEnd, ixA, ixB, numVars, numConstraints, color) {
   var canvas = document.getElementById("volumes");
