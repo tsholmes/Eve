@@ -357,7 +357,7 @@ function solve(numVars, constraints) {
     inVolumes = tmp;
     constraint = (constraint + 1) % numConstraints;
   }
-  drawVolumes(iteration, stableVolumes, 1, 2, numVars, numConstraints, "#0000FF");
+  drawVolumes(iteration, stableVolumes, stableVolumes.length, 1, 2, numVars, numConstraints, "#0000FF");
 
   return stableVolumes;
 }
