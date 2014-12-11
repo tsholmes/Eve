@@ -344,19 +344,46 @@ function solve(numVars, constraints) {
   var inVolumesEnd = volumeLength;
 
   var constraint = 0;
+  var iteration = 0;
   while (inVolumesEnd > 0) {
     console.log((inVolumes.length / volumeLength) + " volumes");
+    drawVolumes(iteration, inVolumes, 1, 2, numVars, numConstraints, "#FF0000");
+    drawVolumes(iteration, stableVolumes, 1, 2, numVars, numConstraints, "#0000FF");
+    iteration++;
     inVolumesEnd = constraints[constraint].propagate(inVolumes, outVolumes, stableVolumes, inVolumesEnd, numVars, numConstraints, constraint);
     var tmp = outVolumes;
     outVolumes = inVolumes;
     inVolumes = tmp;
     constraint = (constraint + 1) % numConstraints;
   }
+  drawVolumes(iteration, stableVolumes, 1, 2, numVars, numConstraints, "#0000FF");
 
   return stableVolumes;
 }
 
 // STUFF
+
+var size = 1000;
+var border = 10;
+
+function drawVolumes(iteration, volumes, ixA, ixB, numVars, numConstraints, color) {
+  var canvas = document.getElementById("volumes");
+  var context = canvas.getContext("2d");
+  var start = (size + border) * iteration;
+  context.fillStyle = "#000000";
+  context.fillRect(0, start - border, size, border);
+  var volumeLength = numVars + numVars + numConstraints + 1;
+  var scale = (maxHash - minHash) / size;
+  var adjust = -minHash;
+  for (var volumeStart = 0, volumesEnd = volumes.length; volumeStart < volumesEnd; volumeStart += volumeLength) {
+    var x = volumes[volumeStart + ixA];
+    var w = volumes[volumeStart + numVars + ixA] - x;
+    var y = volumes[volumeStart + ixB];
+    var h = volumes[volumeStart + numVars + ixB] - y;
+    context.fillStyle = color;
+    context.fillRect((x + adjust) / scale, start + (y + adjust) / scale, (w / scale) + 1, (h / scale) + 1);
+  }
+}
 
 function index(facts, ix) {
   var index = {};
@@ -403,7 +430,7 @@ function bench(a, b, c) {
   var loginsTree = ZZTree.empty(2, 4, [0, 1]).bulkInsert(logins);
   var bansTree = ZZTree.empty(1, 4, [0]).bulkInsert(bans);
   console.timeEnd("insert");
-  //console.log(a, b, c);
+  console.log(usersTree, loginsTree, bansTree);
   console.time("solve");
   //console.profile();
   var solverResults = solve(3, [
