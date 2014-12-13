@@ -506,7 +506,9 @@ function numNodes(tree) {
   };
 }
 
-function bench(numUsers, numLogins, numBans) {
+function bench(numUsers, numLogins, numBans, leafWidth, branchDepth) {
+  leafWidth = leafWidth || 64;
+  branchDepth = branchDepth || 4;
   var users = [];
   for (var i = 0; i < numUsers; i++) {
     var email = i;
@@ -526,9 +528,9 @@ function bench(numUsers, numLogins, numBans) {
   }
 
   console.time("insert");
-  var usersTree = ZZTree.empty(2, 64, 4, [1]).insert(users);
-  var loginsTree = ZZTree.empty(2, 64, 4, [0, 1]).insert(logins);
-  var bansTree = ZZTree.empty(1, 64, 4, [0]).insert(bans);
+  var usersTree = ZZTree.empty(2, leafWidth, branchDepth, [1]).insert(users);
+  var loginsTree = ZZTree.empty(2, leafWidth, branchDepth, [0, 1]).insert(logins);
+  var bansTree = ZZTree.empty(1, leafWidth, branchDepth, [0]).insert(bans);
   console.timeEnd("insert");
   console.log(usersTree, loginsTree, bansTree);
   console.log(numNodes(usersTree), numNodes(loginsTree), numNodes(bansTree));
