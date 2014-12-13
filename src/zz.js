@@ -271,26 +271,25 @@ function write(fromArray, toArray, fromIx, toIx, len) {
   }
 }
 
-function overwrite(volumes, volumeStart, ixes, los, his, state, numVars, myIx) {
-  for (var i = 0, len = ixes.length; i < len; i++) {
-    var ix = ixes[i];
-    var loIx = volumeStart + ix;
-    volumes[loIx] = Math.max(volumes[loIx], los[i]);
-    var hiIx = volumeStart + numVars + ix;
-    volumes[hiIx] = Math.min(volumes[hiIx], his[i]);
-  }
-  volumes[volumeStart + numVars + numVars + myIx] = state;
-}
-
-function intersects(volumes, volumeStart, ixes, los, his, numVars) {
+function intersects(volumes, volumeStart, node, losIx, hisIx, ixes, numVars) {
   var outOfBounds = false;
   for (var i = 0, len = ixes.length; i < len; i++) {
     var ix = ixes[i];
     outOfBounds = outOfBounds ||
-      (his[i] < volumes[volumeStart + ix]) ||
-      (los[i] > volumes[volumeStart + numVars + ix]);
+      (node[hisIx + i] < volumes[volumeStart + ix]) ||
+      (node[losIx + i] > volumes[volumeStart + numVars + ix]);
   }
   return !outOfBounds;
+}
+
+function overwrite(volumes, volumeStart, node, losStart, hisStart, ixes, numVars) {
+  for (var i = 0, len = ixes.length; i < len; i++) {
+    var ix = ixes[i];
+    var loIx = volumeStart + ix;
+    var hiIx = volumeStart + numVars + ix;
+    volumes[loIx] = Math.max(volumes[loIx], node[losStart + i]);
+    volumes[hiIx] = Math.min(volumes[hiIx], node[hisStart + i]);
+  }
 }
 
 ZZContains.prototype.init = function() {
@@ -304,50 +303,53 @@ ZZContains.prototype.propagate = function(inVolumes, outVolumes, stableVolumes, 
   var outVolumesEnd = 0;
   var stableVolumesEnd = stableVolumes.length;
   var hashIxes = this.hashIxes;
+  var numValues = this.tree.numValues;
   for (var inVolumeStart = 0; inVolumeStart < inVolumesEnd; inVolumeStart += volumeLength) {
     var node = inVolumes[inVolumeStart + stateOffset];
-    if (node.constructor === ZZLeaf) {
-      // nothing left to do
-      write(inVolumes, outVolumes, inVolumeStart, outVolumesEnd, volumeLength);
-      outVolumesEnd += volumeLength;
-    } else {
-      // check the child hashes
-      var branchWidth = this.tree.branchWidth;
-
-      propagate: while (true) {
-        var children = node.children;
-        var matches = [];
-        var stables = [];
-
-        for (var i = 0; i < branchWidth; i++) {
-          var child = children[i];
-          if (child !== undefined) {
-            if (intersects(inVolumes, inVolumeStart, hashIxes, nodeLos(child), nodeHis(child), numVars)) {
-              if ((child.constructor === ZZLeaf) && (inVolumes[inVolumeStart + remainingOffset] === 1)) {
-                stables.push(child);
-              } else {
-                matches.push(child);
-              }
+    propagate: while (true) {
+      if (node === null) {
+        // nothing left to do
+        write(inVolumes, outVolumes, inVolumeStart, outVolumesEnd, volumeLength);
+        outVolumesEnd += volumeLength;
+        break propagate;
+      } else if (node[0] === ZZLEAF) {
+        // split on leaf entries
+        var numEntries = zzleaf$length(node, numValues);
+        inVolumes[inVolumeStart + remainingOffset] -= 1;
+        var isStable = inVolumes[inVolumeStart + remainingOffset] === 0;
+        var destination = isStable ? stableVolumes : outVolumes;
+        for (var entry = 0; entry < numEntries; entry++) {
+          if (intersects(inVolumes, inVolumeStart, node, zzleaf$hashesIx(numValues, entry), zzleaf$hashesIx(numValues, entry), hashIxes, numVars)) {
+            var destinationEnd = isStable ? stableVolumesEnd : outVolumesEnd;
+            write(inVolumes, destination, inVolumeStart, destinationEnd, volumeLength);
+            overwrite(destination, destinationEnd, node, zzleaf$hashesIx(numValues, entry), zzleaf$hashesIx(numValues, entry), hashIxes, numVars);
+            destination[destinationEnd + stateOffset] = null;
+            if (isStable) {
+              stableVolumesEnd += volumeLength;
+            } else {
+              outVolumesEnd += volumeLength;
             }
           }
         }
-
-        for (var i = 0, len = stables.length; i < len; i++) {
-          var child = stables[i];
-          write(inVolumes, stableVolumes, inVolumeStart, stableVolumesEnd, volumeLength);
-          overwrite(stableVolumes, stableVolumesEnd, hashIxes, nodeLos(child), nodeHis(child), null, numVars, myIx);
-          stableVolumesEnd += volumeLength;
+        break propagate;
+      } else {
+        // split on branch entries
+        var matches = [];
+        var numEntries = zzbranch$length(node, numValues);
+        for (var entry = 0; entry < numEntries; entry++) {
+          if (intersects(inVolumes, inVolumeStart, node, zzbranch$losIx(numValues, entry), zzbranch$hisIx(numValues, entry), hashIxes, numVars)) {
+            matches.push(entry);
+          }
         }
-
-        if ((matches.length === 1) && (matches[0].constructor === ZZBranch)) {
-          node = matches[0];
+        if (matches.length === 1) {
+          node = zzbranch$getChild(node, numValues, matches[0]);
           continue propagate;
         } else {
           for (var i = 0, len = matches.length; i < len; i++) {
-            var child = matches[i];
+            var entry = matches[i];
             write(inVolumes, outVolumes, inVolumeStart, outVolumesEnd, volumeLength);
-            overwrite(outVolumes, outVolumesEnd, hashIxes, nodeLos(child), nodeHis(child), child, numVars, myIx);
-            if (child.constructor === ZZLeaf) outVolumes[outVolumesEnd + remainingOffset] -= 1;
+            overwrite(outVolumes, outVolumesEnd, node, zzbranch$losIx(numValues, entry), zzbranch$hisIx(numValues, entry), hashIxes, numVars);
+            outVolumes[outVolumesEnd + stateOffset] = zzbranch$getChild(node, numValues, entry);
             outVolumesEnd += volumeLength;
           }
           break propagate;
@@ -507,8 +509,8 @@ function numNodes(tree) {
 }
 
 function bench(numUsers, numLogins, numBans, leafWidth, branchDepth) {
-  leafWidth = leafWidth || 64;
-  branchDepth = branchDepth || 4;
+  leafWidth = leafWidth || 16;
+  branchDepth = branchDepth || 1;
   var users = [];
   for (var i = 0; i < numUsers; i++) {
     var email = i;
@@ -536,11 +538,11 @@ function bench(numUsers, numLogins, numBans, leafWidth, branchDepth) {
   console.log(numNodes(usersTree), numNodes(loginsTree), numNodes(bansTree));
   console.time("solve");
   //console.profile();
-  // var solverResults = solve(3, [
-  //   new ZZContains(usersTree, [0, 1]),
-  //   new ZZContains(loginsTree, [1, 2]),
-  //   new ZZContains(bansTree, [2])
-  // ]);
+  var solverResults = solve(3, [
+    new ZZContains(usersTree, [0, 1]),
+    new ZZContains(loginsTree, [1, 2]),
+    new ZZContains(bansTree, [2])
+  ]);
   //console.profileEnd();
   console.timeEnd("solve");
 
@@ -554,7 +556,7 @@ function bench(numUsers, numLogins, numBans, leafWidth, branchDepth) {
 
   console.time("solve zz");
   //console.profile();
-  var zzResults = zzlookup(zzlookup(bans, 0, 1, loginsTree), 1, 1, usersTree);
+  // var zzResults = zzlookup(zzlookup(bans, 0, 1, loginsTree), 1, 1, usersTree);
   //console.profileEnd();
   console.timeEnd("solve zz");
 
@@ -566,7 +568,7 @@ function bench(numUsers, numLogins, numBans, leafWidth, branchDepth) {
   var backwardResults = lookup(lookup(bans, 0, loginsIndex), 1, usersIndex);
   console.timeEnd("solve backward");
 
-  return [forwardResults, zzResults, backwardResults];
+  return [solverResults, forwardResults, backwardResults];
 }
 
 // var x = bench(1000000);
