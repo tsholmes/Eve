@@ -382,7 +382,7 @@ function solve(numVars, constraints) {
   clearVolumes();
   while (inVolumesEnd > 0) {
     console.log((inVolumesEnd / volumeLength) + " volumes");
-    drawNodes(iteration, inVolumes, inVolumesEnd, 1, 0, 0, 1, 2, 2, numVars, numConstraints, "rgba(255, 0, 0, 0.1)");
+    drawNodes(iteration, inVolumes, inVolumesEnd, 1, 0, 0, 1, 2, 2, numVars, numConstraints, "rgba(255, 0, 0, 0.01)");
     drawVolumes(iteration, inVolumes, inVolumesEnd, 1, 2, numVars, numConstraints, "#FF0000");
     drawVolumes(iteration, stableVolumes, stableVolumes.length, 1, 2, numVars, numConstraints, "#0000FF");
     iteration++;
