@@ -382,6 +382,7 @@ function solve(numVars, constraints) {
   clearVolumes();
   while (inVolumesEnd > 0) {
     console.log((inVolumesEnd / volumeLength) + " volumes");
+    drawNodes(iteration, inVolumes, inVolumesEnd, 1, 0, 0, 1, 2, 2, numVars, numConstraints, "rgba(255, 0, 0, 0.1)");
     drawVolumes(iteration, inVolumes, inVolumesEnd, 1, 2, numVars, numConstraints, "#FF0000");
     drawVolumes(iteration, stableVolumes, stableVolumes.length, 1, 2, numVars, numConstraints, "#0000FF");
     iteration++;
@@ -423,6 +424,33 @@ function drawVolumes(iteration, volumes, volumesEnd, ixA, ixB, numVars, numConst
   //   context.fillStyle = color;
   //   context.fillRect((x + adjust) / scale, start + (y + adjust) / scale, (w / scale) + 1, (h / scale) + 1);
   // }
+}
+
+function drawNodes(iteration, volumes, volumesEnd, ixA, ixB, volumeA, volumeB, numValuesA, numValuesB, numVars, numConstraints, color) {
+  var canvas = document.getElementById("volumes");
+  var context = canvas.getContext("2d");
+  var start = (size + border) * iteration;
+  context.fillStyle = "#000000";
+  context.fillRect(0, start - border, size, border);
+  var volumeLength = numVars + numVars + numConstraints + 1;
+  var scale = (maxHash - minHash) / size;
+  var adjust = -minHash;
+  for (var volumeStart = 0; volumeStart < volumesEnd; volumeStart += volumeLength) {
+    var nodeA = volumes[volumeStart + numVars + numVars + volumeA];
+    var nodeB = volumes[volumeStart + numVars + numVars + volumeB];
+    if (nodeA && nodeB) {
+      var branch = [];
+      zzbranch$append(branch, 0, nodeA, numValuesA);
+      var x = branch[4 + ixA];
+      var w = branch[4 + numValuesA + ixA] - x;
+      var branch = [];
+      zzbranch$append(branch, 0, nodeB, numValuesB);
+      var y = branch[4 + ixB];
+      var h = branch[4 + numValuesB + ixB] - y;
+      context.fillStyle = color;
+      context.fillRect((x + adjust) / scale, start + (y + adjust) / scale, (w / scale) + 1, (h / scale) + 1);
+    }
+  }
 }
 
 function index(facts, ix) {
