@@ -479,12 +479,8 @@ Solver.prototype.zzjoin = function(oldVolumes, variables) {
   return newVolumes;
 };
 
-Solver.prototype.solve = function() {
+Solver.prototype.solve = function(variables) {
   var volumes = [this.wholeVolume()];
-  var variables = [];
-  for (var i = 0; i < this.numVariables; i++) {
-    variables[i] = i;
-  }
   return this.zzjoin(volumes, variables);
 };
 
@@ -550,7 +546,7 @@ function bench(numUsers, numLogins, numBans, leafWidth, branchDepth) {
   ]);
   console.time("solve");
   //console.profile();
-  var solverResults = solver.solve();
+  var solverResults = solver.solve([1]);
   //console.profileEnd();
   console.timeEnd("solve");
 
