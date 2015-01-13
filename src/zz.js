@@ -119,11 +119,11 @@ ZZTree.prototype.updateLeaf = function(leaf) {
   var hiStart = loStart + numValues;
   var leafStart = hiStart + numValues;
   var numFacts = (leafEnd - leafStart) / (2 * numValues);
-  for (var fact = 0; fact < numFacts; fact++) {
-    for (var value = 0; value < numValues; value++) {
-      var hash = leaf[leafStart + (2 * numValues * fact) + value];
-      leaf[loStart + value] = leaf[loStart + value] & hash;
-      leaf[hiStart + value] = leaf[hiStart + value] | hash;
+  for (var factIx = 0; factIx < numFacts; factIx++) {
+    for (var valueIx = 0; valueIx < numValues; valueIx++) {
+      var hash = leaf[leafStart + (2 * numValues * factIx) + valueIx];
+      leaf[loStart + valueIx] = leaf[loStart + valueIx] & hash;
+      leaf[hiStart + valueIx] = leaf[hiStart + valueIx] | hash;
     }
   }
   leaf[1] = numFacts;
@@ -161,12 +161,12 @@ ZZTree.prototype.updateBranch = function(branch) {
   var branchStart = hiStart + numValues;
   var numChildren = (branchEnd - branchStart) / 2;
   var numFacts = 0;
-  for (var child = 0; child < numChildren; child++) {
-    for (var value = 0; value < numValues; value++) {
-      var child = branch[branchStart + (2 * child)];
+  for (var childIx = 0; childIx < numChildren; childIx++) {
+    for (var valueIx = 0; valueIx < numValues; valueIx++) {
+      var child = branch[branchStart + (2 * childIx) + 1];
       numFacts += child[1];
-      branch[loStart + value] = branch[loStart + value] & child[loStart + value];
-      branch[hiStart + value] = branch[hiStart + value] | child[hiStart + value];
+      branch[loStart + valueIx] = branch[loStart + valueIx] & child[loStart + valueIx];
+      branch[hiStart + valueIx] = branch[hiStart + valueIx] | child[hiStart + valueIx];
     }
   }
   branch[1] = numFacts;
@@ -433,8 +433,7 @@ Solver.prototype.zzenqueue = function(queuedVolumes, newVolumes, volume) {
     queuedVolumes.push(volume);
   } else if (cardinality > 0) {
     // nearly solved, pass it on
-    // TODO need to newVolumes.push(volume) and then loopjoin
-    queuedVolumes.push(volume);
+    newVolumes.push(volume);
   }
   // otherwise no results, throw it away
 };
@@ -542,11 +541,11 @@ function bench(numUsers, numLogins, numBans, leafWidth, branchDepth) {
   var solver = new Solver(3, [
     new ZZContains(usersTree, [0, 1, null]),
     new ZZContains(loginsTree, [null, 0, 1]),
-    //new ZZContains(bansTree, [2])
+    new ZZContains(bansTree, [null, null, 0])
   ]);
   console.time("solve");
   //console.profile();
-  var solverResults = solver.solve([1]);
+  var solverResults = solver.solve([1, 2]);
   //console.profileEnd();
   console.timeEnd("solve");
 
