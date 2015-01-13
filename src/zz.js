@@ -460,7 +460,7 @@ Solver.prototype.zzjoin = function(oldVolumes, variables) {
       var unknownBits = lo ^ hi;
       splitBit = unknownBits & -unknownBits; // least-significant unknown bit
 
-      if (splitBit > 0) break findBit; // use this bit
+      if (splitBit !== 0) break findBit; // use this bit
 
       if (nextSplit === lastSplit) {
         // no bits left unset, pass it on
