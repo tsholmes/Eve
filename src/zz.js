@@ -295,12 +295,17 @@ ZZContains.prototype.split = function(solver, volume, myIx, variable, position, 
   var cardinality = 0;
 
   var ix = this.ixes[variable];
-  if (ix === null) return; // TODO need to keep old cardinality somehow...
 
   while (queuedNodes.length > 0) {
     var bitmap = queuedNodes.pop();
     var node = queuedNodes.pop();
-    if (tree.hasBit(node, ix, position, bit) === false) {
+    if (ix === null) {
+      // TODO dont even check this constraint if ix === null
+      // nothing has changed, keep this node
+      newNodes.push(node);
+      newNodes.push(bitmap);
+      cardinality += tree.getCardinality(node);
+    } else if (tree.hasBit(node, ix, position, bit) === false) {
       // doesn't match, forget this node
     } else if (tree.hasBit(node, ix, position, 1 - bit) === false) {
       // definitely matches, keep this node
