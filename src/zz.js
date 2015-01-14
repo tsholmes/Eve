@@ -493,7 +493,7 @@ Solver.prototype.zzjoin = function(oldVolumes, variables) {
 
     // split on the unknown bit
     this.setLastSplit(volume, nextSplit);
-    var loVolume = volume.slice();
+    var loVolume = volume;
     var hiVolume = volume.slice();
     this.split(loVolume, hiVolume, splitVariable, splitBit);
     this.zzenqueue(queuedVolumes, newVolumes, loVolume);
