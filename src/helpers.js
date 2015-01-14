@@ -88,6 +88,28 @@ var sin = Math.sin;
 var cos = Math.cos;
 var tan = Math.tan;
 
+function intervalStart(interval) {
+  assert(typeof interval === "object", "intervalStart requires an interval field.");
+  if(interval.length) {
+    return interval.map(intervalStart);
+  }
+  return interval.start === null ? -Infinity : interval.start;
+}
+
+function intervalEnd(interval) {
+  assert(typeof interval === "object", "intervalEnd requires an interval field.");
+  if(interval.length) {
+    return interval.map(intervalEnd);
+  }
+  return interval.end === null ? Infinity : interval.end;
+}
+
+function intervalToString(interval) {
+  assert(typeof interval === "object", "intervalToString requires an interval field.");
+  return "[" + (interval.start === null ? "-Infinity" : interval.start)  + " " +
+    (interval.end === null? "Infinity" : interval.end) + "]";
+}
+
 //---------------------------------------------------------
 // aggregates
 //---------------------------------------------------------
@@ -181,6 +203,29 @@ function contains(desired, sort, start, end) {
   }
   return results;
 }
+
+function startsAt(desired, sort, start) {
+  assert(desired.length === sort.length, "Desired and sort fields must both be of the same length. Did you remember to filter them both?");
+  var matches = [];
+  for(var i = 0, len = sort.length; i < len; i++) {
+    if(intervalStart(sort[i]) == start) {
+      matches.push(desired[i]);
+    }
+  }
+  return matches;
+}
+
+function endsAt(desired, sort, end) {
+  assert(desired.length === sort.length, "Desired and sort fields must both be of the same length. Did you remember to filter them both?");
+  var matches = [];
+  for(var i = 0, len = sort.length; i < len; i++) {
+    if(intervalEnd(sort[i]) == end) {
+      matches.push(desired[i]);
+    }
+  }
+  return matches;
+}
+
 
 // Sorts desired by sort ascending
 function sort(desired, sort) {
@@ -334,9 +379,11 @@ function editorViews() {
 
 function commonViews() {
   var facts = [];
-  pushAll(facts, inputView("rawEvent", ["client", "eid", "label", "key", "value"]));
-  pushAll(facts, inputView("mousePosition", ["client", "eid","x","y"]));
-  pushAll(facts, inputView("keyboard", ["client", "eid","keyCode","eventType"]));
+  pushAll(facts, inputView("rawEvent", ["interval", "label", "key"]));
+  pushAll(facts, inputView("eventTime", ["tick", "time"]));
+  pushAll(facts, inputView("webResponse", ["interval", "response"]));
+  pushAll(facts, inputView("mousePosition", ["eid","x","y"]));
+  pushAll(facts, inputView("keyboard", ["eid","keyCode","eventType"]));
   pushAll(facts, inputView("time", ["time"]));
   pushAll(facts, inputView("timer", ["client", "id", "event", "rate"]));
   pushAll(facts, inputView("subscription", ["recipient", "view", "alias", "asCells"]));
@@ -346,7 +393,7 @@ function commonViews() {
   pushAll(facts, inputView("profile", ["run", "event", "time"]));
   pushAll(facts, inputView("client", ["client"]));
   pushAll(facts, view("removedEvent", ["client", "eid"]));
-  pushAll(facts, view("event", ["client", "eid", "label", "key", "value"]));
+  pushAll(facts, view("event", ["eid", "interval", "label", "key"]));
   pushAll(facts, view("remote|subscription", ["remote", "recipient", "view", "alias", "asCells"]));
   pushAll(facts, view("remote", ["remote"]));
   pushAll(facts, view("remote|insertedFact", ["remote", "view", "row", "col", "value"]));
