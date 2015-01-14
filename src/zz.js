@@ -285,7 +285,7 @@ function ZZContains(tree, ixes) {
 ZZContains.prototype.init = function(solver, volume, myIx) {
   var tree = this.tree;
   var root = tree.root;
-  solver.contributeCardinality(volume, myIx, tree.getCardinality(root));
+  solver.setCardinality(volume, myIx, tree.getCardinality(root));
   solver.setNodes(volume, myIx, [root, -1]);
 };
 
@@ -300,79 +300,68 @@ ZZContains.prototype.split = function(solver, loVolume, hiVolume, myIx, variable
   var hiCardinality = 0;
 
   var ix = this.ixes[variable];
+  if (ix === null) return; // no change here
 
   counts[Math.floor(Math.log(oldNodes.length))] += 1;
 
   while (queuedNodes.length > 0) {
     var bitmap = queuedNodes.pop();
     var node = queuedNodes.pop();
-    if (ix === null) {
-      // TODO dont even check this constraint if ix === null
-      // nothing has changed, keep this node
+    var hasLo = tree.hasBit(node, ix, position, 0);
+    var hasHi = tree.hasBit(node, ix, position, 1);
+    if (hasLo && !hasHi) {
+      // only matches lo
       loNodes.push(node);
       loNodes.push(bitmap);
+      loCardinality += tree.getCardinality(node);
+    } else if (!hasLo && hasHi) {
+      // only matches hi
       hiNodes.push(node);
       hiNodes.push(bitmap);
-      var cardinality = tree.getCardinality(node);
-      loCardinality += cardinality;
-      hiCardinality += cardinality;
-    } else {
-      var hasLo = tree.hasBit(node, ix, position, 0);
-      var hasHi = tree.hasBit(node, ix, position, 1);
-      if (hasLo && !hasHi) {
-        // only matches lo
-        loNodes.push(node);
-        loNodes.push(bitmap);
-        loCardinality += tree.getCardinality(node);
-      } else if (!hasLo && hasHi) {
-        // only matches hi
-        hiNodes.push(node);
-        hiNodes.push(bitmap);
-        hiCardinality += tree.getCardinality(node);
-      } else if (hasLo && hasHi) {
-        // matches hi and lo, have to break it up
-        if (tree.isBranch(node)) {
-          // is a branch, check all children
-          var numChildren = tree.numChildren(node);
-          for (var child = 0; child < numChildren; child++) {
-            queuedNodes.push(tree.getChild(node, child));
-            queuedNodes.push(-1); // all children match so far
-          }
-        } else {
-          // is a leaf, check number of matches
-          var numFacts = tree.getCardinality(node);
-          var loBitmap = 0;
-          var hiBitmap = 0;
-          for (var fact = 0; fact < numFacts; fact++) {
-            if ((bitmap & (1 << fact)) > 0) {
-              var hash = tree.getHash(node, fact, ix);
-              if ((hash & position) === 0) {
-                // fact matches lo
-                loCardinality += 1;
-                loBitmap = loBitmap | (1 << fact);
-              } else {
-                // fact matches hi
-                hiCardinality += 1;
-                hiBitmap = hiBitmap | (1 << fact);
-              }
+      hiCardinality += tree.getCardinality(node);
+    } else if (hasLo && hasHi) {
+      // matches hi and lo, have to break it up
+      if (tree.isBranch(node)) {
+        // is a branch, check all children
+        var numChildren = tree.numChildren(node);
+        for (var child = 0; child < numChildren; child++) {
+          queuedNodes.push(tree.getChild(node, child));
+          queuedNodes.push(-1); // all children match so far
+        }
+      } else {
+        // is a leaf, check number of matches
+        var numFacts = tree.getCardinality(node);
+        var loBitmap = 0;
+        var hiBitmap = 0;
+        for (var fact = 0; fact < numFacts; fact++) {
+          if ((bitmap & (1 << fact)) > 0) {
+            var hash = tree.getHash(node, fact, ix);
+            if ((hash & position) === 0) {
+              // fact matches lo
+              loCardinality += 1;
+              loBitmap = loBitmap | (1 << fact);
+            } else {
+              // fact matches hi
+              hiCardinality += 1;
+              hiBitmap = hiBitmap | (1 << fact);
             }
           }
-          if (loBitmap !== 0) {
-            loNodes.push(node);
-            loNodes.push(loBitmap);
-          }
-          if (hiBitmap !== 0) {
-            hiNodes.push(node);
-            hiNodes.push(hiBitmap);
-          }
+        }
+        if (loBitmap !== 0) {
+          loNodes.push(node);
+          loNodes.push(loBitmap);
+        }
+        if (hiBitmap !== 0) {
+          hiNodes.push(node);
+          hiNodes.push(hiBitmap);
         }
       }
     }
   }
 
-  solver.contributeCardinality(loVolume, myIx, loCardinality);
+  solver.setCardinality(loVolume, myIx, loCardinality);
   solver.setNodes(loVolume, myIx, loNodes);
-  solver.contributeCardinality(hiVolume, myIx, hiCardinality);
+  solver.setCardinality(hiVolume, myIx, hiCardinality);
   solver.setNodes(hiVolume, myIx, hiNodes);
 };
 
@@ -382,9 +371,9 @@ function Solver(numVariables, constraints) {
   this.constraints = constraints;
 }
 
-// volume layout is lastSplit, cardinality, numVariables * lo, numVariables * hi, numConstraints * bitmaps, numConstraints * nodes
+// volume layout is lastSplit, numVariables * lo, numVariables * hi, numConstraints * nodes, numConstraints * cardinality
 Solver.prototype.wholeVolume = function() {
-  var volume = [0, 1];
+  var volume = [0];
   var numVariables = this.numVariables;
   for (var i = 0; i < numVariables; i++) {
     volume.push(0); // lo is all 0s
@@ -399,44 +388,48 @@ Solver.prototype.wholeVolume = function() {
   return volume;
 };
 
-Solver.prototype.getCardinality = function(volume) {
-  return volume[1];
-};
-
-Solver.prototype.resetCardinality = function(volume) {
-  volume[1] = 1;
-};
-
-Solver.prototype.contributeCardinality = function(volume, constraint, cardinality) {
-  volume[1] *= cardinality;
-};
-
 Solver.prototype.getLo = function(volume, variable) {
-  return volume[2 + variable];
+  return volume[1 + variable];
 };
 
 Solver.prototype.getHi = function(volume, variable) {
-  return volume[2 + this.numVariables + variable];
+  return volume[1 + this.numVariables + variable];
 };
 
 Solver.prototype.setBit = function(volume, variable, position, bit) {
   if (bit === 0) {
     // knock the hi bit down
-    var ix = 2 + this.numVariables + variable;
+    var ix = 1 + this.numVariables + variable;
     volume[ix] = volume[ix] & ~position;
   } else {
     // knock the lo bit up
-    var ix = 2 + variable;
+    var ix = 1 + variable;
     volume[ix] = volume[ix] | position;
   }
 };
 
 Solver.prototype.getNodes = function(volume, constraint) {
-  return volume[2 + this.numVariables + this.numVariables + constraint];
+  return volume[1 + this.numVariables + this.numVariables + constraint];
 };
 
 Solver.prototype.setNodes = function(volume, constraint, nodes) {
-  volume[2 + this.numVariables + this.numVariables + constraint] = nodes;
+  volume[1 + this.numVariables + this.numVariables + constraint] = nodes;
+};
+
+Solver.prototype.getCardinality = function(volume) {
+  var numConstraints = this.constraints.length;
+  var start = 1 + this.numVariables + this.numVariables + numConstraints;
+  var cardinality = 1;
+  for (var i = 0; i < numConstraints; i++) {
+    cardinality *= volume[start + i];
+  }
+  return cardinality;
+};
+
+Solver.prototype.setCardinality = function(volume, constraint, cardinality) {
+  var numConstraints = this.constraints.length;
+  var start = 1 + this.numVariables + this.numVariables + numConstraints;
+  volume[start + constraint] = cardinality;
 };
 
 Solver.prototype.getLastSplit = function(volume) {
@@ -500,7 +493,6 @@ Solver.prototype.zzjoin = function(oldVolumes, variables) {
 
     // split on the unknown bit
     this.setLastSplit(volume, nextSplit);
-    this.resetCardinality(volume);
     var loVolume = volume.slice();
     var hiVolume = volume.slice();
     this.split(loVolume, hiVolume, splitVariable, splitBit);
@@ -600,9 +592,9 @@ function bench(numUsers, numLogins, numBans, leafWidth, branchDepth) {
     new ZZContains(bansTree, [null, null, 0])
   ]);
   console.time("solve");
-  //console.profile();
+  console.profile();
   var solverResults = solver.solve([1, 2]);
-  //console.profileEnd();
+  console.profileEnd();
   console.timeEnd("solve");
 
   console.time("insert forward");
