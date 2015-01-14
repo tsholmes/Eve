@@ -34,11 +34,14 @@
 
 ;;*************************************************
 ;; Events
-;;*************************************************
+
+* _evt
+  | event interval eid label key
 
 * addedTodos
-  | event label="keydown" eid value
-  | keyboard eid keyCode=13
+  | event label="keydown" interval eid
+  | keyboard interval keyCode=13
+  > inputValue label="input" | value = intersects(@inputValue.data, @inputValue.interval, @interval)[0] || ""
   time = @eid
 * todosOverTime
   | addedTodos value:todo eid:id time
@@ -70,8 +73,8 @@
   | toggles isActive key:id
 
 * editedTodos
-  | event label="edit todo" eid key value
-  | keyboard eid keyCode=13
+  | event label="edit todo" eid interval key value
+  | keyboard interval keyCode=13
 * todosOverTime
   | editedTodos value:todo key:id eid:time
 
@@ -142,7 +145,7 @@
       ["h1" "Todos"]
       ["header"
         ["input" {"type" "checkbox" "class" "toggle-all" "click" "toggle-all"}]
-        ["input" {"type" "text" "class" "new-todo" "placeholder" "What needs to be done?" "keyDown" "keydown"}]]
+        ["input" {"type" "text" "class" "new-todo" "placeholder" "What needs to be done?" "input" "input" "keyDown" "keydown"}]]
       ["ul" {"class" "todo-list" "id" "todo-list"}]
       ["div" {"class" "footer" "id" "footer"}
 
