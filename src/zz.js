@@ -274,6 +274,8 @@ ZZTree.empty = function(numValues, leafWidth, branchDepth, ixes) {
 
 // SOLVER
 
+var counts = new Int32Array(1000);
+
 // TODO grab tree from state
 function ZZContains(tree, ixes) {
   this.tree = tree;
@@ -287,14 +289,19 @@ ZZContains.prototype.init = function(solver, volume, myIx) {
   solver.setNodes(volume, myIx, [root, -1]);
 };
 
-ZZContains.prototype.split = function(solver, volume, myIx, variable, position, bit) {
+// TODO bitmap breaks if we have >32 facts in a leaf - may have to allocate instead
+ZZContains.prototype.split = function(solver, loVolume, hiVolume, myIx, variable, position) {
   var tree = this.tree;
-  var oldNodes = solver.getNodes(volume, myIx);
+  var oldNodes = solver.getNodes(loVolume, myIx);
   var queuedNodes = oldNodes.slice();
-  var newNodes = [];
-  var cardinality = 0;
+  var loNodes = [];
+  var hiNodes = [];
+  var loCardinality = 0;
+  var hiCardinality = 0;
 
   var ix = this.ixes[variable];
+
+  counts[Math.floor(Math.log(oldNodes.length))] += 1;
 
   while (queuedNodes.length > 0) {
     var bitmap = queuedNodes.pop();
@@ -302,48 +309,71 @@ ZZContains.prototype.split = function(solver, volume, myIx, variable, position, 
     if (ix === null) {
       // TODO dont even check this constraint if ix === null
       // nothing has changed, keep this node
-      newNodes.push(node);
-      newNodes.push(bitmap);
-      cardinality += tree.getCardinality(node);
-    } else if (tree.hasBit(node, ix, position, bit) === false) {
-      // doesn't match, forget this node
-    } else if (tree.hasBit(node, ix, position, 1 - bit) === false) {
-      // definitely matches, keep this node
-      newNodes.push(node);
-      newNodes.push(bitmap);
-      cardinality += tree.getCardinality(node);
-    } else if (tree.isBranch(node)) {
-      // is a branch, check all children
-      var numChildren = tree.numChildren(node);
-      for (var child = 0; child < numChildren; child++) {
-        queuedNodes.push(tree.getChild(node, child));
-        queuedNodes.push(-1); // all children match so far
-      }
+      loNodes.push(node);
+      loNodes.push(bitmap);
+      hiNodes.push(node);
+      hiNodes.push(bitmap);
+      var cardinality = tree.getCardinality(node);
+      loCardinality += cardinality;
+      hiCardinality += cardinality;
     } else {
-      // is a leaf, check number of matches
-      var numFacts = tree.getCardinality(node);
-      var matched = false;
-      for (var fact = 0; fact < numFacts; fact++) {
-        if ((bitmap & (1 << fact)) > 0) {
-          var hash = tree.getHash(node, fact, ix);
-          if ((hash & position) === (bit * position)) {
-            // this fact matches
-            cardinality += 1;
-            matched = true;
-          } else {
-            // this fact does not match
-            bitmap = bitmap ^ (1 << fact);
+      var hasLo = tree.hasBit(node, ix, position, 0);
+      var hasHi = tree.hasBit(node, ix, position, 1);
+      if (hasLo && !hasHi) {
+        // only matches lo
+        loNodes.push(node);
+        loNodes.push(bitmap);
+        loCardinality += tree.getCardinality(node);
+      } else if (!hasLo && hasHi) {
+        // only matches hi
+        hiNodes.push(node);
+        hiNodes.push(bitmap);
+        hiCardinality += tree.getCardinality(node);
+      } else if (hasLo && hasHi) {
+        // matches hi and lo, have to break it up
+        if (tree.isBranch(node)) {
+          // is a branch, check all children
+          var numChildren = tree.numChildren(node);
+          for (var child = 0; child < numChildren; child++) {
+            queuedNodes.push(tree.getChild(node, child));
+            queuedNodes.push(-1); // all children match so far
+          }
+        } else {
+          // is a leaf, check number of matches
+          var numFacts = tree.getCardinality(node);
+          var loBitmap = 0;
+          var hiBitmap = 0;
+          for (var fact = 0; fact < numFacts; fact++) {
+            if ((bitmap & (1 << fact)) > 0) {
+              var hash = tree.getHash(node, fact, ix);
+              if ((hash & position) === 0) {
+                // fact matches lo
+                loCardinality += 1;
+                loBitmap = loBitmap | (1 << fact);
+              } else {
+                // fact matches hi
+                hiCardinality += 1;
+                hiBitmap = hiBitmap | (1 << fact);
+              }
+            }
+          }
+          if (loBitmap !== 0) {
+            loNodes.push(node);
+            loNodes.push(loBitmap);
+          }
+          if (hiBitmap !== 0) {
+            hiNodes.push(node);
+            hiNodes.push(hiBitmap);
           }
         }
       }
-      if (matched === true) {
-        newNodes.push(node);
-        newNodes.push(bitmap);
-      }
     }
   }
-  solver.contributeCardinality(volume, myIx, cardinality);
-  solver.setNodes(volume, myIx, newNodes);
+
+  solver.contributeCardinality(loVolume, myIx, loCardinality);
+  solver.setNodes(loVolume, myIx, loNodes);
+  solver.contributeCardinality(hiVolume, myIx, hiCardinality);
+  solver.setNodes(hiVolume, myIx, hiNodes);
 };
 
 
@@ -417,13 +447,13 @@ Solver.prototype.setLastSplit = function(volume, lastSplit) {
   volume[0] = lastSplit;
 };
 
-Solver.prototype.split = function(volume, variable, position, bit) {
+Solver.prototype.split = function(loVolume, hiVolume, variable, position) {
   var constraints = this.constraints;
+  this.setBit(loVolume, variable, position, 0);
+  this.setBit(hiVolume, variable, position, 1);
   for (var i = 0, len = constraints.length; i < len; i++) {
-    constraints[i].split(this, volume, i, variable, position, bit);
+    constraints[i].split(this, loVolume, hiVolume, i, variable, position);
   }
-  this.setBit(volume, variable, position, bit);
-  return volume;
 };
 
 Solver.prototype.zzenqueue = function(queuedVolumes, newVolumes, volume) {
@@ -471,8 +501,11 @@ Solver.prototype.zzjoin = function(oldVolumes, variables) {
     // split on the unknown bit
     this.setLastSplit(volume, nextSplit);
     this.resetCardinality(volume);
-    this.zzenqueue(queuedVolumes, newVolumes, this.split(volume.slice(), splitVariable, splitBit, 0));
-    this.zzenqueue(queuedVolumes, newVolumes, this.split(volume.slice(), splitVariable, splitBit, 1));
+    var loVolume = volume.slice();
+    var hiVolume = volume.slice();
+    this.split(loVolume, hiVolume, splitVariable, splitBit);
+    this.zzenqueue(queuedVolumes, newVolumes, loVolume);
+    this.zzenqueue(queuedVolumes, newVolumes, hiVolume);
   }
 
   return newVolumes;
@@ -511,9 +544,31 @@ function lookup(facts, ix, index) {
   return results;
 }
 
+function numNodes(tree) {
+  var branches = 0;
+  var leaves = 0;
+  var nodes = [tree.root];
+  while (nodes.length > 0) {
+    var node = nodes.pop();
+    if (tree.isBranch(node)) {
+      branches += 1;
+      var numChildren = tree.numChildren(node);
+      for (var i = 0; i < numChildren; i++) {
+        nodes.push(tree.getChild(node, i));
+      }
+    } else {
+      leaves += 1;
+    }
+  }
+  return {
+    leaves: leaves,
+    branches: branches
+  };
+}
+
 function bench(numUsers, numLogins, numBans, leafWidth, branchDepth) {
-  leafWidth = leafWidth || 16;
-  branchDepth = branchDepth || 1;
+  leafWidth = leafWidth || 32;
+  branchDepth = branchDepth || 4;
   var users = [];
   for (var i = 0; i < numUsers; i++) {
     var email = i;
@@ -537,6 +592,7 @@ function bench(numUsers, numLogins, numBans, leafWidth, branchDepth) {
   var loginsTree = ZZTree.empty(2, leafWidth, branchDepth, [0, 1]).insert(logins);
   var bansTree = ZZTree.empty(1, leafWidth, branchDepth, [0]).insert(bans);
   console.timeEnd("insert");
+  console.log(numNodes(usersTree), numNodes(loginsTree), numNodes(bansTree));
   console.log(usersTree, loginsTree, bansTree);
   var solver = new Solver(3, [
     new ZZContains(usersTree, [0, 1, null]),
@@ -577,5 +633,3 @@ function bits(n) {
   }
   return s;
 }
-
-// bench(2, 2, 2)
