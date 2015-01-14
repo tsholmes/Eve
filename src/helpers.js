@@ -88,10 +88,6 @@ var sin = Math.sin;
 var cos = Math.cos;
 var tan = Math.tan;
 
-function intervalMagnitude(intvl) {
-  assert(typeof intvl === "object", "magnitude requires an interval field.");
-  return intervalEnd(intvl) - intervalStart(intvl);
-}
 
 function intervalStart(intvl) {
   assert(typeof intvl === "object", "intervalStart requires an interval field.");
@@ -109,11 +105,27 @@ function intervalEnd(intvl) {
   return intvl.end === null ? Infinity : intvl.end;
 }
 
+function intersects(intvl1, intvl2) {
+  var s1 = intervalStart(intvl1);
+  var e1 = intervalEnd(intvl1);
+  var s2 = intervalStart(intvl2);
+  var e2 = intervalEnd(intvl2);
+  return (e1 >= s2 && e2 >= s1);
+
+}
+
+function intervalMagnitude(intvl) {
+  assert(typeof intvl === "object", "magnitude requires an interval field.");
+  return intervalEnd(intvl) - intervalStart(intvl);
+}
+
 function intervalToString(intvl) {
   assert(typeof intvl === "object", "intervalToString requires an interval field.");
   return "[" + (intvl.start === null ? "-Infinity" : intvl.start)  + " " +
     (intvl.end === null? "Infinity" : intvl.end) + "]";
 }
+
+
 
 //---------------------------------------------------------
 // aggregates
@@ -182,7 +194,7 @@ function firstAfter(desired, sort, limit, otherwise) {
 // Filters
 //---------------------------------------------------------
 // Returns all items in desired where the interval or point represented by sort is contained within [start, end]
-function contains(desired, sort, intvl) {
+function containsFilter(desired, sort, intvl) {
   assert(desired.length === sort.length, "Desired and sort fields must both be of the same length. Did you remember to filter them both?");
   assert(interval !== undefined, "Interval must not be undefined.");
 
@@ -205,7 +217,7 @@ function contains(desired, sort, intvl) {
   return results;
 }
 
-function intersects(desired, sort, intvl) {
+function intersectsFilter(desired, sort, intvl) {
   assert(desired.length === sort.length, "Desired and sort fields must both be of the same length. Did you remember to filter them both?");
   assert(typeof intvl === "object", "Intersects requires an interval field.");
 
