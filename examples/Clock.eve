@@ -8,7 +8,8 @@
 
 * clock
   | time time:startTime
-  > event label="tick" | value = maxBy(@event.value, @event.value, @startTime)
+  > event label="tick" | eid = maxBy(@event.eid, @event.eid, @startTime)
+  | eventTime tick:eid time:value
   hours = hours(@value)
   minutes = minutes(@value)
   seconds = seconds(@value)
