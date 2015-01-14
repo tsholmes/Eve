@@ -641,7 +641,7 @@ onmessage = function(event) {
           facts.push(["mousePosition", intvl, cur.x, cur.y]);
 
         } else if(cur.type === "keyboard") {
-          facts.push(["keyboard", intvl, cur.charCode, event]);
+          facts.push(["keyboard", intvl, cur.keyCode, event]);
 
         } else if(cur.event === "input") {
           if(prev) {
