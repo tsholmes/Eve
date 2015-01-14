@@ -642,14 +642,13 @@ onmessage = function(event) {
 
         } else if(cur.type === "keyboard") {
           facts.push(["keyboard", intvl, cur.keyCode, event]);
-
         } else if(cur.event === "input") {
           if(prev) {
             var oldIntvl = interval(prev.eid, eid)
-            facts.push(["inputValue", oldIntvl, prev.data]);
+            facts.push(["inputValue", oldIntvl, cur.label, prev.data]);
             facts.push(["rawEvent", oldIntvl, cur.label, cur.key]);
           }
-          facts.push(["inputValue", intvl, cur.data]);
+          facts.push(["inputValue", intvl, cur.label, cur.data]);
         }
 
 
