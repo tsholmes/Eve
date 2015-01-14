@@ -41,7 +41,7 @@
 * addedTodos
   | event label="keydown" interval eid
   | keyboard interval keyCode=13
-  > inputValue label="input" | value = intersects(@inputValue.data, @inputValue.interval, @interval)[0] || ""
+  > inputValue label="input" | value = intersectsFilter(@inputValue.data, @inputValue.interval, @interval)[0] || ""
   time = @eid
 * todosOverTime
   | addedTodos value:todo eid:id time
@@ -89,17 +89,15 @@
 * removedTodos
   | removeCompleted id
 
-* todoEditing1
+* todoEditing
   | event label="edit todo" key:id
-  | !event label="done editing" key:id
-* todoEditing2
-  | event label="edit todo" key:id eid:open
-  | event label="done editing" key:id eid:close
-  ? @open > @close
-* todoEditing
-  | todoEditing1 id
-* todoEditing
-  | todoEditing2 id
+  | !todoEditsCompleted id
+
+* todoEditsCompleted
+  > event label="edit todo" key:id | interval = maxBy(@event.interval, intervalEnd(@event.interval), "")
+  | event label="editing" key:id interval:editIntvl
+  ? intervalStart(@interval) < intervalStart(@editIntvl)
+  ? intervalEnd(@editIntvl) != Infinity
 
 ;;*************************************************
 ;; Drawing
@@ -121,7 +119,7 @@
   ["li" {"id" uiId
          "parent" "todo-list"
          "ix" id}
-    ["input" {"type" "text" "class" "todo-editor" "keyDown" "edit todo" "blur" "done editing" "key" id "value" todo}]]
+    ["input" {"type" "text" "class" "todo-editor" "keyDown" "edit todo" "focus" "editing" "key" id "value" todo}]]
 
 * draw todos left
   > remainingTodos | remaining = count(@remainingTodos.id)
