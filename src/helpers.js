@@ -88,26 +88,31 @@ var sin = Math.sin;
 var cos = Math.cos;
 var tan = Math.tan;
 
-function intervalStart(interval) {
-  assert(typeof interval === "object", "intervalStart requires an interval field.");
-  if(interval.length) {
-    return interval.map(intervalStart);
-  }
-  return interval.start === null ? -Infinity : interval.start;
+function intervalMagnitude(intvl) {
+  assert(typeof intvl === "object", "magnitude requires an interval field.");
+  return intervalEnd(intvl) - intervalStart(intvl);
 }
 
-function intervalEnd(interval) {
-  assert(typeof interval === "object", "intervalEnd requires an interval field.");
-  if(interval.length) {
-    return interval.map(intervalEnd);
+function intervalStart(intvl) {
+  assert(typeof intvl === "object", "intervalStart requires an interval field.");
+  if("length" in intvl) {
+    return intvl.map(intervalStart);
   }
-  return interval.end === null ? Infinity : interval.end;
+  return intvl.start === null ? -Infinity : intvl.start;
 }
 
-function intervalToString(interval) {
-  assert(typeof interval === "object", "intervalToString requires an interval field.");
-  return "[" + (interval.start === null ? "-Infinity" : interval.start)  + " " +
-    (interval.end === null? "Infinity" : interval.end) + "]";
+function intervalEnd(intvl) {
+  assert(typeof intvl === "object", "intervalEnd requires an interval field.");
+  if("length" in intvl) {
+    return intvl.map(intervalEnd);
+  }
+  return intvl.end === null ? Infinity : intvl.end;
+}
+
+function intervalToString(intvl) {
+  assert(typeof intvl === "object", "intervalToString requires an interval field.");
+  return "[" + (intvl.start === null ? "-Infinity" : intvl.start)  + " " +
+    (intvl.end === null? "Infinity" : intvl.end) + "]";
 }
 
 //---------------------------------------------------------
@@ -177,27 +182,47 @@ function firstAfter(desired, sort, limit, otherwise) {
 // Filters
 //---------------------------------------------------------
 // Returns all items in desired where the interval or point represented by sort is contained within [start, end]
-function contains(desired, sort, start, end) {
+function contains(desired, sort, intvl) {
   assert(desired.length === sort.length, "Desired and sort fields must both be of the same length. Did you remember to filter them both?");
-  // start is actually an interval
-  if(end === undefined && typeof start === 'object') {
-    end = start.end;
-    start = start.start;
-  }
-  if(end === 'undefined') {
-    end = Infinity;
-  }
+  assert(interval !== undefined, "Interval must not be undefined.");
+
+  var start = intervalStart(intvl);
+  var end = intervalEnd(intvl);
 
   var results = [];
   for(var i = 0, len = sort.length; i < len; i++) {
     var v = sort[i];
     var type = typeof v;
     if(type === "number") {
-      v = {start: v, end: v};
+      v = interval(v, v);
     }
     assert(typeof v === "object", "Contains sort field must contain intervals or numbers.");
 
     if(v.start >= start && v.end <= end)  {
+      results.push(desired[i]);
+    }
+  }
+  return results;
+}
+
+function intersects(desired, sort, intvl) {
+  assert(desired.length === sort.length, "Desired and sort fields must both be of the same length. Did you remember to filter them both?");
+  assert(typeof intvl === "object", "Intersects requires an interval field.");
+
+  var s1 = intervalStart(intvl);
+  var e1 = intervalEnd(intvl);
+  var results = [];
+  for(var i = 0, len = sort.length; i < len; i++) {
+    var v = sort[i];
+    var type = typeof v;
+    if(type === "number") {
+      v = interval(v, v);
+    }
+    assert(typeof v === "object", "Contains sort field must contain intervals or numbers.");
+
+    var s2 = intervalStart(v);
+    var e2 = intervalEnd(v);
+    if(e1 >= s2 && e2 >= s1)  {
       results.push(desired[i]);
     }
   }
@@ -384,7 +409,7 @@ function commonViews() {
   pushAll(facts, inputView("webResponse", ["interval", "response"]));
   pushAll(facts, inputView("mousePosition", ["interval","x","y"]));
   pushAll(facts, inputView("keyboard", ["interval","keyCode","eventType"]));
-  pushAll(facts, inputView("inputValue", ["interval","data"]));
+  pushAll(facts, inputView("inputValue", ["interval", "label", "data"]));
   pushAll(facts, inputView("time", ["time"]));
   pushAll(facts, inputView("timer", ["client", "id", "event", "rate"]));
   pushAll(facts, inputView("subscription", ["recipient", "view", "alias", "asCells"]));
