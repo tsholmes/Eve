@@ -657,8 +657,6 @@ onmessage = function(event) {
         facts.push(["eventTime", eid, cur.time]);
       });
 
-      console.log('FACTS', facts);
-
       if(facts.length) eveApp.run(facts);
       break;
   }
