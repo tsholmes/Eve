@@ -195,10 +195,10 @@ ZZTree.prototype.pathAt = function(hashesAndValues, pathIx) {
   var path = 0;
   var maxBitIx = length * 32;
   for (var i = 0; i < branchDepth; i++) {
-    var bitIx = maxBitIx - ((pathIx * branchDepth) + i) - 1;
+    var bitIx = (pathIx * branchDepth) + i;
     var hash = hashesAndValues[ixes[bitIx % length]];
     var bit = (hash >> ((bitIx / length) | 0)) & 1;
-    path = path | (bit << (branchDepth - i - 1));
+    path = path | (bit << i);
   }
   return path;
 };
@@ -592,9 +592,9 @@ function bench(numUsers, numLogins, numBans, leafWidth, branchDepth) {
     new ZZContains(bansTree, [null, null, 0])
   ]);
   console.time("solve");
-  console.profile();
+  //console.profile();
   var solverResults = solver.solve([1, 2]);
-  console.profileEnd();
+  //console.profileEnd();
   console.timeEnd("solve");
 
   console.time("insert forward");
