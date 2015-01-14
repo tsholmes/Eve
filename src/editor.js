@@ -296,6 +296,10 @@ var _createUICallback = function(id, event, label, key, program) {
       result.type = "keyboard";
       result.keyCode = e.keyCode;
       result.subState = e.keyCode;
+    } else if(event === "input") {
+      console.log(e);
+      result.data = e.srcElement.value;
+      result.subState = label;
     }
 
     var value = e.target.value;

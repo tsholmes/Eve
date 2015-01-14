@@ -382,8 +382,9 @@ function commonViews() {
   pushAll(facts, inputView("rawEvent", ["interval", "label", "key"]));
   pushAll(facts, inputView("eventTime", ["tick", "time"]));
   pushAll(facts, inputView("webResponse", ["interval", "response"]));
-  pushAll(facts, inputView("mousePosition", ["eid","x","y"]));
-  pushAll(facts, inputView("keyboard", ["eid","keyCode","eventType"]));
+  pushAll(facts, inputView("mousePosition", ["interval","x","y"]));
+  pushAll(facts, inputView("keyboard", ["interval","keyCode","eventType"]));
+  pushAll(facts, inputView("inputValue", ["interval","data"]));
   pushAll(facts, inputView("time", ["time"]));
   pushAll(facts, inputView("timer", ["client", "id", "event", "rate"]));
   pushAll(facts, inputView("subscription", ["recipient", "view", "alias", "asCells"]));

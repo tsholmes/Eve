@@ -515,7 +515,8 @@ function injectRemoteDiffs(client, diffs, inserts, subs) {
 //************************************
 
 var UIEventState = {
-  "keydown": {}
+  "keydown": {},
+  "input": {}
 };
 
 function setEventStart(event, value) {
@@ -628,19 +629,35 @@ onmessage = function(event) {
         } else if(cur.isEnd) {
           setEventStart(cur, undefined);
           intvl = interval(prev, eid);
+
+        } else {
+          // It's a sliding window event, e.g. input.
+          setEventStart(cur, {eid: eid, data: cur.data});
+          intvl = interval(eid, Infinity);
         }
 
         // Push extended event facts.
-        if(event.type === "mouse") {
+        if(cur.type === "mouse") {
           facts.push(["mousePosition", intvl, cur.x, cur.y]);
 
-        } else if(event.type === "keyboard") {
-          facts.push("keyboard", intvl, cur.charCode, event);
+        } else if(cur.type === "keyboard") {
+          facts.push(["keyboard", intvl, cur.charCode, event]);
+
+        } else if(cur.event === "input") {
+          if(prev) {
+            var oldIntvl = interval(prev.eid, eid)
+            facts.push(["inputValue", oldIntvl, prev.data]);
+            facts.push(["rawEvent", oldIntvl, cur.label, cur.key]);
+          }
+          facts.push(["inputValue", intvl, cur.data]);
         }
+
 
         facts.push(["rawEvent", intvl, cur.label, cur.key]);
         facts.push(["eventTime", eid, cur.time]);
       });
+
+      console.log('FACTS', facts);
 
       if(facts.length) eveApp.run(facts);
       break;
