@@ -84,4 +84,7 @@ test("foo.eve", function(env) {
 test("Add data.eve", function(env) {
   injectAndRun(env, []);
   checkTable(env, "Add field literal", [[7, 10, -1]]);
+  checkTable(env, "Add multirow field literal", [[7, 10, -1], [3, 2, 1]]);
+  checkTable(env, "Add heterogenous multirow field literal", [[1, 2, 3], ["one", "two", "three"]]);
+  checkTable(env, "Add constant constraints", [[7, 10, -1]])
 });

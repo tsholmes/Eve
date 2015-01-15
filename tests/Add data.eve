@@ -2,12 +2,12 @@
   ~ field1 field2 field3
   + 7 10 -1
 
-* Add multi-row field literal
+* Add multirow field literal
   ~ field1 field2 field3
   + 7 10 -1
   + 3 2 1
 
-* Add homogenous multi-row field literal
+* Add heterogenous multirow field literal
   ~ field1 field2 field3
   + 1 2 3
   + "one" "two" "three"
