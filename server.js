@@ -277,38 +277,58 @@ io.on("connection", function(socket) {
 });
 
 //---------------------------------------------------------
-// Examples loading
+// Examples / tests loading
 //---------------------------------------------------------
-
-express.get("/src/examples.js", function(req, res) {
-  var examples = {};
-  var files = fs.readdirSync("examples/");
+function bundleFiles(dir, ext) {
+  var bundle = {};
+  var files = fs.readdirSync(dir);
   for(var i in files) {
     var file = files[i];
-    var content = fs.readFileSync("examples/" + file).toString();
-    examples[path.basename(file, ".eve")] = content;
-
+    if(path.extname(file) === ext) {
+      var content = fs.readFileSync(path.join(dir, file)).toString();
+      bundle[path.basename(file, ext)] = content;
+    }
   }
-  res.send("var examples = " + JSON.stringify(examples));
-});
 
-express.post("/src/examples.js/update", function(req, res) {
-  var stack = req.body.stack;
-  var content = req.body.content.replace(/[ \t]+$/gm, "");
+  return bundle;
+}
+
+function updateFile(path, content)  {
+  content = content.replace(/[ \t]+$/gm, "");
   if(content[content.length-1] != "\n") {
     content += "\n";
   }
-  var path = "examples/" + stack + ".eve";
-
-  // my stack shouldn't get written out.
-  if(stack === "My Stack") return res.send("");
-
-  //only save stacks we already know about
+  // Only update existing files
   if(fs.existsSync(path)) {
     fs.writeFileSync(path, content);
   }
+}
+
+express.get("/src/examples.js", function(req, res) {
+  var examples = bundleFiles("examples", ".eve");
+  res.send("var examples = " + JSON.stringify(examples));
+});
+
+
+express.post("/src/examples.js/update", function(req, res) {
+  var stack = req.body.stack;
+  // my stack shouldn't get written out.
+  if(stack === "My Stack") return res.send("");
+  updateFile("examples/" + stack + ".eve", req.body.content);
   res.send("");
 });
+
+express.get("/src/tests.js", function(req, res) {
+  var tests = bundleFiles("tests", ".eve");
+  res.send("var tests = " + JSON.stringify(tests));
+});
+
+express.post("/src/tests.js/update", function(req, res) {
+  var stack = req.body.stack;
+  updateFile("tests/" + stack + ".eve", req.body.content);
+  res.send("");
+});
+
 
 //---------------------------------------------------------
 // Go
