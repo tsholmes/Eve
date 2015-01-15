@@ -2,6 +2,12 @@
 ;; Chat app
 ;;-----------------------------------------------
 
+;* evtzzz
+;  | event eid interval label key
+
+;* inpuzzz
+;  | inputValue interval label data
+
 * rootUi
   | currentValue value
   ["div" {"id" "zomg" "style" "border:1px solid #ccc;"}
@@ -20,32 +26,36 @@
     message]
 
 * sentMessages
-  | event eid:id client label="newMessage" value:message
-  | keyboard eid:id keyCode=13
+  | event interval label="newMessage"
+  | keyboard interval keyCode=13
+  | client client
+  > inputValue label="messageChanged" | message = maxBy(intersectsFilter(@inputValue.data, @inputValue.interval, @interval), intervalStart(intersectsFilter(@inputValue.interval, @inputValue.interval, @interval)), "")
+  ? @message != ""
   user = @client.substring(0,6)
 
-* outboundMessages
-  | sentMessages id message user
+;* outboundMessages
+;  | sentMessages id message user
 
 * inboundMessages
    ~ id message user
 
-* remoteSubsTemp
-  | client client:me
-  stack = "editor|Chat"
-  server = "server"
-  inbound = "inboundMessages"
-  outbound = "outboundMessages"
-  asCells = false
+;* remoteSubsTemp
+;  | client client:me
+;  stack = "editor|Chat"
+;  server = "server"
+;  inbound = "inboundMessages"
+;  outbound = "outboundMessages"
+;  asCells = false
 
-* remote|subscription
-  | remoteSubsTemp server:remote inbound:view inbound:alias asCells me:recipient
+;* remote|subscription
+;  | remoteSubsTemp server:remote inbound:view inbound:alias asCells me:recipient
 
-* remote|subscription
-  | remoteSubsTemp stack:remote outbound:view inbound:alias asCells server:recipient
+;* remote|subscription
+;  | remoteSubsTemp stack:remote outbound:view inbound:alias asCells server:recipient
 
 * currentValue
-  > event label="messageChanged" | eid = maxBy(@event.eid, @event.eid, 0)
-  > event label="messageChanged" | lastValue = maxBy(@event.value, @event.eid, "")
-  > keyboard keyCode=13 | submitEid = maxBy(@keyboard.eid, @keyboard.eid, 0)
-  value = @submitEid > @eid ? "" : @lastValue
+  > keyboard keyCode=13 | submitInterval = maxBy(@keyboard.interval, intervalStart(@keyboard.interval), interval(-1, -1))
+  > event label="messageChanged" | interval = maxBy(@event.interval, @event.eid, interval(-1, -1))
+  > inputValue label="messageChanged" | lastValue = intersectsFilter(@inputValue.data, @inputValue.interval, @interval)[0] || ""
+  ;| inputValue label="messageChanged" interval data:lastValue
+  value = intervalStart(@submitInterval) > intervalStart(@interval) ? "" : @lastValue
