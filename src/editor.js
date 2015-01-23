@@ -34,7 +34,6 @@ for(var stackIx = 0; stackIx < stacks.length; stackIx++) {
 stacks = uniqueStacks;
 setLocal("stacks", stacks);
 // setLocal("Editor-code", examples["Editor"]);
-console.log(tests, stacks);
 
 var client = getLocal("client", uuid());
 setLocal("client", client);
@@ -262,6 +261,61 @@ function onChange(cm, change) {
 }
 
 editor.on("change", Cowboy.debounce(200, onChange));
+
+var onEditInputCell = function(evt) {
+  var tableEl = $(evt.target).parents(".card[table]");
+  var table = tableEl.attr("table");
+  var edValue = editor.getValue();
+
+  // Delete old inputView
+  var cardNames = /^\s*\*\s*(.*)\s*$/gm;
+  var cardHeader = /^\s*~\s*(.*)\s*$/m;
+  var match;
+  var editedCardIx;
+  var header;
+  var nextCardIx;
+  while(match = cardNames.exec(edValue)) {
+    if(match[1] === table) {
+      editedCardIx = match.index;
+      header = cardHeader.exec(edValue.substring(match.index))[1];
+    } else if(editedCardIx !== undefined && !nextCardIx) {
+      nextCardIx = match.index;
+    }
+  }
+
+  var prefix = edValue.substring(0, editedCardIx);
+  var suffix = edValue.substring(nextCardIx);
+
+  // Collate rows
+  var rows = tableEl.find(".grid-row");
+  var facts = [];
+  for(var rowIx = 0, rowLength = rows.length; rowIx < rowLength; rowIx++) {
+    var inputs = $(rows[rowIx]).find("input");
+    var inputsLength = inputs.length;
+    var fact = new Array(inputsLength + 1);
+    fact[0] = table;
+    for(var inputIx = 0; inputIx < inputsLength; inputIx++) {
+      var val = inputs[inputIx].value;
+      if(val === "" || isNaN(val)) {
+	if(val !== "true" && val !== "false") {	  
+	  val = "\"" + val + "\"";
+	}
+      }
+      fact.push(val);
+    }
+    facts.push(fact);
+  }
+
+  // DSL-ify facts.
+  var card = "* " + table + "\n";
+  card += "  ~ " + header + "\n";
+  card += facts.map(function(fact) {
+    return "  + " + fact.slice(1).join(" ").trim();
+  }).join("\n");
+
+  editor.setValue(prefix + "\n" + card + "\n" + suffix);
+};
+onEditInputCell = Cowboy.debounce(200, onEditInputCell);
 
 //---------------------------------------------------------
 // UI diff element
@@ -493,6 +547,11 @@ function uiDiffRenderer(diff, storage, program) {
           if(cur[attrs_value] !== el.value) el.value = cur[attrs_value];
         } else if (cur[attrs_attr] === "autofocus") {
             el.focus();
+
+        } else if(cur[attrs_attr] === "tableCardInputCell") {
+          // Add special-cased editor inputCell event
+          el.addEventListener("blur", onEditInputCell);
+
         } else {
           el.setAttribute(cur[attrs_attr], cur[attrs_value]);
         }
