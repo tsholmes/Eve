@@ -28,7 +28,7 @@ var console = {
 
 var compilerTables = ["programView", "programQuery", "subscription", "generatedView", "displayName", "view", "field", "query", "constantConstraint", "functionConstraint", "functionConstraintInput", "constantConstraint",
                       "viewConstraint", "viewConstraintBinding", "aggregateConstraint", "aggregateConstraintBinding", "aggregateConstraintSolverInput",
-                      "aggregateConstraintAggregateInput", "isInput", "isCheck"];
+                      "aggregateConstraintAggregateInput", "isInput", "isCheck", "viewCode"];
 
 eveApp.webRequestWatcher = function(application, storage, system) {
   var requests = system.getStore("webRequest");

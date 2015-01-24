@@ -304,6 +304,7 @@ function inputView(name, fields) {
 
 function editorViews() {
   var facts = [];
+  pushAll(facts, inputView("editor|viewCode", ["view", "code"]));
   pushAll(facts, inputView("editor|programView", ["program", "view"]));
   pushAll(facts, inputView("editor|programQuery", ["program", "query"]));
   pushAll(facts, inputView("editor|insertedFact", ["program", "view", "row", "col", "value"]));
@@ -334,6 +335,7 @@ function editorViews() {
 
 function commonViews() {
   var facts = [];
+  pushAll(facts, inputView("viewCode", ["view", "code"]));
   pushAll(facts, inputView("rawEvent", ["client", "eid", "label", "key", "value"]));
   pushAll(facts, inputView("eventTime", ["client", "tick", "time"]));
   pushAll(facts, inputView("mousePosition", ["client", "eid","x","y"]));

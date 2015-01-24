@@ -615,6 +615,7 @@ function parse(string) {
       state.lineNumber = ix;
       var parsed = parseLine(line, state)
       if(parsed) {
+        parsed.lineText = line;
         parsed.line = ix;
         if(parsed.error) {
           parsed.error.line = ix;
@@ -635,6 +636,7 @@ function parse(string) {
     switch(line.type) {
       case "rule":
         curRule = {name: line.name,
+                   code: line.lineText,
                    isCheck: line.isCheck,
                    header: false,
                    ui: [],
@@ -660,14 +662,17 @@ function parse(string) {
             curRule.fields[field.name] = field;
           }
         }
+        curRule.code += "\n" + line.lineText;
         curRule.sources.push(line);
         break;
       case "constant":
         line.constantVar = line.symbol;
+        curRule.code += "\n" + line.lineText;
         curRule.constants[line.constantVar] = line;
         break;
       case "function":
         curRule.fields[line.symbol] = line;
+        curRule.code += "\n" + line.lineText;
         curRule.functions.push(line);
         break;
       case "aggregate":
@@ -684,18 +689,23 @@ function parse(string) {
             curRule.fields[field.name] = field;
           }
         }
+        curRule.code += "\n" + line.lineText;
         curRule.aggregates.push(line);
         break;
       case "filter":
+        curRule.code += "\n" + line.lineText;
         curRule.filters.push(line);
         break;
       case "header":
+        curRule.code += "\n" + line.lineText;
         curRule.header = line;
         break;
       case "insert":
+        curRule.code += "\n" + line.lineText;
         curRule.values.push(line);
         break;
       case "ui":
+        curRule.code += "\n" + line.lineText;
         if(line.element) {
           curRule.ui.push(line.element);
         }
@@ -933,10 +943,12 @@ function injectParsed(parsed, program, prefix, programName) {
   var errors = parsed.errors || [];
   var context = {nextId: 0, programName: programName};
   var facts = [];
+  var code = [];
   var values = {};
   for(var ix = 0; ix < parsed.rules.length; ix++) {
     var curId = context.nextId;
     var curRule = parsed.rules[ix];
+    code.push([curRule.name, curRule.code]);
 
     var view = curRule.name;
     var query = view + "|query=" + curId;
@@ -1094,6 +1106,22 @@ function injectParsed(parsed, program, prefix, programName) {
 //   console.log("Compiling " + JSON.stringify(facts));
 
   var final = facts;
+  var mergedCode = {};
+
+  for(var codeIx in code) {
+    var cur = code[codeIx];
+    if(!mergedCode[cur[0]]) {
+      mergedCode[cur[0]] = cur[1];
+    } else {
+      mergedCode[cur[0]] += "\n\n" + cur[1];
+    }
+  }
+
+  for(var viewName in mergedCode) {
+    var value = mergedCode[viewName];
+    final.push(["viewCode", viewName, value]);
+  }
+
   if(prefix) {
     final = final.map(function(cur) {
       cur[0] = prefix + cur[0];
@@ -1101,6 +1129,7 @@ function injectParsed(parsed, program, prefix, programName) {
     });
   }
   program.update(final, []);
+
   return {values: values, errors: errors, tablesCreated: tablesCreated};
 }
 
