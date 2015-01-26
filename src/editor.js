@@ -341,6 +341,9 @@ CodeMirrorElem.prototype.wrappedNode = function() {
 CodeMirrorElem.prototype.setAttribute = function(attr, value) {
   this.cm.setOption(attr, value);
 };
+CodeMirrorElem.prototype.getAttribute = function(attr) {
+  this.cm.getOption(attr);
+};
 CodeMirrorElem.prototype.removeAttribute = function(attr) {
   this.cm.setOption(attr, null);
 };
@@ -365,35 +368,38 @@ CodeMirrorElem.prototype.addedToDom = function(parent) {
 };
 
 
-function DomElemWrapper(type) {
+function DomElem(type) {
   this.parentNode = null;
   this.style = "";
   this.elem = document.createElement(type);
 }
-DomElemWrapper.prototype.wrappedNode = function() {
+DomElem.prototype.wrappedNode = function() {
   return this.elem;
 }
-DomElemWrapper.prototype.setAttribute = function(attr, value) {
+DomElem.prototype.setAttribute = function(attr, value) {
   this.elem.setAttribute(attr, value);
 }
-DomElemWrapper.prototype.removeAttribute = function(attr) {
+DomElem.prototype.getAttribute = function(attr) {
+    this.elem.getAttribute(attr);
+};
+DomElem.prototype.removeAttribute = function(attr) {
   this.elem.removeAttribute(attr, value);
 }
-DomElemWrapper.prototype.appendChild = function(child) {
+DomElem.prototype.appendChild = function(child) {
   var node = child;
   if(child.wrappedNode) {
     node = child.wrappedNode();
   }
   this.elem.appendChild(node);
 }
-DomElemWrapper.prototype.removeChild = function(child) {
+DomElem.prototype.removeChild = function(child) {
   var node = child;
   if(child.wrappedNode) {
     node = child.wrappedNode();
   }
   this.elem.removeChild(node);
 }
-DomElemWrapper.prototype.insertBefore = function(child, anchor) {
+DomElem.prototype.insertBefore = function(child, anchor) {
   var node = child;
   var anchorNode = anchor;
   if(child.wrappedNode) {
@@ -404,21 +410,37 @@ DomElemWrapper.prototype.insertBefore = function(child, anchor) {
   }
   this.elem.insertBefore(node, anchorNode);
 }
-DomElemWrapper.prototype.removeEventListener = function(ev, listener) {
+DomElem.prototype.removeEventListener = function(ev, listener) {
   this.elem.removeEventListener(ev, listener);
 }
-DomElemWrapper.prototype.addEventListener = function(ev, listener) {
+DomElem.prototype.addEventListener = function(ev, listener) {
   this.elem.addEventListener(ev, listener);
 }
 
-var specialElements = {"codemirror": CodeMirrorElem};
+SvgElem = function SvgElem(type) {
+    this.parentNode = null;
+    this.style = "";
+    this.elem = document.createElementNS("http://www.w3.org/2000/svg", type);
+};
+
+SvgElem.prototype = DomElem.prototype;
+
+var specialElements = {
+    "codemirror":CodeMirrorElem,
+    "svg": SvgElem,
+    "path": SvgElem,
+    "rect": SvgElem,
+    "circle": SvgElem,
+    "line": SvgElem,
+    "polygon": SvgElem
+};
 
 function wrappedElement(type) {
   var special = specialElements[type];
   if(special) {
     return new special(type);
   }
-  return new DomElemWrapper(type);
+  return new DomElem(type);
 }
 
 //---------------------------------------------------------
@@ -476,15 +498,6 @@ var createUICallback = function(id, event, label, key, program) {
       workers[program].postMessage({type: "event", items: items});
     }
   };
-};
-
-var svgs = {
-  "svg": true,
-  "path": true,
-  "rect": true,
-  "circle": true,
-  "line": true,
-  "polygon": true
 };
 
 function appendSortElement(parent, child){
@@ -561,11 +574,7 @@ function uiDiffRenderer(diff, storage, program) {
   for(var i = 0; i < elemsLen; i++) {
     var cur = elem[i];
     var tag = cur[elem_type] || "span";
-    if(!svgs[cur[elem_type]]) {
-      var me = builtEls[cur[elem_id]] = wrappedElement(tag);
-    } else {
-      var me = builtEls[cur[elem_id]] = document.createElementNS("http://www.w3.org/2000/svg", tag);
-    }
+    var me = builtEls[cur[elem_id]] = wrappedElement(tag);
 
     var old = removed[cur[elem_id]];
     if(old)  {
@@ -576,9 +585,9 @@ function uiDiffRenderer(diff, storage, program) {
       var node = old.wrappedNode();
       while(node.childNodes.length) {
         me.appendChild(node.childNodes[0]);
-          if(builtEls[node.childNodes[0].id] && typeof builtEls[node.childNodes[0].id].addedToDom === "function") {
-            builtEls[node.childNodes[0].id].addedToDom(me);
-          }
+        if(builtEls[node.childNodes[0].id] && typeof builtEls[node.childNodes[0].id].addedToDom === "function") {
+          builtEls[node.childNodes[0].id].addedToDom(me);
+        }
       }
 
       //TODO: transfer attrs
@@ -639,9 +648,9 @@ function uiDiffRenderer(diff, storage, program) {
     } else {
       try {
         if(cur[attrs_attr] === "value") {
-          if(cur[attrs_value] !== el.value) el.value = cur[attrs_value];
+          if(cur[attrs_value] !== el.getAttribute("value")) el.setAttribute("value", cur[attrs_value]);
         } else if (cur[attrs_attr] === "autofocus") {
-            el.focus();
+            el.wrappedNode().focus();
 
         } else if(cur[attrs_attr] === "tableCardInputCell") {
           // Add special-cased editor inputCell event
