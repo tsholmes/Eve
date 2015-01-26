@@ -572,6 +572,9 @@ function uiDiffRenderer(diff, storage, program) {
       var node = old.wrappedNode();
       while(node.childNodes.length) {
         me.appendChild(node.childNodes[0]);
+          if(builtEls[node.childNodes[0].id] && typeof builtEls[node.childNodes[0].id].addedToDom === "function") {
+            builtEls[node.childNodes[0].id].addedToDom(me);
+          }
       }
 
       //TODO: transfer attrs
@@ -714,8 +717,8 @@ function uiDiffRenderer(diff, storage, program) {
       } else {
         appendSortElement(parent, child, child.eveSortValue);
       }
-      if(child.postAppend) {
-        child.postAppend();
+      if(typeof child.addedToDom === "function") {
+        child.addedToDom(parent);
       }
     }
   }
