@@ -23,6 +23,12 @@
   ~ remote view alias asCells
   + "Editor" "rollback" "rollback" ""
 
+* namespacedInputViews
+  | tableCardProgram program
+  | editor|isInput view
+  | resultCell view:table
+  table = "editor|" + @program + "|" + @view
+
 * drawControlCard
   | tableCardProgram program
   | editor|numEvents count
@@ -90,7 +96,7 @@
   id = "table|" + @remote + "|" + @table
   gridId = "grid" + @remote + "|" + @table
   gridHeaderId = "gridHeader" + @table
-  ["div" {"id" id "class" "card table-card open" "ix" table}
+  ["div" {"id" id "class" "card table-card open" "ix" table "table" table}
     ["h2" table]
     ["div" {"id" gridId "class" "grid" "gid" gridId}
     ["div" {"id" gridHeaderId "class" "grid-header" "ix" "" "hid" gridHeaderId}]]]
@@ -113,10 +119,20 @@
 
 * drawTableCardCells
   | resultCell view:table row col value
+  | !namespacedInputViews table
   id = @table + @row + @col
   rowId = "row" + @table + @row
   strValue = typeof @value === "object" ? "[" + @value.start + " " + @value.end + "]" : @value
   ["div" {"id" id "parent" rowId "ix" col} strValue]
+
+* drawTableCardInputCells
+  | resultCell view:table row col value
+  | namespacedInputViews table
+  id = @table + @row + @col
+  rowId = "row" + @table + @row
+  strValue = typeof @value === "object" ? "[" + @value.start + " " + @value.end + "]" : @value
+  ["input" {"id" id "parent" rowId "tableCardInputCell" true "ix" col "value" strValue}]
+
 
 * rollbackEvents
   | event label="rollback" eid value:event
