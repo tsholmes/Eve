@@ -63,7 +63,7 @@ function drainRenderQueue() {
       var diff = queued[1];
       uiDiffRenderer(diff, storage, program);
     }
-    var eveRoot = $(storage["builtEls"]["eve-root"]);
+    var eveRoot = $(storage["builtEls"]["eve-root"].wrappedNode());
     if(!eveRoot.closest(document.documentElement).size()) {
       storage["rootParent"].appendChild(eveRoot.get(0));
     }
@@ -297,7 +297,7 @@ var onEditInputCell = function(evt) {
     for(var inputIx = 0; inputIx < inputsLength; inputIx++) {
       var val = inputs[inputIx].value;
       if(val === "" || isNaN(val)) {
-	if(val !== "true" && val !== "false") {	  
+	if(val !== "true" && val !== "false") {
 	  val = "\"" + val + "\"";
 	}
       }
@@ -329,6 +329,93 @@ onEditInputCell = Cowboy.debounce(200, onEditInputCell);
 // .parentNode
 // .style
 //---------------------------------------------------------
+
+function CodeMirrorElem() {
+  this.parentNode = null;
+  this.style = "";
+  this.cm = new CodeMirror();
+}
+CodeMirrorElem.prototype.wrappedNode = function() {
+  return this.cm.getWrapperElement();
+}
+CodeMirrorElem.prototype.setAttribute = function(attr, value) {
+  this.cm.setOption(attr, value);
+}
+CodeMirrorElem.prototype.removeAttribute = function(attr) {
+  this.cm.setOption(attr, null);
+}
+CodeMirrorElem.prototype.appendChild = function(child) {
+  //widgets maybe?
+}
+CodeMirrorElem.prototype.removeChild = function(child) {
+  //?
+}
+CodeMirrorElem.prototype.insertBefore = function(child, anchor) {
+  //?
+}
+CodeMirrorElem.prototype.removeEventListener = function(ev, listener) {
+
+}
+CodeMirrorElem.prototype.addEventListener = function(ev, listener) {
+
+}
+
+
+function DomElemWrapper(type) {
+  this.parentNode = null;
+  this.style = "";
+  this.elem = document.createElement(type);
+}
+DomElemWrapper.prototype.wrappedNode = function() {
+  return this.elem;
+}
+DomElemWrapper.prototype.setAttribute = function(attr, value) {
+  this.elem.setAttribute(attr, value);
+}
+DomElemWrapper.prototype.removeAttribute = function(attr) {
+  this.elem.removeAttribute(attr, value);
+}
+DomElemWrapper.prototype.appendChild = function(child) {
+  var node = child;
+  if(child.wrappedNode) {
+    node = child.wrappedNode();
+  }
+  this.elem.appendChild(node);
+}
+DomElemWrapper.prototype.removeChild = function(child) {
+  var node = child;
+  if(child.wrappedNode) {
+    node = child.wrappedNode();
+  }
+  this.elem.removeChild(node);
+}
+DomElemWrapper.prototype.insertBefore = function(child, anchor) {
+  var node = child;
+  var anchorNode = anchor;
+  if(child.wrappedNode) {
+    node = child.wrappedNode();
+  }
+  if(anchor.wrappedNode) {
+    anchorNode = anchor.wrappedNode();
+  }
+  this.elem.insertBefore(node, anchorNode);
+}
+DomElemWrapper.prototype.removeEventListener = function(ev, listener) {
+  this.elem.removeEventListener(ev, listener);
+}
+DomElemWrapper.prototype.addEventListener = function(ev, listener) {
+  this.elem.addEventListener(ev, listener);
+}
+
+var specialElements = {"codemirror": CodeMirrorElem};
+
+function wrappedElement(type) {
+  var special = specialElements[type];
+  if(special) {
+    return new special(type);
+  }
+  return new DomElemWrapper(type);
+}
 
 //---------------------------------------------------------
 // UI Diff
@@ -399,7 +486,7 @@ var svgs = {
 function appendSortElement(parent, child){
 
   var value = child.eveSortValue;
-  var children = parent.childNodes;
+  var children = parent.wrappedNode().childNodes;
   var startIndex = 0;
   var stopIndex = children.length - 1;
 
@@ -449,7 +536,7 @@ function uiDiffRenderer(diff, storage, program) {
   var child_pos = 1;
   var child_childid = 2;
 
-  var builtEls = storage["builtEls"] || {"eve-root": document.createElement("div")};
+  var builtEls = storage["builtEls"] || {"eve-root": wrappedElement("div")};
   var handlers = storage["handlers"] || {};
   var roots = {};
   var removed = {};
@@ -469,11 +556,11 @@ function uiDiffRenderer(diff, storage, program) {
   var elemsLen = elem.length;
   for(var i = 0; i < elemsLen; i++) {
     var cur = elem[i];
+    var tag = cur[elem_type] || "span";
     if(!svgs[cur[elem_type]]) {
-      var tag = cur[elem_type] || "span";
-      var me = builtEls[cur[elem_id]] = document.createElement(tag);
+      var me = builtEls[cur[elem_id]] = wrappedElement(tag);
     } else {
-      var me = builtEls[cur[elem_id]] = document.createElementNS("http://www.w3.org/2000/svg", cur[elem_type]);
+      var me = builtEls[cur[elem_id]] = document.createElementNS("http://www.w3.org/2000/svg", tag);
     }
 
     var old = removed[cur[elem_id]];
@@ -482,8 +569,9 @@ function uiDiffRenderer(diff, storage, program) {
         old.parentNode.insertBefore(me, old);
         old.parentNode.removeChild(old);
       }
-      while(old.childNodes.length) {
-        me.appendChild(old.childNodes[0]);
+      var node = old.wrappedNode();
+      while(node.childNodes.length) {
+        me.appendChild(node.childNodes[0]);
       }
 
       //TODO: transfer attrs
@@ -618,10 +706,16 @@ function uiDiffRenderer(diff, storage, program) {
     var parent = builtEls[cur[elem_id]];
     if(parent && child) {
       child.eveSortValue = cur[child_pos];
-      if(parent.childNodes.length === 0) {
+      if(child.wrappedNode) {
+        child.wrappedNode().eveSortValue = cur[child_pos];
+      }
+      if(parent.wrappedNode().childNodes.length === 0) {
         parent.appendChild(child);
       } else {
         appendSortElement(parent, child, child.eveSortValue);
+      }
+      if(child.postAppend) {
+        child.postAppend();
       }
     }
   }
@@ -630,7 +724,7 @@ function uiDiffRenderer(diff, storage, program) {
     storage["builtEls"] = builtEls;
     storage["handlers"] = handlers;
     if(storage["rootParent"]) {
-      storage["rootParent"].appendChild(builtEls["eve-root"]);
+      storage["rootParent"].appendChild(builtEls["eve-root"].wrappedNode());
     }
   }
 
