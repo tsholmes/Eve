@@ -362,43 +362,46 @@ CodeMirrorElem.prototype.removeEventListener = function(ev, listener) {
 CodeMirrorElem.prototype.addEventListener = function(ev, listener) {
 
 };
-
+CodeMirrorElem.prototype.parent = function() {
+  return this.cm.getWrapperElement().parentNode;
+};
+CodeMirrorElem.prototype.children = function() {
+  return []; // @FIXME: What is sensible here?
+};
 CodeMirrorElem.prototype.addedToDom = function(parent) {
     this.cm.refresh();
 };
 
 
 function DomElem(type) {
-  this.parentNode = null;
-  this.style = "";
   this.elem = document.createElement(type);
 }
 DomElem.prototype.wrappedNode = function() {
   return this.elem;
-}
+};
 DomElem.prototype.setAttribute = function(attr, value) {
   this.elem.setAttribute(attr, value);
-}
+};
 DomElem.prototype.getAttribute = function(attr) {
     this.elem.getAttribute(attr);
 };
 DomElem.prototype.removeAttribute = function(attr) {
   this.elem.removeAttribute(attr, value);
-}
+};
 DomElem.prototype.appendChild = function(child) {
   var node = child;
   if(child.wrappedNode) {
     node = child.wrappedNode();
   }
   this.elem.appendChild(node);
-}
+};
 DomElem.prototype.removeChild = function(child) {
   var node = child;
   if(child.wrappedNode) {
     node = child.wrappedNode();
   }
   this.elem.removeChild(node);
-}
+};
 DomElem.prototype.insertBefore = function(child, anchor) {
   var node = child;
   var anchorNode = anchor;
@@ -409,18 +412,22 @@ DomElem.prototype.insertBefore = function(child, anchor) {
     anchorNode = anchor.wrappedNode();
   }
   this.elem.insertBefore(node, anchorNode);
-}
+};
 DomElem.prototype.removeEventListener = function(ev, listener) {
   this.elem.removeEventListener(ev, listener);
-}
+};
 DomElem.prototype.addEventListener = function(ev, listener) {
   this.elem.addEventListener(ev, listener);
-}
+};
+DomElem.prototype.parent = function() {
+  return this.elem.parentNode;
+};
+DomElem.prototype.children = function() {
+  return this.elem.childNodes;
+};
 
 SvgElem = function SvgElem(type) {
-    this.parentNode = null;
-    this.style = "";
-    this.elem = document.createElementNS("http://www.w3.org/2000/svg", type);
+  this.elem = document.createElementNS("http://www.w3.org/2000/svg", type);
 };
 
 SvgElem.prototype = DomElem.prototype;
@@ -578,15 +585,15 @@ function uiDiffRenderer(diff, storage, program) {
 
     var old = removed[cur[elem_id]];
     if(old)  {
-      if(old && old.parentNode && old.parentNode.parentNode) {
-        old.parentNode.insertBefore(me, old);
-        old.parentNode.removeChild(old);
+      if(old && old.parent() && old.parent().parentNode) {
+        old.parent().insertBefore(me.wrappedNode(), old.wrappedNode());
+        old.parent().removeChild(old.wrappedNode());
       }
-      var node = old.wrappedNode();
-      while(node.childNodes.length) {
-        me.appendChild(node.childNodes[0]);
-        if(builtEls[node.childNodes[0].id] && typeof builtEls[node.childNodes[0].id].addedToDom === "function") {
-          builtEls[node.childNodes[0].id].addedToDom(me);
+      var oldChildren = old.children(); // @TODO: Ensure this works as expected.
+      while(oldChildren.length) {
+        me.appendChild(oldChildren[0]);
+        if(builtEls[oldChildren[0].id] && typeof builtEls[oldChildren[0].id].addedToDom === "function") {
+          builtEls[oldChildren[0].id].addedToDom(me);
         }
       }
 
@@ -602,8 +609,8 @@ function uiDiffRenderer(diff, storage, program) {
     var cur = removed[toRemove];
     if(!cur) continue;
 
-    if(cur && cur.parentNode && cur.parentNode.parentNode) {
-      cur.parentNode.removeChild(cur);
+    if(cur && cur.parent() && cur.parent().parentNode) {
+      cur.parent().removeChild(cur.wrappedNode());
     }
     handlers[toRemove] = null;
     builtEls[toRemove] = null;
