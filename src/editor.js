@@ -337,28 +337,32 @@ function CodeMirrorElem() {
 }
 CodeMirrorElem.prototype.wrappedNode = function() {
   return this.cm.getWrapperElement();
-}
+};
 CodeMirrorElem.prototype.setAttribute = function(attr, value) {
   this.cm.setOption(attr, value);
-}
+};
 CodeMirrorElem.prototype.removeAttribute = function(attr) {
   this.cm.setOption(attr, null);
-}
+};
 CodeMirrorElem.prototype.appendChild = function(child) {
   //widgets maybe?
-}
+};
 CodeMirrorElem.prototype.removeChild = function(child) {
   //?
-}
+};
 CodeMirrorElem.prototype.insertBefore = function(child, anchor) {
   //?
-}
+};
 CodeMirrorElem.prototype.removeEventListener = function(ev, listener) {
 
-}
+};
 CodeMirrorElem.prototype.addEventListener = function(ev, listener) {
 
-}
+};
+
+CodeMirrorElem.prototype.addedToDom = function(parent) {
+    this.cm.refresh();
+};
 
 
 function DomElemWrapper(type) {
