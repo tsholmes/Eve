@@ -193,21 +193,30 @@ body {
 #editor {
   flex:1;
   position:relative;
+
   .CodeMirror {
-    z-depth(1);
-    overflow:hidden;
-    border-radius:2px;
     position:absolute;
     top:30px; bottom:30px; left:20px; right:20px;
-  }
-  .CodeMirror-lines {
-    padding: 20px 0; /* Vertical padding around content */
-  }
-  .CodeMirror pre {
-    padding: 0 20px; /* Horizontal padding of content */
+    width: auto;
   }
   .CodeMirror-scroll { height:100%; }
 }
+
+.CodeMirror {
+  z-depth(1);
+  overflow:hidden;
+  border-radius:2px;
+  width: 100%;
+  height: auto;
+}
+.CodeMirror-scroll { height: auto; }
+.CodeMirror-lines {
+  padding: 20px 0; /* Vertical padding around content */
+}
+.CodeMirror pre {
+  padding: 0 20px; /* Horizontal padding of content */
+}
+
 #cards { flex: 1.2;
   background: #ececec;
   position:relative;
@@ -259,7 +268,7 @@ body {
   z-depth(1);
 }
 .uiCard h2 { font-size:14pt; color: rgba(0,0,0, 0.56); margin-bottom:10px; }
-.uiCard > div { border-radius:2px; overflow:hidden; box-shadow: 0 0px 0px rgba(0,0,0,0.26); }
+.uiCard > div { border-radius:2px; overflow:hidden; box-shadow: 0 0px 0px rgba(0,0,0,0.26); width: 100%; }
 
 $fonts = "Inconsolata", "Menlo", "Courier New", monospace;
 
@@ -374,6 +383,9 @@ $open-animation = cubic-bezier(.14,.85,.77,1.03);
     }
     div + div {
       border-left:1px solid $border-color;
+    }
+    input {
+      width: 100%;
     }
   }
   .grid-row + .grid-row {

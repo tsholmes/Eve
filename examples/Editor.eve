@@ -29,6 +29,21 @@
   | resultCell view:table
   table = "editor|" + @program + "|" + @view
 
+* editor_viewCodeHistory
+  | editor|viewCodeInitial view code
+  version = -1
+
+* viewCodeChanges
+  | event label="editor|viewCodeChanged" eid:version key:view value:code
+
+* editor_viewCodeHistory
+  | viewCodeChanges view code version
+
+* editor|viewCode
+  | editor_viewCodeHistory view code version
+  > editor_viewCodeHistory view code | version = maxBy(@editor_viewCodeHistory.version, @editor_viewCodeHistory.version, -1)
+
+
 * drawControlCard
   | tableCardProgram program
   | editor|numEvents count
@@ -93,13 +108,18 @@
 
 * drawTableCard
   | realViews view:table remote
+  | editor|viewCode view:table code
   id = "table|" + @remote + "|" + @table
   gridId = "grid" + @remote + "|" + @table
+  cmId = "cm" + @remote + "|" + @table
   gridHeaderId = "gridHeader" + @table
   ["div" {"id" id "class" "card table-card open" "ix" table "table" table}
     ["h2" table]
     ["div" {"id" gridId "class" "grid" "gid" gridId}
-    ["div" {"id" gridHeaderId "class" "grid-header" "ix" "" "hid" gridHeaderId}]]]
+    ["div" {"id" gridHeaderId "class" "grid-header" "ix" "" "hid" gridHeaderId}]]
+    ["codemirror" {"id" cmId "ix" 999999 "value" code
+                   "change" "editor|viewCodeChanged" "key" table}]
+  ]
 
 * drawTableCardGridHeaders
   | realViews view
