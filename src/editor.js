@@ -335,6 +335,9 @@ function CodeMirrorElem() {
   this.style = "";
   this.cm = new CodeMirror();
 }
+CodeMirrorElem.eventMappings = {
+  "change": "changes"
+};
 CodeMirrorElem.prototype.wrappedNode = function() {
   return this.cm.getWrapperElement();
 };
@@ -357,10 +360,14 @@ CodeMirrorElem.prototype.insertBefore = function(child, anchor) {
   //?
 };
 CodeMirrorElem.prototype.removeEventListener = function(ev, listener) {
-
+  var cmEv = CodeMirrorElem.eventMappings[ev];
+  assert(cmEv, "Invalid CodeMirrorElem event: '" + ev + "'.");
+  this.cm.off(cmEv, listener);
 };
 CodeMirrorElem.prototype.addEventListener = function(ev, listener) {
-
+  var cmEv = CodeMirrorElem.eventMappings[ev];
+  assert(cmEv, "Invalid CodeMirrorElem event: '" + ev + "'.");
+  this.cm.on(cmEv, listener);
 };
 CodeMirrorElem.prototype.parent = function() {
   return this.cm.getWrapperElement().parentNode;
@@ -484,7 +491,9 @@ var createUICallback = function(id, event, label, key, program) {
         items.push(["keyboard", client, eid, e.keyCode, event]);
       }
 
-      var value = e.target.value;
+      var value;
+      if(e.target) { value = e.target.value; }
+      if(e.getValue) { value = e.getValue(); }
       if(event === "dragstart") {
         console.log("start: ", JSON.stringify(eid));
         e.dataTransfer.setData("eid", JSON.stringify(eid));
@@ -498,7 +507,8 @@ var createUICallback = function(id, event, label, key, program) {
           value = "";
         }
       }
-      e.stopPropagation();
+      if(e.stopPropagation) { e.stopPropagation(); }
+
       value = (value === undefined) ? "" : value;
       items.push(["rawEvent", client, eid, label, key, value]);
       items.push(["eventTime", client, eid, Date.now()]);
