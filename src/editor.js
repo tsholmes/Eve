@@ -330,6 +330,8 @@ onEditInputCell = Cowboy.debounce(200, onEditInputCell);
 // .style
 //---------------------------------------------------------
 
+var eventId = 1;
+
 function CodeMirrorElem() {
   this.parentNode = null;
   this.style = "";
@@ -338,17 +340,44 @@ function CodeMirrorElem() {
 CodeMirrorElem.eventMappings = {
   "change": "changes"
 };
+CodeMirrorElem.createHandler = function(id, event, label, key, program) {
+  return function(cm) {
+    var items = [];
+    var eid = eventId++;
+
+    var value = cm.getValue();
+    value = (value === undefined) ? "" : value;
+    items.push(["rawEvent", client, eid, label, key, value]);
+    items.push(["eventTime", client, eid, Date.now()]);
+    workers[program].postMessage({type: "event", items: items});
+  };
+};
+
 CodeMirrorElem.prototype.wrappedNode = function() {
   return this.cm.getWrapperElement();
 };
 CodeMirrorElem.prototype.setAttribute = function(attr, value) {
-  this.cm.setOption(attr, value);
+  switch(attr) {
+  case "value":
+    return this.cm.doc.setValue(value);
+    break;
+  default:
+    return this.cm.setOption(attr, value);
+    break;
+  }
 };
 CodeMirrorElem.prototype.getAttribute = function(attr) {
-  this.cm.getOption(attr);
+  switch(attr) {
+  case "value":
+    return this.cm.doc.getValue();
+    break;
+  default:
+    return this.cm.getOption(attr);
+    break;
+    }
 };
 CodeMirrorElem.prototype.removeAttribute = function(attr) {
-  this.cm.setOption(attr, null);
+  this.setAttribute(attr, null);
 };
 CodeMirrorElem.prototype.appendChild = function(child) {
   //widgets maybe?
@@ -380,9 +409,63 @@ CodeMirrorElem.prototype.addedToDom = function(parent) {
 };
 
 
+var mouseEvents = {"drop": true,
+                   "drag": true,
+                   "mouseover": true,
+                   "dragover": true,
+                   "dragstart": true,
+                   "dragend": true,
+                   "mousedown": true,
+                   "mouseup": true,
+                   "click": true,
+                   "dblclick": true,
+                   "contextmenu": true};
+
+var keyEvents = {"keydown": true, "keyup": true, "keypress": true};
+
 function DomElem(type) {
   this.elem = document.createElement(type);
 }
+
+DomElem.createHandler = function(id, event, label, key, program) {
+  return function(e) {
+    var items = [];
+    var eid = eventId++;
+    if(event === "dragover") {
+      e.preventDefault();
+    } else {
+      if(mouseEvents[event]) {
+        items.push(["mousePosition", client, eid, e.clientX, e.clientY]);
+      }
+
+      if(keyEvents[event]) {
+        items.push(["keyboard", client, eid, e.keyCode, event]);
+      }
+
+      var value = e.target.value;
+      if(event === "dragstart") {
+        console.log("start: ", JSON.stringify(eid));
+        e.dataTransfer.setData("eid", JSON.stringify(eid));
+        value = eid;
+      }
+      if(event === "drop" || event === "drag" || event === "dragover" || event === "dragend") {
+        console.log("drop", e.dataTransfer.getData("eid"));
+        try {
+          value = JSON.parse(e.dataTransfer.getData("eid"));
+        } catch(e) {
+          value = "";
+        }
+      }
+      e.stopPropagation();
+
+      value = (value === undefined) ? "" : value;
+      items.push(["rawEvent", client, eid, label, key, value]);
+      items.push(["eventTime", client, eid, Date.now()]);
+      workers[program].postMessage({type: "event", items: items});
+    }
+  };
+};
+
 DomElem.prototype.wrappedNode = function() {
   return this.elem;
 };
@@ -436,7 +519,7 @@ DomElem.prototype.children = function() {
 SvgElem = function SvgElem(type) {
   this.elem = document.createElementNS("http://www.w3.org/2000/svg", type);
 };
-
+SvgElem.createHandler = DomElem.createHandler;
 SvgElem.prototype = DomElem.prototype;
 
 var specialElements = {
@@ -461,61 +544,6 @@ function wrappedElement(type) {
 // UI Diff
 //---------------------------------------------------------
 
-var eventId = 1;
-var mouseEvents = {"drop": true,
-                   "drag": true,
-                   "mouseover": true,
-                   "dragover": true,
-                   "dragstart": true,
-                   "dragend": true,
-                   "mousedown": true,
-                   "mouseup": true,
-                   "click": true,
-                   "dblclick": true,
-                   "contextmenu": true};
-
-var keyEvents = {"keydown": true, "keyup": true, "keypress": true};
-
-var createUICallback = function(id, event, label, key, program) {
-  return function(e) {
-    var items = [];
-    var eid = eventId++;
-    if(event === "dragover") {
-      e.preventDefault();
-    } else {
-      if(mouseEvents[event]) {
-        items.push(["mousePosition", client, eid, e.clientX, e.clientY]);
-      }
-
-      if(keyEvents[event]) {
-        items.push(["keyboard", client, eid, e.keyCode, event]);
-      }
-
-      var value;
-      if(e.target) { value = e.target.value; }
-      if(e.getValue) { value = e.getValue(); }
-      if(event === "dragstart") {
-        console.log("start: ", JSON.stringify(eid));
-        e.dataTransfer.setData("eid", JSON.stringify(eid));
-        value = eid;
-      }
-      if(event === "drop" || event === "drag" || event === "dragover" || event === "dragend") {
-        console.log("drop", e.dataTransfer.getData("eid"));
-        try {
-          value = JSON.parse(e.dataTransfer.getData("eid"));
-        } catch(e) {
-          value = "";
-        }
-      }
-      if(e.stopPropagation) { e.stopPropagation(); }
-
-      value = (value === undefined) ? "" : value;
-      items.push(["rawEvent", client, eid, label, key, value]);
-      items.push(["eventTime", client, eid, Date.now()]);
-      workers[program].postMessage({type: "event", items: items});
-    }
-  };
-};
 
 function appendSortElement(parent, child){
 
@@ -708,7 +736,7 @@ function uiDiffRenderer(diff, storage, program) {
     if(!handlers[cur[elem_id]]) {
       handlers[cur[elem_id]] = {};
     }
-    var handler = handlers[cur[elem_id]][cur[events_event]] = createUICallback(cur[elem_id], cur[events_event], cur[events_label], cur[events_key], program);
+    var handler = handlers[cur[elem_id]][cur[events_event]] = builtEls[cur[elem_id]].constructor.createHandler(cur[elem_id], cur[events_event], cur[events_label], cur[events_key], program);
     builtEls[cur[elem_id]].addEventListener(cur[events_event], handler);
   }
 
