@@ -620,7 +620,7 @@ function uiDiffRenderer(diff, storage, program) {
     var cur = elem[i];
     var tag = cur[elem_type] || "span";
     var me = builtEls[cur[elem_id]] = wrappedElement(tag);
-
+    me.wrappedNode().eveId  = cur[elem_id];
     var old = removed[cur[elem_id]];
     if(old)  {
       if(old && old.parent() && old.parent().parentNode) {
@@ -629,9 +629,10 @@ function uiDiffRenderer(diff, storage, program) {
       }
       var oldChildren = old.children(); // @TODO: Ensure this works as expected.
       while(oldChildren.length) {
-        me.appendChild(oldChildren[0]);
-        if(builtEls[oldChildren[0].id] && typeof builtEls[oldChildren[0].id].addedToDom === "function") {
-          builtEls[oldChildren[0].id].addedToDom(me);
+        var oldChild = oldChildren[0];
+        me.appendChild(oldChild);
+        if(builtEls[oldChild.eveId] && typeof builtEls[oldChild.eveId].addedToDom === "function") {
+          builtEls[oldChild.eveId].addedToDom(me);
         }
       }
 
