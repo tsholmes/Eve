@@ -1117,10 +1117,10 @@ function injectParsed(parsed, program, prefix, programName) {
     }
   }
 
-  if(prefix) {
+  if(prefix && programName) {
     for(var viewName in mergedCode) {
       var value = mergedCode[viewName];
-      final.push(["viewCodeInitial", viewName, value]);
+      final.push(["viewCodeInitial", programName, viewName, value]);
     }
   }
 
