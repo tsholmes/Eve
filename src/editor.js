@@ -628,7 +628,7 @@ function uiDiffRenderer(diff, storage, program) {
         old.parent().removeChild(old.wrappedNode());
       }
       var oldChildren = old.children(); // @TODO: Ensure this works as expected.
-      while(oldChildren.length) {
+      while(oldChildren.length) { // @FIXME: IE Issues with array like objects
         var oldChild = oldChildren[0];
         me.appendChild(oldChild);
         if(builtEls[oldChild.eveId] && typeof builtEls[oldChild.eveId].addedToDom === "function") {
@@ -710,7 +710,7 @@ function uiDiffRenderer(diff, storage, program) {
       }
     }
   }
-
+  // @TODO: Investigate
   var styles = diff["uiStyle"].adds;
   var stylesLen = styles.length;
   for(var i = 0; i < stylesLen; i++) {
