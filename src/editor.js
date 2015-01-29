@@ -1,10 +1,12 @@
+import * as uiRenderers from "./uiRenderers";
+
 //---------------------------------------------------------
 // State
 //---------------------------------------------------------
 
 function getLocal(k, otherwise) {
   if(localStorage[k]) {
-    return JSON.parse(localStorage[k])
+    return JSON.parse(localStorage[k]);
   }
   return otherwise;
 }
@@ -42,7 +44,7 @@ setLocal("client", client);
 // renderer
 //---------------------------------------------------------
 
-var renderer = {"editorQueue": [], "programQueue": [], "queued": false}
+var renderer = {"editorQueue": [], "programQueue": [], "queued": false};
 
 function drainRenderQueue() {
   var start = now();
@@ -202,7 +204,7 @@ function openStack(stack) {
 
 $("#return").on("click", function() {
   openStacksView();
-})
+});
 
 function closeStack() {
   setLocal("activeStack", null);
@@ -330,220 +332,10 @@ onEditInputCell = Cowboy.debounce(200, onEditInputCell);
 // .style
 //---------------------------------------------------------
 
-var eventId = 1;
-
-function CodeMirrorElem() {
-  this.parentNode = null;
-  this.style = "";
-  this.cm = new CodeMirror();
-}
-CodeMirrorElem.eventMappings = {
-  "change": "changes"
-};
-CodeMirrorElem.createHandler = function(id, event, label, key, program) {
-  return function(cm) {
-    var items = [];
-    var eid = eventId++;
-
-    var value = cm.getValue();
-    value = (value === undefined) ? "" : value;
-    items.push(["rawEvent", client, eid, label, key, value]);
-    items.push(["eventTime", client, eid, Date.now()]);
-    workers[program].postMessage({type: "event", items: items});
-  };
-};
-
-CodeMirrorElem.prototype.wrappedNode = function() {
-  return this.cm.getWrapperElement();
-};
-CodeMirrorElem.prototype.setAttribute = function(attr, value) {
-  switch(attr) {
-  case "value":
-    return this.cm.doc.setValue(value);
-    break;
-  default:
-    return this.cm.setOption(attr, value);
-    break;
-  }
-};
-CodeMirrorElem.prototype.getAttribute = function(attr) {
-  switch(attr) {
-  case "value":
-    return this.cm.doc.getValue();
-    break;
-  default:
-    return this.cm.getOption(attr);
-    break;
-    }
-};
-CodeMirrorElem.prototype.removeAttribute = function(attr) {
-  this.setAttribute(attr, null);
-};
-CodeMirrorElem.prototype.appendChild = function(child) {
-  //widgets maybe?
-};
-CodeMirrorElem.prototype.removeChild = function(child) {
-  //?
-};
-CodeMirrorElem.prototype.insertBefore = function(child, anchor) {
-  //?
-};
-CodeMirrorElem.prototype.removeEventListener = function(ev, listener) {
-  var cmEv = CodeMirrorElem.eventMappings[ev];
-  assert(cmEv, "Invalid CodeMirrorElem event: '" + ev + "'.");
-  this.cm.off(cmEv, listener);
-};
-CodeMirrorElem.prototype.addEventListener = function(ev, listener) {
-  var cmEv = CodeMirrorElem.eventMappings[ev];
-  assert(cmEv, "Invalid CodeMirrorElem event: '" + ev + "'.");
-  this.cm.on(cmEv, listener);
-};
-CodeMirrorElem.prototype.parent = function() {
-  return this.cm.getWrapperElement().parentNode;
-};
-CodeMirrorElem.prototype.children = function() {
-  return []; // @FIXME: What is sensible here?
-};
-CodeMirrorElem.prototype.addedToDom = function(parent) {
-    this.cm.refresh();
-};
-
-
-var mouseEvents = {"drop": true,
-                   "drag": true,
-                   "mouseover": true,
-                   "dragover": true,
-                   "dragstart": true,
-                   "dragend": true,
-                   "mousedown": true,
-                   "mouseup": true,
-                   "click": true,
-                   "dblclick": true,
-                   "contextmenu": true};
-
-var keyEvents = {"keydown": true, "keyup": true, "keypress": true};
-
-function DomElem(type) {
-  this.elem = document.createElement(type);
-}
-
-DomElem.createHandler = function(id, event, label, key, program) {
-  return function(e) {
-    var items = [];
-    var eid = eventId++;
-    if(event === "dragover") {
-      e.preventDefault();
-    } else {
-      if(mouseEvents[event]) {
-        items.push(["mousePosition", client, eid, e.clientX, e.clientY]);
-      }
-
-      if(keyEvents[event]) {
-        items.push(["keyboard", client, eid, e.keyCode, event]);
-      }
-
-      var value = e.target.value;
-      if(event === "dragstart") {
-        console.log("start: ", JSON.stringify(eid));
-        e.dataTransfer.setData("eid", JSON.stringify(eid));
-        value = eid;
-      }
-      if(event === "drop" || event === "drag" || event === "dragover" || event === "dragend") {
-        console.log("drop", e.dataTransfer.getData("eid"));
-        try {
-          value = JSON.parse(e.dataTransfer.getData("eid"));
-        } catch(e) {
-          value = "";
-        }
-      }
-      e.stopPropagation();
-
-      value = (value === undefined) ? "" : value;
-      items.push(["rawEvent", client, eid, label, key, value]);
-      items.push(["eventTime", client, eid, Date.now()]);
-      workers[program].postMessage({type: "event", items: items});
-    }
-  };
-};
-
-DomElem.prototype.wrappedNode = function() {
-  return this.elem;
-};
-DomElem.prototype.setAttribute = function(attr, value) {
-  this.elem.setAttribute(attr, value);
-};
-DomElem.prototype.getAttribute = function(attr) {
-    this.elem.getAttribute(attr);
-};
-DomElem.prototype.removeAttribute = function(attr) {
-  this.elem.removeAttribute(attr, value);
-};
-DomElem.prototype.appendChild = function(child) {
-  var node = child;
-  if(child.wrappedNode) {
-    node = child.wrappedNode();
-  }
-  this.elem.appendChild(node);
-};
-DomElem.prototype.removeChild = function(child) {
-  var node = child;
-  if(child.wrappedNode) {
-    node = child.wrappedNode();
-  }
-  this.elem.removeChild(node);
-};
-DomElem.prototype.insertBefore = function(child, anchor) {
-  var node = child;
-  var anchorNode = anchor;
-  if(child.wrappedNode) {
-    node = child.wrappedNode();
-  }
-  if(anchor.wrappedNode) {
-    anchorNode = anchor.wrappedNode();
-  }
-  this.elem.insertBefore(node, anchorNode);
-};
-DomElem.prototype.removeEventListener = function(ev, listener) {
-  this.elem.removeEventListener(ev, listener);
-};
-DomElem.prototype.addEventListener = function(ev, listener) {
-  this.elem.addEventListener(ev, listener);
-};
-DomElem.prototype.parent = function() {
-  return this.elem.parentNode;
-};
-DomElem.prototype.children = function() {
-  return this.elem.childNodes;
-};
-
-SvgElem = function SvgElem(type) {
-  this.elem = document.createElementNS("http://www.w3.org/2000/svg", type);
-};
-SvgElem.createHandler = DomElem.createHandler;
-SvgElem.prototype = DomElem.prototype;
-
-var specialElements = {
-    "codemirror":CodeMirrorElem,
-    "svg": SvgElem,
-    "path": SvgElem,
-    "rect": SvgElem,
-    "circle": SvgElem,
-    "line": SvgElem,
-    "polygon": SvgElem
-};
-
-function wrappedElement(type) {
-  var special = specialElements[type];
-  if(special) {
-    return new special(type);
-  }
-  return new DomElem(type);
-}
-
 //---------------------------------------------------------
 // UI Diff
 //---------------------------------------------------------
-
+var eventId = 1;
 
 function appendSortElement(parent, child){
 
@@ -598,7 +390,7 @@ function uiDiffRenderer(diff, storage, program) {
   var child_pos = 1;
   var child_childid = 2;
 
-  var builtEls = storage["builtEls"] || {"eve-root": wrappedElement("div")};
+  var builtEls = storage["builtEls"] || {"eve-root": uiRenderers.wrappedElement("div")};
   var handlers = storage["handlers"] || {};
   var roots = {};
   var removed = {};
@@ -619,7 +411,7 @@ function uiDiffRenderer(diff, storage, program) {
   for(var i = 0; i < elemsLen; i++) {
     var cur = elem[i];
     var tag = cur[elem_type] || "span";
-    var me = builtEls[cur[elem_id]] = wrappedElement(tag);
+    var me = builtEls[cur[elem_id]] = uiRenderers.wrappedElement(tag);
     me.wrappedNode().eveId  = cur[elem_id];
     var old = removed[cur[elem_id]];
     if(old)  {
@@ -731,13 +523,16 @@ function uiDiffRenderer(diff, storage, program) {
   }
 
   var events = diff["uiEvent"].adds;
+  var handlerCallback = workers[program].postMessage.bind(workers[program]);
   var eventsLen = events.length;
   for(var i = 0; i < eventsLen; i++) {
     var cur = events[i];
     if(!handlers[cur[elem_id]]) {
       handlers[cur[elem_id]] = {};
     }
-    var handler = handlers[cur[elem_id]][cur[events_event]] = builtEls[cur[elem_id]].constructor.createHandler(cur[elem_id], cur[events_event], cur[events_label], cur[events_key], program);
+
+    var handler = builtEls[cur[elem_id]].constructor.createHandler(eventId++, cur[elem_id], cur[events_event], cur[events_label], cur[events_key], handlerCallback);
+    handlers[cur[elem_id]][cur[events_event]] = handler;
     builtEls[cur[elem_id]].addEventListener(cur[events_event], handler);
   }
 
@@ -746,7 +541,7 @@ function uiDiffRenderer(diff, storage, program) {
   children.sort(function(a,b) {
     if(a[0] !== b[0]) {
       var ta = typeof(a[0]);
-      var tb = typeof(b[0])
+      var tb = typeof(b[0]);
       if(ta === tb && ta === "string") {
         return a[0].localeCompare(b[0]);
       } if(ta === "string" || tb === "string") {
@@ -789,8 +584,7 @@ function uiDiffRenderer(diff, storage, program) {
       storage["rootParent"].appendChild(builtEls["eve-root"].wrappedNode());
     }
   }
-
-};
+}
 
 //---------------------------------------------------------
 // socket.io
