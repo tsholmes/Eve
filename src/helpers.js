@@ -378,3 +378,13 @@ function commonViews() {
   pushAll(facts, view("uiEvent", ["id", "event", "label", "key"]));
   return facts;
 }
+
+//We need a list of all the common views, so this translates the views
+//we add by default into defaultView facts
+function commonViewsAsDefaultView() {
+  return commonViews().filter(function(cur) {
+    return cur[0] === "view";
+  }).map(function(cur) {
+    return ["defaultView", cur[1]];
+  });
+}

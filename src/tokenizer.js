@@ -750,8 +750,8 @@ function createUIView(uiTable, view, context, mappings) {
   var fields = {};
   var bindings = {};
   //make temp table
-  var tempName = uiTable + view + "|ix=" + context.nextId++;
-  var query = tempName + "|query";
+  var tempName =  uiTable + "|" + view + "|ix=" + context.nextId++;
+  var query = context.programName + "|" + tempName + "|query";
 
   function toLocalFieldName(name) {
     return tempName + "|field=" + name;
@@ -822,7 +822,7 @@ function createUIView(uiTable, view, context, mappings) {
   }
 
   //map temp table into the real table
-  var realQuery = tempName + "|realQuery";
+  var realQuery = context.programName + "|" + tempName + "|realQuery";
   facts.push(["query", realQuery, uiTable, context.nextId++]);
   if(context.programName) { facts.push(["programQuery", context.programName, realQuery]); }
 
@@ -951,7 +951,7 @@ function injectParsed(parsed, program, prefix, programName) {
     code.push([curRule.name, curRule.code]);
 
     var view = curRule.name;
-    var query = view + "|query=" + curId;
+    var query = programName + "|" + view + "|query=" + curId;
     facts.push(["view", view]);
 
     if(programName) {

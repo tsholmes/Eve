@@ -28,7 +28,7 @@ var console = {
 
 var compilerTables = ["programView", "programQuery", "subscription", "generatedView", "displayName", "view", "field", "query", "constantConstraint", "functionConstraint", "functionConstraintInput", "constantConstraint",
                       "viewConstraint", "viewConstraintBinding", "aggregateConstraint", "aggregateConstraintBinding", "aggregateConstraintSolverInput",
-                      "aggregateConstraintAggregateInput", "isInput", "isCheck", "viewCode", "viewCodeInitial"];
+                      "aggregateConstraintAggregateInput", "isInput", "isCheck", "viewCode", "viewCodeInitial", "defaultView"];
 
 eveApp.webRequestWatcher = function(application, storage, system) {
   var requests = system.getStore("webRequest");
@@ -378,6 +378,8 @@ function parseFragment(application, viewName, code, subProgramName) {
     var errors = [];
 
     compileResults = injectParsed(parsedCompilerChecks, system);
+    //add the list of default views so that they're there
+    system.update(commonViewsAsDefaultView(), []);
 
     application.compileResults = compileResults;
     errors = errors.concat(compileResults.errors);
@@ -403,7 +405,6 @@ function parseFragment(application, viewName, code, subProgramName) {
     for(var i = 0, len = compilerTables.length; i < len; i++) {
       var table = prefix + compilerTables[i];
       var diff = diffTables(system.getStore(table), prevCompile.getStore(table));
-      console.log("updating tables:", table, diff);
       applyDiff(application, table, diff);
     }
     stats.profile.push([run, "loadCompiled", now() - start]);
@@ -425,11 +426,9 @@ function parseFragment(application, viewName, code, subProgramName) {
         }
       }
     }
-    var prev = application.system.getStore("editor|insertedFact");
-    var removes = [];
-    if(prev) {
-      removes = prev.getFacts();
-    }
+
+    var removes = prevCompile.inserts || [];
+    application.storage["textCompile"][subProgramName + "|" + viewName].inserts = insertedFacts;
     application.system.updateStore("editor|insertedFact", insertedFacts, removes);
 
     application.system.updateStore("profile", stats.profile, []);
@@ -472,6 +471,8 @@ function onCompile(code, replace, subProgram, subProgramName) {
     var errors = [];
 
     compileResults = injectParsed(parsedCompilerChecks, system);
+    //add the list of default views so that they're there
+    system.update(commonViewsAsDefaultView(), []);
 
     if(eveApp.isEditor) {
       system.update(editorViews(), []);
@@ -511,7 +512,6 @@ function onCompile(code, replace, subProgram, subProgramName) {
       var table = prefix + "viewCodeInitial";
       var diff = diffTables(system.getStore(table), prevCompile.getStore(table));
       applyDiff(eveApp, table, diff);
-      console.log(diff);
     } else {
       eveApp.updateSystem(system);
     }

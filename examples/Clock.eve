@@ -3,8 +3,8 @@
 ;*****************************************************
 
 * timer
- ~ id event rate
- + 3 "tick" 1000
+  ~ id event rate
+  + "foo" "tick" 1000
 
 * clock
   | time time:startTime
