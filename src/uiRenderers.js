@@ -40,8 +40,11 @@ CodeMirrorElem.prototype.wrappedNode = function() {
 CodeMirrorElem.prototype.setAttribute = function(attr, value) {
   switch(attr) {
     // @FIXME: Figure out a more permanent solution for setting the value.
-    // case "value":
-    //  return this.cm.doc.setValue(value);
+    case "value":
+      if(!this.cm.getValue()) {
+        return this.cm.doc.setValue(value);
+      }
+      break;
     default:
       return this.cm.setOption(attr, value);
   }
