@@ -19,12 +19,6 @@
   + "Editor" "hasUI" "editor|hasUI" ""
   + "Editor" "numEvents" "editor|numEvents" ""
 
-* defaultView
-  ~ view
-  + "rawEvent"
-  + "uiElem"
-  + "keyboard"
-
 * viewsToPush
   ~ remote view alias asCells
   + "Editor" "rollback" "rollback" ""
@@ -114,6 +108,7 @@
     ]
 
 * drawTableCard
+  | tableCardProgram program
   | realViews view:table remote
   | editor|viewCode program view:table code
   id = "table|" + @remote + "|" + @table

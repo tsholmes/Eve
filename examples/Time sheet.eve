@@ -1,6 +1,7 @@
+
 * timer
- ~ id event rate
- + 3 "minutes" 6000
+  ~ id event rate
+  + 3 "minutes" 6000
 
 * clients
   ~  id name

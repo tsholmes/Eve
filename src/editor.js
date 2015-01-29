@@ -257,9 +257,9 @@ function onChange(cm, change) {
   //Special case modifying the editor to go ahead and compile/run that into
   //the current editor process
   if(stack === "Editor") {
-    workers["Editor"].postMessage({type: "compile", code: getEditorCode()});
+    //workers["Editor"].postMessage({type: "compile", code: getEditorCode()});
   }
-  workers["Editor"].postMessage({type: "compile", code: edValue, subProgram: true, subProgramName: stack});
+  //workers["Editor"].postMessage({type: "compile", code: edValue, subProgram: true, subProgramName: stack});
 }
 
 editor.on("change", Cowboy.debounce(200, onChange));
