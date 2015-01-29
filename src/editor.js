@@ -99,7 +99,7 @@ function onWorkerMessage(event) {
   if(event.data.to === "uiThread") {
     switch(event.data.type) {
       case "log":
-        console.log.apply(console, event.data.args);
+        // console.log.apply(console, event.data.args);
         break;
       case "renderUI":
         if(event.data.uiContainer === "program") {
