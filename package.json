@@ -19,7 +19,7 @@
     "build-editor": "./node_modules/.bin/gulp build-editor",
     "watch-stylus": "./node_modules/.bin/stylus --watch stylus/*.stylus",
     "dev": "npm run watch-stylus & npm start",
-    "test": "node tests/test.js"
+    "test": "node tests/index.js"
   },
   "devDependencies": {
     "axis-css": "^0.1.8",
