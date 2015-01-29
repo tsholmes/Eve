@@ -111,16 +111,30 @@ eveApp.timerWatcher = function(application, storage, system) {
 
 eveApp.compileWatcher = function(application, storage, system) {
   var needsCompile = false;
+  var needsParse = false;
   for(var i = 0, len = compilerTables.length; i < len; i++) {
     var table = compilerTables[i];
+    if(table === "viewCode") {
+      table = "editor|viewCode";
+    }
     var current = system.getStore(table);
     if(!needsCompile) {
       var diff = diffTables(current, storage[table])
       if(diff.adds.length || diff.removes.length) {
+        if(table === "editor|viewCode") {
+          needsParse = diff.adds;
+        }
         needsCompile = true;
       }
     }
     storage[table] = current;
+  }
+
+  if(needsParse) {
+    for(var codeIx = 0, len = needsParse.length; codeIx < len; codeIx++) {
+      var codeItem = needsParse[codeIx];
+      parseFragment(application, codeItem[3], codeItem[0], codeItem[1]);
+    }
   }
 
   if(needsCompile) {
@@ -337,6 +351,96 @@ eveApp.uiWatcher = function(application, storage, system) {
   }
 }
 
+function parseFragment(application, viewName, code, subProgramName) {
+  if(!application.storage["textCompile"]) {
+    application.storage["textCompile"] = {};
+  }
+  var run = application.runNumber;
+  var stats = {profile: []};
+  var start = now();
+  var parsedCompilerChecks = parse(compilerChecks);
+  var parsed = parse(code);
+  var prefix = "editor|";
+  var compileErrorTable = application.system.getStore("compileError");
+  if(compileErrorTable) {
+    application.system.updateStore("compileError", [], compileErrorTable.getFacts());
+  }
+  stats.profile.push([run, "parse", now() - start]);
+  try {
+    var prev = application.system;
+    var prevCompile = application.storage["textCompile"][subProgramName + "|" + viewName] || System.empty({});
+    start = now();
+    var system = System.empty({name: "editor program"});
+    system.update(commonViews().concat(editorViews()), []);
+    system.recompile();
+    system.refresh();
+
+    var errors = [];
+
+    compileResults = injectParsed(parsedCompilerChecks, system);
+
+    application.compileResults = compileResults;
+    errors = errors.concat(compileResults.errors);
+    system.refresh(errors);
+    if (errors.length > 0) {
+      console.log("errors", errors);
+      application.system.updateStore("compileError", errorsToFacts(errors), []);
+      return application.run([]);
+    }
+    system.recompile();
+
+    programResults = injectParsed(parsed, system, prefix, subProgramName);
+    errors = errors.concat(programResults.errors);
+    if (errors.length > 0) {
+      console.log("errors", errors);
+      application.system.updateStore("compileError", errorsToFacts(errors), []);
+      return application.run([]);
+    }
+
+    stats.profile.push([run, "subCompile", now() - start]);
+
+    start = now();
+    for(var i = 0, len = compilerTables.length; i < len; i++) {
+      var table = prefix + compilerTables[i];
+      var diff = diffTables(system.getStore(table), prevCompile.getStore(table));
+      console.log("updating tables:", table, diff);
+      applyDiff(application, table, diff);
+    }
+    stats.profile.push([run, "loadCompiled", now() - start]);
+
+    // the viewName may have changed, we need to use the new name to ensure that
+    // we diff against the right table.
+    viewName = Object.keys(programResults.tablesCreated)[0];
+    application.storage["textCompile"][subProgramName + "|" + viewName] = system;
+
+    programResults.values["time"] = [[(new Date()).getTime()]];
+
+    var insertedFacts = [];
+    for(var table in programResults.values) {
+      var facts = programResults.values[table];
+      for(var factIx = 0, factLen = facts.length; factIx < factLen; factIx++) {
+        var fact = facts[factIx];
+        for(var colIx = 0, colLen = fact.length; colIx < colLen; colIx++) {
+          insertedFacts.push([subProgramName, table, factIx, colIx, fact[colIx]]);
+        }
+      }
+    }
+    var prev = application.system.getStore("editor|insertedFact");
+    var removes = [];
+    if(prev) {
+      removes = prev.getFacts();
+    }
+    application.system.updateStore("editor|insertedFact", insertedFacts, removes);
+
+    application.system.updateStore("profile", stats.profile, []);
+
+  } catch(e) {
+    console.log(e);
+    application.system.updateStore("error", errorsToFacts([e]), []);
+    application.remoteWatcher(application, application.storage["remoteWatcher"], application.system);
+  }
+}
+
 function onCompile(code, replace, subProgram, subProgramName) {
   if(!eveApp.storage["textCompile"]) {
     eveApp.storage["textCompile"] = {};
@@ -395,7 +499,7 @@ function onCompile(code, replace, subProgram, subProgramName) {
 
     stats.profile.push([run, "compile", now() - start]);
 
-    if(!replace) {
+    if(!replace && !subProgram) {
       start = now();
       for(var i = 0, len = compilerTables.length; i < len; i++) {
         var table = prefix + compilerTables[i];
@@ -403,6 +507,11 @@ function onCompile(code, replace, subProgram, subProgramName) {
         applyDiff(eveApp, table, diff);
       }
       stats.profile.push([run, "loadCompiled", now() - start]);
+    } else if(!replace && subProgram) {
+      var table = prefix + "viewCodeInitial";
+      var diff = diffTables(system.getStore(table), prevCompile.getStore(table));
+      applyDiff(eveApp, table, diff);
+      console.log(diff);
     } else {
       eveApp.updateSystem(system);
     }
@@ -424,29 +533,13 @@ function onCompile(code, replace, subProgram, subProgramName) {
         }
         eveApp.system.updateStore(table, facts, removes);
       }
-    } else {
-      var insertedFacts = [];
-      for(var table in programResults.values) {
-        var facts = programResults.values[table];
-        for(var factIx = 0, factLen = facts.length; factIx < factLen; factIx++) {
-          var fact = facts[factIx];
-          for(var colIx = 0, colLen = fact.length; colIx < colLen; colIx++) {
-            insertedFacts.push([eveApp.activeEditorProgram, table, factIx, colIx, fact[colIx]]);
-          }
-        }
-      }
-      var prev = eveApp.system.getStore("editor|insertedFact");
-      var removes = [];
-      if(prev) {
-        removes = prev.getFacts();
-      }
-      eveApp.system.updateStore("editor|insertedFact", insertedFacts, removes);
     }
 
     eveApp.system.updateStore("profile", stats.profile, []);
     eveApp.run([]);
 
   } catch(e) {
+    console.log(e.stack);
     eveApp.system.updateStore("error", errorsToFacts([e]), []);
     eveApp.remoteWatcher(eveApp, eveApp.storage["remoteWatcher"], eveApp.system);
   }

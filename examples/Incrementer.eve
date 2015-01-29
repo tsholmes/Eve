@@ -4,9 +4,12 @@
 
 * increment button
   > event label="increment" | clicks = count(@event.eid)
+  ["div"
   ["button" {"click" "increment"}
     "I've been clicked " clicks " times."]
+    ["codemirror" {"id" "wah" "foo" "bar"}]
+    ]
 
-* manuallyShared
-  ~ alias view
-  + "rawEvent" "rawEvent"
+;* manuallyShared
+;  ~ alias view
+;  + "rawEvent" "rawEvent"
