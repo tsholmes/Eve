@@ -79,7 +79,9 @@ ZZTree.prototype.isBranch = function(node) {
 
 // branch layout is 16 * childPointer, 1 * version
 ZZTree.prototype.emptyBranch = function() {
-  return new Array(17);
+  var branch = new Array(17);
+  branch[16] = 0;
+  return branch;
 };
 
 function nibble(hash, i) {
@@ -99,6 +101,7 @@ ZZTree.prototype.insertAt = function(branch, depth, hashesAndValues) {
   var child = branch[path];
   if (child === undefined) {
     branch[path] = hashesAndValues;
+    branch[16] = branch[16] | (1 << path);
   } else if (this.isBranch(child)) {
     this.insertAt(child, depth + 1, hashesAndValues);
   } else {
