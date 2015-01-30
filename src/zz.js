@@ -57,11 +57,8 @@ function hash(o) {
 
 // --- end of cljs.core ---
 
-var ZZLEAF = 0;
-var ZZBRANCH = 1;
-
 function withHashes(values) {
-  var hashesAndValues = [];
+  var hashesAndValues = new Array(2 * values.length);
   for (var i = 0, len = values.length; i < len; i++) {
     var value = values[i];
     hashesAndValues[i] = hash(value);
@@ -70,443 +67,154 @@ function withHashes(values) {
   return hashesAndValues;
 }
 
-function ZZTree(numValues, leafWidth, branchWidth, branchDepth, ixes, root) {
+function ZZTree(numValues, ixes, root) {
   this.numValues = numValues;
-  this.leafWidth = leafWidth;
-  this.branchWidth = branchWidth;
-  this.branchDepth = branchDepth;
   this.ixes = ixes;
   this.root = root;
 }
 
 ZZTree.prototype.isBranch = function(node) {
-  return node[0] === ZZBRANCH;
+  return node.length === 17; // leaves include hashes and values so are always an even length
 };
 
-ZZTree.prototype.getCardinality = function(node) {
-  return node[1];
-};
-
-ZZTree.prototype.hasBit = function(node, value, position, bit) {
-  var bits = node[2 + (this.numValues * bit) + value];
-  return (bits & position) === (bit * position);
-};
-
-// leaf layout is ZZLEAF, cardinality, los, his, <= leafWidth * (hashes, values)
-ZZTree.prototype.emptyLeaf = function() {
-  var numValues = this.numValues;
-  var leaf = [ZZLEAF, 0];
-  for (var i = 0; i < numValues; i++) {
-    leaf[2 + i] = -1; // lo is all 1s
-  }
-  for (var i = 0; i < numValues; i++) {
-    leaf[2 + numValues + i] = 0; // hi is all 0s
-  }
-  return leaf;
-};
-
-ZZTree.prototype.appendToLeaf = function(leaf, hashesAndValues) {
-  var leafEnd = leaf.length;
-  for (var i = 0, len = hashesAndValues.length; i < len; i++) {
-    leaf[leafEnd + i] = hashesAndValues[i];
-  }
-};
-
-ZZTree.prototype.updateLeaf = function(leaf) {
-  var numValues = this.numValues;
-  var leafEnd = leaf.length;
-  var loStart = 2;
-  var hiStart = loStart + numValues;
-  var leafStart = hiStart + numValues;
-  var numFacts = (leafEnd - leafStart) / (2 * numValues);
-  for (var factIx = 0; factIx < numFacts; factIx++) {
-    for (var valueIx = 0; valueIx < numValues; valueIx++) {
-      var hash = leaf[leafStart + (2 * numValues * factIx) + valueIx];
-      leaf[loStart + valueIx] = leaf[loStart + valueIx] & hash;
-      leaf[hiStart + valueIx] = leaf[hiStart + valueIx] | hash;
-    }
-  }
-  leaf[1] = numFacts;
-};
-
-ZZTree.prototype.getHash = function(leaf, fact, value) {
-  var numValues = this.numValues;
-  return leaf[2 + (2 * numValues) + (fact * 2 * numValues) + value];
-};
-
-// branch layout is ZZBRANCH, cardinality, los, his, <= branchWidth * (pathIx, childPointer)
+// branch layout is 16 * childPointer, 1 * version
 ZZTree.prototype.emptyBranch = function() {
-  var numValues = this.numValues;
-  var branch = [ZZBRANCH, 0];
-  for (var i = 0; i < numValues; i++) {
-    branch[2 + i] = -1; // lo is all 1s
-  }
-  for (var i = 0; i < numValues; i++) {
-    branch[2 + numValues + i] = 0; // hi is all 0s
-  }
-  return branch;
+  return new Array(17);
 };
 
-ZZTree.prototype.appendToBranch = function(branch, pathIx, child) {
-  var branchEnd = branch.length;
-  branch[branchEnd] = pathIx;
-  branch[branchEnd + 1] = child;
-};
+function nibble(hash, i) {
+  return (hash >> (28 - (4 * i))) & 15;
+}
 
-ZZTree.prototype.updateBranch = function(branch) {
-  var numValues = this.numValues;
-  var branchEnd = branch.length;
-  var loStart = 2;
-  var hiStart = loStart + numValues;
-  var branchStart = hiStart + numValues;
-  var numChildren = (branchEnd - branchStart) / 2;
-  var numFacts = 0;
-  for (var childIx = 0; childIx < numChildren; childIx++) {
-    for (var valueIx = 0; valueIx < numValues; valueIx++) {
-      var child = branch[branchStart + (2 * childIx) + 1];
-      numFacts += child[1];
-      branch[loStart + valueIx] = branch[loStart + valueIx] & child[loStart + valueIx];
-      branch[hiStart + valueIx] = branch[hiStart + valueIx] | child[hiStart + valueIx];
-    }
-  }
-  branch[1] = numFacts;
-};
-
-ZZTree.prototype.numChildren = function(branch) {
-  var numValues = this.numValues;
-  var branchEnd = branch.length;
-  var loStart = 2;
-  var hiStart = loStart + numValues;
-  var branchStart = hiStart + numValues;
-  var numChildren = (branchEnd - branchStart) / 2;
-  return numChildren;
-};
-
-ZZTree.prototype.getChild = function(branch, child) {
-  var numValues = this.numValues;
-  return branch[2 + (2 * numValues) + (2 * child) + 1];
-};
-
-// the path interleaves bits from each of the hashes
-ZZTree.prototype.pathAt = function(hashesAndValues, pathIx) {
-  var branchDepth = this.branchDepth;
+// the path interleaves nibbles from each of the hashes
+ZZTree.prototype.pathAt = function(hashesAndValues, depth) {
   var ixes = this.ixes;
-  var length = ixes.length;
-  var path = 0;
-  var maxBitIx = length * 32;
-  for (var i = 0; i < branchDepth; i++) {
-    var bitIx = (pathIx * branchDepth) + i;
-    var hash = hashesAndValues[ixes[bitIx % length]];
-    var bit = (hash >> ((bitIx / length) | 0)) & 1;
-    path = path | (bit << i);
-  }
-  return path;
+  var numIxes = ixes.length;
+  var hash = hashesAndValues[ixes[depth % numIxes]];
+  return nibble(hash, (depth / numIxes) | 0);
 };
 
-ZZTree.prototype.bucketSort = function(inserts, pathIx) {
-  var buckets = [];
-  var branchWidth = this.branchWidth;
-  for (var path = 0; path < branchWidth; path++) {
-    buckets[path] = [];
-  }
-  for (var i = 0, len = inserts.length; i < len; i++) {
-    var insert = inserts[i];
-    var path = this.pathAt(insert, pathIx);
-    buckets[path].push(insert);
-  }
-  return buckets;
-};
-
-ZZTree.prototype.buildNodeFrom = function(inserts, pathIx) {
-  var numInserts = inserts.length;
-  if (numInserts <= this.leafWidth) {
-    var leaf = this.emptyLeaf();
-    for (var i = 0; i < numInserts; i++) {
-      this.appendToLeaf(leaf, inserts[i]);
-    }
-    this.updateLeaf(leaf);
-    return leaf;
+ZZTree.prototype.insertAt = function(branch, depth, hashesAndValues) {
+  var path = this.pathAt(hashesAndValues, depth);
+  var child = branch[path];
+  if (child === undefined) {
+    branch[path] = hashesAndValues;
+  } else if (this.isBranch(child)) {
+    this.insertAt(child, depth + 1, hashesAndValues);
   } else {
-    var branch = this.emptyBranch();
-    var buckets = this.bucketSort(inserts, pathIx);
-    var branchWidth = this.branchWidth;
-    for (var path = 0; path < branchWidth; path++) {
-      var bucket = buckets[path];
-      if (bucket.length > 0) {
-        this.appendToBranch(branch, path, this.buildNodeFrom(bucket, pathIx + 1));
-      }
-    }
-    this.updateBranch(branch);
-    return branch;
+    var newBranch = this.emptyBranch();
+    branch[path] = newBranch;
+    this.insertAt(newBranch, depth + 1, hashesAndValues);
+    this.insertAt(newBranch, depth + 1, child);
   }
 };
 
-ZZTree.prototype.insertToNode = function(node, inserts, pathIx) {
-  if (node[0] === ZZBRANCH) {
-    // TODO handle this case
-    // bucket sort
-    // for each bucket
-    //   if exists in branch, insertToNode and append
-    //   if doesn't exist, buildNodeFrom and append
-    assert(false);
+ZZTree.prototype.insert = function(values) {
+  this.insertAt(this.root, 0, withHashes(values));
+  return this;
+};
+
+ZZTree.prototype.inserts = function(valuess) {
+  for (var i = 0, len = valuess.length; i < len; i++) {
+    this.insert(valuess[i]);
+  }
+  return this;
+};
+
+ZZTree.prototype.probeLeaf = function(node, depthBehind, maxDepth, hashes) {
+  var numBits = 4 * (maxDepth / hashes.length);
+  var ixes = this.ixes;
+  for (var i = 0, len = ixes.length; i < len; i++) {
+    var ix = ixes[i];
+    var nodeBits = node[ix] >> (32 - numBits);
+    var hashBits = hashes[i] >> (32 - numBits);
+    if (nodeBits !== hashBits) return false;
+  }
+  return true;
+};
+
+// the path interleaves nibbles from each of the hashes
+ZZTree.prototype.probePathAt = function(hashes, depth) {
+  var ixes = this.ixes;
+  var numIxes = ixes.length;
+  var hash = hashes[depth % numIxes];
+  return nibble(hash, (depth / numIxes) | 0);
+};
+
+ZZTree.prototype.probeIn = function(node, depthBehind, maxDepth, hashes) {
+  if (depthBehind === maxDepth) {
+    return true;
+  } else if (!this.isBranch(node)) {
+    return this.probeLeaf(node, depthBehind, maxDepth, hashes);
   } else {
-    // TODO if pathIx is at max just make a big leaf
-    // TODO zzleaf$explodeInto(leaf, inserts);
-    return this.buildNodeFrom(inserts, pathIx);
+    var path = this.probePathAt(hashes, depthBehind);
+    var child = node[path];
+    if (child === undefined) {
+      return false;
+    } else {
+      return this.probeIn(node[path], depthBehind + 1, maxDepth, hashes);
+    }
   }
 };
 
-ZZTree.prototype.insert = function(facts) {
-  var inserts = [];
-  for (var i = 0, len = facts.length; i < len; i++) {
-    inserts[i] = withHashes(facts[i]);
-  }
-  var root = this.insertToNode(this.root, inserts, 0);
-  return new ZZTree(this.numValues, this.leafWidth, this.branchWidth, this.branchDepth, this.ixes, root);
+ZZTree.prototype.probe = function(maxDepth, hashes) {
+  return this.probeIn(this.root, 0, maxDepth, hashes);
 };
 
-ZZTree.empty = function(numValues, leafWidth, branchDepth, ixes) {
-  var branchWidth = Math.pow(2, branchDepth);
-  var tree = new ZZTree(numValues, leafWidth, branchWidth, branchDepth, ixes, null);
-  tree.root = tree.emptyLeaf();
+ZZTree.empty = function(numValues, ixes) {
+  var tree = new ZZTree(numValues, ixes, null);
+  tree.root = tree.emptyBranch();
   return tree;
 };
 
 // SOLVER
 
-var counts = new Int32Array(1000);
-
-// TODO grab tree from state
 function ZZContains(tree, ixes) {
   this.tree = tree;
-  this.ixes = ixes;
+  this.ixes = ixes; // maps from tree values to solver values
 }
 
-ZZContains.prototype.init = function(solver, volume, myIx) {
-  var tree = this.tree;
-  var root = tree.root;
-  solver.setCardinality(volume, myIx, tree.getCardinality(root));
-  solver.setNodes(volume, myIx, [root, -1]);
-};
-
-// TODO bitmap breaks if we have >32 facts in a leaf - may have to allocate instead
-ZZContains.prototype.split = function(solver, loVolume, hiVolume, myIx, variable, position) {
-  var tree = this.tree;
-  var oldNodes = solver.getNodes(loVolume, myIx);
-  var queuedNodes = oldNodes.slice();
-  var loNodes = [];
-  var hiNodes = [];
-  var loCardinality = 0;
-  var hiCardinality = 0;
-
-  var ix = this.ixes[variable];
-  if (ix === null) return; // no change here
-
-  counts[Math.floor(Math.log(oldNodes.length))] += 1;
-
-  while (queuedNodes.length > 0) {
-    var bitmap = queuedNodes.pop();
-    var node = queuedNodes.pop();
-    var hasLo = tree.hasBit(node, ix, position, 0);
-    var hasHi = tree.hasBit(node, ix, position, 1);
-    if (hasLo && !hasHi) {
-      // only matches lo
-      loNodes.push(node);
-      loNodes.push(bitmap);
-      loCardinality += tree.getCardinality(node);
-    } else if (!hasLo && hasHi) {
-      // only matches hi
-      hiNodes.push(node);
-      hiNodes.push(bitmap);
-      hiCardinality += tree.getCardinality(node);
-    } else if (hasLo && hasHi) {
-      // matches hi and lo, have to break it up
-      if (tree.isBranch(node)) {
-        // is a branch, check all children
-        var numChildren = tree.numChildren(node);
-        for (var child = 0; child < numChildren; child++) {
-          queuedNodes.push(tree.getChild(node, child));
-          queuedNodes.push(-1); // all children match so far
-        }
-      } else {
-        // is a leaf, check number of matches
-        var numFacts = tree.getCardinality(node);
-        var loBitmap = 0;
-        var hiBitmap = 0;
-        for (var fact = 0; fact < numFacts; fact++) {
-          if ((bitmap & (1 << fact)) > 0) {
-            var hash = tree.getHash(node, fact, ix);
-            if ((hash & position) === 0) {
-              // fact matches lo
-              loCardinality += 1;
-              loBitmap = loBitmap | (1 << fact);
-            } else {
-              // fact matches hi
-              hiCardinality += 1;
-              hiBitmap = hiBitmap | (1 << fact);
-            }
-          }
-        }
-        if (loBitmap !== 0) {
-          loNodes.push(node);
-          loNodes.push(loBitmap);
-        }
-        if (hiBitmap !== 0) {
-          hiNodes.push(node);
-          hiNodes.push(hiBitmap);
-        }
-      }
-    }
+ZZContains.prototype.probe = function(numNibbles, values) {
+  var ixes = this.ixes;
+  var treeValues = new Array(ixes.length);
+  for (var i = 0, len = ixes.length; i < len; i++) {
+    treeValues[i] = values[ixes[i]];
   }
-
-  solver.setCardinality(loVolume, myIx, loCardinality);
-  solver.setNodes(loVolume, myIx, loNodes);
-  solver.setCardinality(hiVolume, myIx, hiCardinality);
-  solver.setNodes(hiVolume, myIx, hiNodes);
+  return this.tree.probe(numNibbles * ixes.length, treeValues);
 };
 
-
-function Solver(numVariables, constraints) {
-  this.numVariables = numVariables;
-  this.constraints = constraints;
-}
-
-// volume layout is lastSplit, numVariables * lo, numVariables * hi, numConstraints * nodes, numConstraints * cardinality
-Solver.prototype.wholeVolume = function() {
-  var volume = [0];
-  var numVariables = this.numVariables;
-  for (var i = 0; i < numVariables; i++) {
-    volume.push(0); // lo is all 0s
-  }
-  for (var i = 0; i < numVariables; i++) {
-    volume.push(-1); // hi is all 1s
-  }
-  var constraints = this.constraints;
-  for (var i = 0, len = constraints.length; i < len; i++) {
-    constraints[i].init(this, volume, i);
-  }
-  return volume;
-};
-
-Solver.prototype.getLo = function(volume, variable) {
-  return volume[1 + variable];
-};
-
-Solver.prototype.getHi = function(volume, variable) {
-  return volume[1 + this.numVariables + variable];
-};
-
-Solver.prototype.setBit = function(volume, variable, position, bit) {
-  if (bit === 0) {
-    // knock the hi bit down
-    var ix = 1 + this.numVariables + variable;
-    volume[ix] = volume[ix] & ~position;
-  } else {
-    // knock the lo bit up
-    var ix = 1 + variable;
-    volume[ix] = volume[ix] | position;
-  }
-};
-
-Solver.prototype.getNodes = function(volume, constraint) {
-  return volume[1 + this.numVariables + this.numVariables + constraint];
-};
-
-Solver.prototype.setNodes = function(volume, constraint, nodes) {
-  volume[1 + this.numVariables + this.numVariables + constraint] = nodes;
-};
-
-Solver.prototype.getCardinality = function(volume) {
-  var numConstraints = this.constraints.length;
-  var start = 1 + this.numVariables + this.numVariables + numConstraints;
-  var cardinality = 1;
+function solveIn(constraints, numConstraints, numVariables, values, numNibbles, results) {
   for (var i = 0; i < numConstraints; i++) {
-    cardinality *= volume[start + i];
-  }
-  return cardinality;
-};
-
-Solver.prototype.setCardinality = function(volume, constraint, cardinality) {
-  var numConstraints = this.constraints.length;
-  var start = 1 + this.numVariables + this.numVariables + numConstraints;
-  volume[start + constraint] = cardinality;
-};
-
-Solver.prototype.getLastSplit = function(volume) {
-  return volume[0];
-};
-
-Solver.prototype.setLastSplit = function(volume, lastSplit) {
-  volume[0] = lastSplit;
-};
-
-Solver.prototype.split = function(loVolume, hiVolume, variable, position) {
-  var constraints = this.constraints;
-  this.setBit(loVolume, variable, position, 0);
-  this.setBit(hiVolume, variable, position, 1);
-  for (var i = 0, len = constraints.length; i < len; i++) {
-    constraints[i].split(this, loVolume, hiVolume, i, variable, position);
-  }
-};
-
-Solver.prototype.zzenqueue = function(queuedVolumes, newVolumes, volume) {
-  var cardinality = this.getCardinality(volume);
-  if (cardinality > 1) {
-    // lots to do, keep going
-    queuedVolumes.push(volume);
-  } else if (cardinality > 0) {
-    // nearly solved, pass it on
-    newVolumes.push(volume);
-  }
-  // otherwise no results, throw it away
-};
-
-Solver.prototype.zzjoin = function(oldVolumes, variables) {
-  var queuedVolumes = oldVolumes.slice();
-  var newVolumes = [];
-
-  nextVolume: while (queuedVolumes.length > 0) {
-    var volume = queuedVolumes.pop();
-
-    // find an unknown bit
-    var numVariables = variables.length;
-    var lastSplit = this.getLastSplit(volume);
-    var nextSplit = lastSplit;
-    var splitVariable, splitBit;
-    findBit: while (true) {
-      nextSplit = (nextSplit + 1) % numVariables;
-
-      var splitVariable = variables[nextSplit];
-      var lo = this.getLo(volume, splitVariable);
-      var hi = this.getHi(volume, splitVariable);
-      var unknownBits = lo ^ hi;
-      splitBit = unknownBits & -unknownBits; // least-significant unknown bit
-
-      if (splitBit !== 0) break findBit; // use this bit
-
-      if (nextSplit === lastSplit) {
-        // no bits left unset, pass it on
-        newVolumes.push(volume);
-        continue nextVolume;
-      }
+    if (constraints[i].probe(numNibbles, values) === false) {
+      return; // no solutions here
     }
-
-    // split on the unknown bit
-    this.setLastSplit(volume, nextSplit);
-    var loVolume = volume;
-    var hiVolume = volume.slice();
-    this.split(loVolume, hiVolume, splitVariable, splitBit);
-    this.zzenqueue(queuedVolumes, newVolumes, loVolume);
-    this.zzenqueue(queuedVolumes, newVolumes, hiVolume);
   }
+  if (numNibbles === 8) {
+    results.push(values.slice()); // found a solution
+  } else {
+    // TODO only allows for 8 values
+    for (var i = 0, max = Math.pow(16, numVariables); i < max; i++) {
+      for (var j = 0; j < numVariables; j++) {
+        var value = values[j];
+        value = value & -Math.pow(2, 32 - 4 * numNibbles); // clear remaining bits, ridiculous that js cant do this with bit shifts
+        var nibble = (i >> (4 * j)) & 15; // grab the correct nibble for this permutation
+        value = value | (nibble << (28 - 4 * numNibbles)); // set the nibble
+        values[j] = value;
+      }
+      solveIn(constraints, numConstraints, numVariables, values, numNibbles + 1, results);
+    }
+  }
+}
 
-  return newVolumes;
-};
-
-Solver.prototype.solve = function(variables) {
-  var volumes = [this.wholeVolume()];
-  return this.zzjoin(volumes, variables);
-};
+function solve(constraints, numVariables) {
+  var values = new Array(numVariables);
+  for (var i = 0; i < numVariables; i++) {
+    values[i] = 0;
+  }
+  var results = [];
+  solveIn(constraints, constraints.length, numVariables, values, 0, results);
+  return results;
+}
 
 // STUFF
 
@@ -539,28 +247,33 @@ function lookup(facts, ix, index) {
 function numNodes(tree) {
   var branches = 0;
   var leaves = 0;
+  var children = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
   var nodes = [tree.root];
   while (nodes.length > 0) {
     var node = nodes.pop();
     if (tree.isBranch(node)) {
+      var numChildren = 0;
       branches += 1;
-      var numChildren = tree.numChildren(node);
-      for (var i = 0; i < numChildren; i++) {
-        nodes.push(tree.getChild(node, i));
+      for (var i = 0; i < 16; i++) {
+        var child = node[i];
+        if (child !== undefined) {
+          numChildren += 1;
+          nodes.push(child);
+        }
       }
+      children[numChildren] += 1;
     } else {
       leaves += 1;
     }
   }
   return {
     leaves: leaves,
-    branches: branches
+    branches: branches,
+    children: children
   };
 }
 
-function bench(numUsers, numLogins, numBans, leafWidth, branchDepth) {
-  leafWidth = leafWidth || 32;
-  branchDepth = branchDepth || 4;
+function bench(numUsers, numLogins, numBans) {
   var users = [];
   for (var i = 0; i < numUsers; i++) {
     var email = i;
@@ -580,20 +293,19 @@ function bench(numUsers, numLogins, numBans, leafWidth, branchDepth) {
   }
 
   console.time("insert");
-  var usersTree = ZZTree.empty(2, leafWidth, branchDepth, [1]).insert(users);
-  var loginsTree = ZZTree.empty(2, leafWidth, branchDepth, [0, 1]).insert(logins);
-  var bansTree = ZZTree.empty(1, leafWidth, branchDepth, [0]).insert(bans);
+  var usersTree = ZZTree.empty(2, [1]).inserts(users);
+  var loginsTree = ZZTree.empty(2, [0, 1]).inserts(logins);
+  var bansTree = ZZTree.empty(1, [0]).inserts(bans);
   console.timeEnd("insert");
   console.log(numNodes(usersTree), numNodes(loginsTree), numNodes(bansTree));
   console.log(usersTree, loginsTree, bansTree);
-  var solver = new Solver(3, [
-    new ZZContains(usersTree, [0, 1, null]),
-    new ZZContains(loginsTree, [null, 0, 1]),
-    new ZZContains(bansTree, [null, null, 0])
-  ]);
   console.time("solve");
   //console.profile();
-  var solverResults = solver.solve([1, 2]);
+  var solverResults = solve([
+    new ZZContains(usersTree, [0]),
+    new ZZContains(loginsTree, [0, 1]),
+    new ZZContains(bansTree, [1])
+  ], 2);
   //console.profileEnd();
   console.timeEnd("solve");
 
