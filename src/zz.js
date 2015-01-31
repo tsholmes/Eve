@@ -88,6 +88,11 @@ function getNibble(hash, i) {
   return (hash >> (28 - (4 * i))) & 15;
 }
 
+function setNibble(hash, i, nibble) {
+  var cleared = hash & ~(15 << (28 - (4 * i)));
+  return cleared | (nibble << (28 - (4 * i)));
+}
+
 // the path interleaves nibbles from each of the hashes
 ZZTree.prototype.pathAt = function(hashesAndValues, depth) {
   var ixes = this.ixes;
@@ -222,32 +227,44 @@ function solveIn(constraints, numConstraints, numVariables, values, numNibbles, 
   if (cardinality === 1) {
     results.push(values.slice()); // found a solution
   } else {
-    var maxPermutation = Math.pow(16, numVariables); // TODO only allows for 8 values
-    var permutation = 0;
-    nextPermutation: while (true) {
-      if (permutation >= maxPermutation) break nextPermutation;
+    // zero out nibbles
+    for (var i = 0; i < numVariables; i++) {
+      values[i] = setNibble(values[i], numNibbles, 0);
+    }
 
-      // check if this permutation is valid
-      for (var i = 0; i < numVariables; i++) {
-        var nibble = (permutation >> (4 * i)) & 15;
-        if (((1 << nibble) & nextNibbles[i]) === 0) {
-          permutation += 1; // TODO can skip more?
-          continue nextPermutation;
+    // find all permutations of nextNibbles
+    //console.log("Permuting", bits(nextNibbles[0]), bits(nextNibbles[1]));
+    var variable = 0;
+    var lastVariable = numVariables - 1;
+    var value = values[variable];
+    var nibble = getNibble(value, numNibbles);
+    var choices = nextNibbles[variable];
+    permute: while (true) {
+      if ((choices & (1 << nibble)) !== 0) {
+        values[variable] = setNibble(value, numNibbles, nibble);
+        if (variable < lastVariable) {
+          variable++;
+          value = values[variable];
+          nibble = getNibble(value, numNibbles);
+          choices = nextNibbles[variable];
+          continue permute;
         }
+        //console.log("Solving for", bits(1 << getNibble(values[0], numNibbles)), bits(1 << getNibble(values[1], numNibbles)));
+        solveIn(constraints, numConstraints, numVariables, values, numNibbles + 1, results);
       }
 
-      // calculate permutation
-      for (var i = 0; i < numVariables; i++) {
-        var value = values[i];
-        value = value & -Math.pow(2, 32 - 4 * numNibbles); // clear remaining bits, ridiculous that js cant do this with bit shifts
-        var nibble = (permutation >> (4 * i)) & 15; // grab the correct nibble for this permutation
-        value = value | (nibble << (28 - 4 * numNibbles)); // set the nibble
-        values[i] = value;
-      }
+      nibble = (nibble + 1) % 16;
 
-      // solve permutation
-      solveIn(constraints, numConstraints, numVariables, values, numNibbles + 1, results);
-      permutation += 1;
+      if (nibble === 0) {
+        while (nibble === 0) {
+          if (variable === 0) break permute; // done
+          values[variable] = setNibble(value, numNibbles, nibble);
+          variable--;
+          value = values[variable];
+          nibble = (getNibble(value, numNibbles) + 1) % 16;
+        }
+        choices = nextNibbles[variable];
+      }
     }
   }
 }
