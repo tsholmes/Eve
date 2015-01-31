@@ -125,7 +125,7 @@ ZZTree.prototype.inserts = function(valuess) {
 };
 
 ZZTree.prototype.setNextNibblesFromLeaf = function(node, maxDepth, nextNibbles, index2solver) {
-  var nextNibble = (maxDepth / index2solver.length) + 1;
+  var nextNibble = (maxDepth / index2solver.length) | 0;
   var ixes = this.ixes;
   for (var i = 0, len = index2solver.length; i < len; i++) {
     var nodeIx = ixes[i];
@@ -207,7 +207,8 @@ ZZContains.prototype.probe = function(numNibbles, nextNibbles, values) {
   return this.tree.probe(numNibbles, nextNibbles, values, this.index2solver, this.solver2index);
 };
 
-function solveIn(constraints, numConstraints, numVariables, values, numNibbles, nextNibbles, results) {
+function solveIn(constraints, numConstraints, numVariables, values, numNibbles, results) {
+  var nextNibbles = new Array(numVariables);
   for (var i = 0; i < numVariables; i++) {
     nextNibbles[i] = -1;
   }
@@ -221,16 +222,32 @@ function solveIn(constraints, numConstraints, numVariables, values, numNibbles, 
   if (cardinality === 1) {
     results.push(values.slice()); // found a solution
   } else {
-    // TODO only allows for 8 values
-    for (var i = 0, max = Math.pow(16, numVariables); i < max; i++) {
-      for (var j = 0; j < numVariables; j++) {
-        var value = values[j];
-        value = value & -Math.pow(2, 32 - 4 * numNibbles); // clear remaining bits, ridiculous that js cant do this with bit shifts
-        var nibble = (i >> (4 * j)) & 15; // grab the correct nibble for this permutation
-        value = value | (nibble << (28 - 4 * numNibbles)); // set the nibble
-        values[j] = value;
+    var maxPermutation = Math.pow(16, numVariables); // TODO only allows for 8 values
+    var permutation = 0;
+    nextPermutation: while (true) {
+      if (permutation >= maxPermutation) break nextPermutation;
+
+      // check if this permutation is valid
+      for (var i = 0; i < numVariables; i++) {
+        var nibble = (permutation >> (4 * i)) & 15;
+        if (((1 << nibble) & nextNibbles[i]) === 0) {
+          permutation += 1; // TODO can skip more?
+          continue nextPermutation;
+        }
       }
-      solveIn(constraints, numConstraints, numVariables, values, numNibbles + 1, nextNibbles, results);
+
+      // calculate permutation
+      for (var i = 0; i < numVariables; i++) {
+        var value = values[i];
+        value = value & -Math.pow(2, 32 - 4 * numNibbles); // clear remaining bits, ridiculous that js cant do this with bit shifts
+        var nibble = (permutation >> (4 * i)) & 15; // grab the correct nibble for this permutation
+        value = value | (nibble << (28 - 4 * numNibbles)); // set the nibble
+        values[i] = value;
+      }
+
+      // solve permutation
+      solveIn(constraints, numConstraints, numVariables, values, numNibbles + 1, results);
+      permutation += 1;
     }
   }
 }
@@ -241,7 +258,7 @@ function solve(constraints, numVariables) {
     values[i] = 0;
   }
   var results = [];
-  solveIn(constraints, constraints.length, numVariables, values, 0, new Array(numVariables), results);
+  solveIn(constraints, constraints.length, numVariables, values, 0, results);
   return results;
 }
 
