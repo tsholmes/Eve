@@ -124,44 +124,50 @@ ZZTree.prototype.inserts = function(valuess) {
   return this;
 };
 
-ZZTree.prototype.probeLeaf = function(node, depth, maxDepth, hashes) {
+ZZTree.prototype.probeLeaf = function(node, depth, maxDepth, nextNibbles, hashes, index2solver) {
   var numBits = 4 * (maxDepth / hashes.length);
   var ixes = this.ixes;
   for (var i = 0, len = ixes.length; i < len; i++) {
-    var ix = ixes[i];
-    var nodeBits = node[ix] >> (32 - numBits);
-    var hashBits = hashes[i] >> (32 - numBits);
+    var indexIx = ixes[i];
+    var solverIx = index2solver[i];
+    var nodeBits = node[indexIx] >> (32 - numBits);
+    var hashBits = hashes[solverIx] >> (32 - numBits);
     if (nodeBits !== hashBits) return 0;
   }
   return 1;
 };
 
 // the path interleaves nibbles from each of the hashes
-ZZTree.prototype.probePathAt = function(hashes, depth) {
-  var ixes = this.ixes;
-  var numIxes = ixes.length;
-  var hash = hashes[depth % numIxes];
+ZZTree.prototype.probePathAt = function(depth, hashes, index2solver) {
+  var numIxes = index2solver.length;
+  var hash = hashes[index2solver[depth % numIxes]];
   return nibble(hash, (depth / numIxes) | 0);
 };
 
-ZZTree.prototype.probeIn = function(node, depth, maxDepth, hashes) {
-  if (depth === maxDepth) {
-    return 2;
-  } else if (!this.isBranch(node)) {
-    return this.probeLeaf(node, depth, maxDepth, hashes);
-  } else {
-    var path = this.probePathAt(hashes, depth);
-    var child = node[path];
-    if (child === undefined) {
-      return 0;
+ZZTree.prototype.probeIn = function(node, depth, maxDepth, nextNibbles, hashes, index2solver, solver2index) {
+  if (depth < maxDepth) {
+    if (this.isBranch(node)) {
+      var path = this.probePathAt(depth, hashes, index2solver);
+      var child = node[path];
+      if (child === undefined) {
+        return 0;
+      } else {
+        return this.probeIn(child, depth + 1, maxDepth, nextNibbles, hashes, index2solver, solver2index);
+      }
     } else {
-      return this.probeIn(child, depth + 1, maxDepth, hashes);
+      return this.probeLeaf(node, depth, maxDepth, nextNibbles, hashes, index2solver);
+    }
+  } else {
+    if (this.isBranch(node)) {
+      return 2;
+    } else {
+      return 1;
     }
   }
 };
 
-ZZTree.prototype.probe = function(maxDepth, hashes) {
-  return this.probeIn(this.root, 0, maxDepth, hashes);
+ZZTree.prototype.probe = function(numNibbles, nextNibbles, hashes, index2solver, solver2index) {
+  return this.probeIn(this.root, 0, numNibbles * index2solver.length, nextNibbles, hashes, index2solver, solver2index);
 };
 
 ZZTree.empty = function(numValues, ixes) {
@@ -172,24 +178,23 @@ ZZTree.empty = function(numValues, ixes) {
 
 // SOLVER
 
-function ZZContains(tree, ixes) {
+function ZZContains(tree, index2solver, solver2index) {
   this.tree = tree;
-  this.ixes = ixes; // maps from tree values to solver values
+  this.index2solver = index2solver;
+  this.solver2index = solver2index;
 }
 
-ZZContains.prototype.probe = function(numNibbles, values) {
-  var ixes = this.ixes;
-  var treeValues = new Array(ixes.length);
-  for (var i = 0, len = ixes.length; i < len; i++) {
-    treeValues[i] = values[ixes[i]];
-  }
-  return this.tree.probe(numNibbles * ixes.length, treeValues);
+ZZContains.prototype.probe = function(numNibbles, nextNibbles, values) {
+  return this.tree.probe(numNibbles, nextNibbles, values, this.index2solver, this.solver2index);
 };
 
-function solveIn(constraints, numConstraints, numVariables, values, numNibbles, results) {
+function solveIn(constraints, numConstraints, numVariables, values, numNibbles, nextNibbles, results) {
+  for (var i = 0; i < numVariables; i++) {
+    nextNibbles[i] = -1;
+  }
   var cardinality = 1;
   for (var i = 0; i < numConstraints; i++) {
-    cardinality *= constraints[i].probe(numNibbles, values);
+    cardinality *= constraints[i].probe(numNibbles, nextNibbles, values);
     if (cardinality === 0) {
       return; // no solutions here
     }
@@ -206,7 +211,7 @@ function solveIn(constraints, numConstraints, numVariables, values, numNibbles, 
         value = value | (nibble << (28 - 4 * numNibbles)); // set the nibble
         values[j] = value;
       }
-      solveIn(constraints, numConstraints, numVariables, values, numNibbles + 1, results);
+      solveIn(constraints, numConstraints, numVariables, values, numNibbles + 1, nextNibbles, results);
     }
   }
 }
@@ -217,7 +222,7 @@ function solve(constraints, numVariables) {
     values[i] = 0;
   }
   var results = [];
-  solveIn(constraints, constraints.length, numVariables, values, 0, results);
+  solveIn(constraints, constraints.length, numVariables, values, 0, new Array(numVariables), results);
   return results;
 }
 
