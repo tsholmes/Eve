@@ -84,7 +84,7 @@ ZZTree.prototype.emptyBranch = function() {
   return branch;
 };
 
-function nibble(hash, i) {
+function getNibble(hash, i) {
   return (hash >> (28 - (4 * i))) & 15;
 }
 
@@ -93,7 +93,7 @@ ZZTree.prototype.pathAt = function(hashesAndValues, depth) {
   var ixes = this.ixes;
   var numIxes = ixes.length;
   var hash = hashesAndValues[ixes[depth % numIxes]];
-  return nibble(hash, (depth / numIxes) | 0);
+  return getNibble(hash, (depth / numIxes) | 0);
 };
 
 ZZTree.prototype.insertAt = function(branch, depth, hashesAndValues) {
@@ -124,16 +124,33 @@ ZZTree.prototype.inserts = function(valuess) {
   return this;
 };
 
+ZZTree.prototype.setNextNibblesFromLeaf = function(node, maxDepth, nextNibbles, index2solver) {
+  var nextNibble = (maxDepth / index2solver.length) + 1;
+  var ixes = this.ixes;
+  for (var i = 0, len = index2solver.length; i < len; i++) {
+    var nodeIx = ixes[i];
+    var solverIx = index2solver[i];
+    var nodeValue = node[nodeIx];
+    nextNibbles[solverIx] = nextNibbles[solverIx] & (1 << getNibble(nodeValue, nextNibble));
+  }
+};
+
+ZZTree.prototype.setNextNibblesFromBranch = function(node, maxDepth, nextNibbles, index2solver) {
+  var solverIx = index2solver[maxDepth % index2solver.length];
+  nextNibbles[solverIx] = nextNibbles[solverIx] & node[16];
+};
+
 ZZTree.prototype.probeLeaf = function(node, depth, maxDepth, nextNibbles, hashes, index2solver) {
   var numBits = 4 * (maxDepth / hashes.length);
   var ixes = this.ixes;
   for (var i = 0, len = ixes.length; i < len; i++) {
-    var indexIx = ixes[i];
+    var nodeIx = ixes[i];
     var solverIx = index2solver[i];
-    var nodeBits = node[indexIx] >> (32 - numBits);
-    var hashBits = hashes[solverIx] >> (32 - numBits);
-    if (nodeBits !== hashBits) return 0;
+    var nodeValue = node[nodeIx];
+    var hashValue = hashes[solverIx];
+    if ((nodeValue >> (32 - numBits)) !== (hashValue >> (32 - numBits))) return 0;
   }
+  this.setNextNibblesFromLeaf(node, maxDepth, nextNibbles, index2solver);
   return 1;
 };
 
@@ -141,7 +158,7 @@ ZZTree.prototype.probeLeaf = function(node, depth, maxDepth, nextNibbles, hashes
 ZZTree.prototype.probePathAt = function(depth, hashes, index2solver) {
   var numIxes = index2solver.length;
   var hash = hashes[index2solver[depth % numIxes]];
-  return nibble(hash, (depth / numIxes) | 0);
+  return getNibble(hash, (depth / numIxes) | 0);
 };
 
 ZZTree.prototype.probeIn = function(node, depth, maxDepth, nextNibbles, hashes, index2solver, solver2index) {
@@ -159,8 +176,10 @@ ZZTree.prototype.probeIn = function(node, depth, maxDepth, nextNibbles, hashes, 
     }
   } else {
     if (this.isBranch(node)) {
+      this.setNextNibblesFromBranch(node, maxDepth, nextNibbles, index2solver);
       return 2;
     } else {
+      this.setNextNibblesFromLeaf(node, maxDepth, nextNibbles, index2solver);
       return 1;
     }
   }
