@@ -155,7 +155,7 @@ ZZTree.prototype.probeIn = function(node, depth, maxDepth, hashes) {
     if (child === undefined) {
       return 0;
     } else {
-      return this.probeIn(node[path], depth + 1, maxDepth, hashes);
+      return this.probeIn(child, depth + 1, maxDepth, hashes);
     }
   }
 };
