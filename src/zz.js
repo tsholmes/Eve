@@ -124,16 +124,16 @@ ZZTree.prototype.inserts = function(valuess) {
   return this;
 };
 
-ZZTree.prototype.probeLeaf = function(node, depthBehind, maxDepth, hashes) {
+ZZTree.prototype.probeLeaf = function(node, depth, maxDepth, hashes) {
   var numBits = 4 * (maxDepth / hashes.length);
   var ixes = this.ixes;
   for (var i = 0, len = ixes.length; i < len; i++) {
     var ix = ixes[i];
     var nodeBits = node[ix] >> (32 - numBits);
     var hashBits = hashes[i] >> (32 - numBits);
-    if (nodeBits !== hashBits) return false;
+    if (nodeBits !== hashBits) return 0;
   }
-  return true;
+  return 1;
 };
 
 // the path interleaves nibbles from each of the hashes
@@ -144,18 +144,18 @@ ZZTree.prototype.probePathAt = function(hashes, depth) {
   return nibble(hash, (depth / numIxes) | 0);
 };
 
-ZZTree.prototype.probeIn = function(node, depthBehind, maxDepth, hashes) {
-  if (depthBehind === maxDepth) {
-    return true;
+ZZTree.prototype.probeIn = function(node, depth, maxDepth, hashes) {
+  if (depth === maxDepth) {
+    return 2;
   } else if (!this.isBranch(node)) {
-    return this.probeLeaf(node, depthBehind, maxDepth, hashes);
+    return this.probeLeaf(node, depth, maxDepth, hashes);
   } else {
-    var path = this.probePathAt(hashes, depthBehind);
+    var path = this.probePathAt(hashes, depth);
     var child = node[path];
     if (child === undefined) {
-      return false;
+      return 0;
     } else {
-      return this.probeIn(node[path], depthBehind + 1, maxDepth, hashes);
+      return this.probeIn(node[path], depth + 1, maxDepth, hashes);
     }
   }
 };
@@ -187,12 +187,14 @@ ZZContains.prototype.probe = function(numNibbles, values) {
 };
 
 function solveIn(constraints, numConstraints, numVariables, values, numNibbles, results) {
+  var cardinality = 1;
   for (var i = 0; i < numConstraints; i++) {
-    if (constraints[i].probe(numNibbles, values) === false) {
+    cardinality *= constraints[i].probe(numNibbles, values);
+    if (cardinality === 0) {
       return; // no solutions here
     }
   }
-  if (numNibbles === 8) {
+  if (cardinality === 1) {
     results.push(values.slice()); // found a solution
   } else {
     // TODO only allows for 8 values
