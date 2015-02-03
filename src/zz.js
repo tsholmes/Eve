@@ -57,6 +57,29 @@ function hash(o) {
 
 // --- end of cljs.core ---
 
+function population(v) {
+  var c;
+  c = v - ((v >> 1) & 0x55555555);
+  c = ((c >> 2) & 0x33333333) + (c & 0x33333333);
+  c = ((c >> 4) + c) & 0x0F0F0F0F;
+  c = ((c >> 8) + c) & 0x00FF00FF;
+  return c & 0x0000FFFF;
+}
+
+function slowPopulation(v) {
+  var c = 0;
+  for (var i = 0; i < 16; i++) {
+    c += (v >> i) & 1;
+  }
+  return c;
+}
+
+function testPopulation() {
+  for (var i = 0, max = Math.pow(2, 16); i < max; i++) {
+    if (population(i) !== slowPopulation(i)) throw ("Failed on " + i);
+  }
+}
+
 function getNibble(hash, i) {
   return (hash >> (28 - (4 * i))) & 15;
 }
@@ -75,15 +98,20 @@ function ZZTree(numValues, ixes, root) {
 var BRANCH = 0;
 var LEAF = 1;
 
-function makeBranch() {
-  var branch = new Array(18);
+var buffer = [];
+for (var i = 0; i < 1000; i++) {
+  buffer[i] = 0;
+}
+
+function makeBranch(numChildren) {
+  var branch = buffer.slice(0, numChildren);
   branch[0] = BRANCH;
-  branch[1] = 0; // entries bitflag
+  branch[1] = 0;
   return branch;
 }
 
 function makeLeaf(values) {
-  var leaf = new Array(1 + (2 * values.length));
+  var leaf = buffer.slice(0, 1 + (2 * values.length));
   leaf[0] = LEAF;
   for (var i = 0, len = values.length; i < len; i++) {
     var value = values[i];
@@ -106,12 +134,21 @@ function getEntries(branch) {
 }
 
 function getChild(branch, path) {
-  return branch[2 + path];
+  var entries = branch[1];
+  if (entries & (1 << path)) {
+    var ix = population(entries << (16 - path));
+    return branch[2 + ix];
+  } else {
+    return undefined;
+  }
 }
 
-function setChild(branch, path, child) {
-  branch[1] = branch[1] | (1 << path);
-  branch[2 + path] = child;
+// must be called in ascending path order
+function addChild(branch, path, child) {
+  var entries = branch[1] | (1 << path);
+  branch[1] = entries;
+  var ix = population(entries << (16 - path));
+  branch[2 + ix] = child;
 }
 
 ZZTree.prototype.nibbleSort = function(leaves, depth) {
@@ -135,12 +172,19 @@ ZZTree.prototype.create = function(leaves, depth) {
   if (leaves.length === 1) {
     return leaves[0];
   } else {
-    var branch = makeBranch();
     var buckets = this.nibbleSort(leaves, depth);
+    var numChildren = 0;
     for (var path = 0; path < 16; path++) {
       var bucket = buckets[path];
       if (bucket.length > 0) {
-        setChild(branch, path, this.create(bucket, depth + 1));
+        numChildren += 1;
+      }
+    }
+    var branch = makeBranch(numChildren);
+    for (var path = 0; path < 16; path++) {
+      var bucket = buckets[path];
+      if (bucket.length > 0) {
+        addChild(branch, path, this.create(bucket, depth + 1));
       }
     }
     return branch;
@@ -231,7 +275,7 @@ ZZTree.prototype.probe = function(numNibbles, nextNibbles, hashes, index2solver,
 };
 
 ZZTree.empty = function(numValues, ixes) {
-  return new ZZTree(numValues, ixes, makeBranch());
+  return new ZZTree(numValues, ixes, makeBranch(0));
 };
 
 // SOLVER
@@ -352,12 +396,10 @@ function numNodes(tree) {
       case BRANCH:
         var numChildren = 0;
         branches += 1;
-        for (var i = 0; i < 16; i++) {
-          var child = getChild(node, i);
-          if (child !== undefined) {
-            numChildren += 1;
-            nodes.push(child);
-          }
+        for (var i = 0, max = node.length - 2; i < max; i++) {
+          var child = node[2 + i];
+          numChildren += 1;
+          nodes.push(child);
         }
         children[numChildren] += 1;
         break;
@@ -374,6 +416,8 @@ function numNodes(tree) {
 }
 
 function bench(numUsers, numLogins, numBans) {
+  var results = [];
+
   var users = [];
   for (var i = 0; i < numUsers; i++) {
     var email = i;
@@ -403,11 +447,11 @@ function bench(numUsers, numLogins, numBans) {
   console.log(usersTree, loginsTree, bansTree);
   console.time("solve");
   //console.profile();
-  var solverResults = solve([
+  results.push(solve([
     new ZZContains(usersTree, [0]),
     new ZZContains(loginsTree, [0, 1]),
     new ZZContains(bansTree, [1])
-  ], 2);
+  ], 2));
   //console.profileEnd();
   console.timeEnd("solve");
 
@@ -416,7 +460,7 @@ function bench(numUsers, numLogins, numBans) {
   var bansIndex = index(bans, 0);
   console.timeEnd("insert forward");
   console.time("solve forward");
-  var forwardResults = lookup(lookup(users, 1, loginsIndex), 3, bansIndex);
+  results.push(lookup(lookup(users, 1, loginsIndex), 3, bansIndex));
   console.timeEnd("solve forward");
 
   console.time("insert backward");
@@ -424,10 +468,10 @@ function bench(numUsers, numLogins, numBans) {
   var loginsIndex = index(logins, 1);
   console.timeEnd("insert backward");
   console.time("solve backward");
-  var backwardResults = lookup(lookup(bans, 0, loginsIndex), 1, usersIndex);
+  results.push(lookup(lookup(bans, 0, loginsIndex), 1, usersIndex));
   console.timeEnd("solve backward");
 
-  return [solverResults, forwardResults, backwardResults];
+  return results;
 }
 
 // var x = bench(1000000);
