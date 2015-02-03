@@ -415,9 +415,53 @@ function numNodes(tree) {
   };
 }
 
-function bench(numUsers, numLogins, numBans) {
-  var results = [];
+function benchZZ(users, logins, bans) {
+  console.time("insert");
+  //console.profile();
+  var usersTree = ZZTree.empty(2, [1]).insert(users);
+  var loginsTree = ZZTree.empty(2, [0, 1]).insert(logins);
+  var bansTree = ZZTree.empty(1, [0]).insert(bans);
+  //console.profileEnd();
+  console.timeEnd("insert");
+  //console.log(numNodes(usersTree), numNodes(loginsTree), numNodes(bansTree));
+  //console.log(usersTree, loginsTree, bansTree);
+  console.time("solve");
+  //console.profile();
+  var results = solve([
+    new ZZContains(usersTree, [0]),
+    new ZZContains(loginsTree, [0, 1]),
+    new ZZContains(bansTree, [1])
+  ], 2);
+  //console.profileEnd();
+  console.timeEnd("solve");
+  return results.length;
+}
 
+function benchForward(users, logins, bans) {
+  console.time("insert forward");
+  var loginsIndex = index(logins, 0);
+  var bansIndex = index(bans, 0);
+  console.timeEnd("insert forward");
+  console.time("solve forward");
+  var results = lookup(lookup(users, 1, loginsIndex), 3, bansIndex);
+  console.timeEnd("solve forward");
+
+  return results.length;
+}
+
+function benchBackward(users, logins, bans) {
+  console.time("insert backward");
+  var usersIndex = index(users, 1);
+  var loginsIndex = index(logins, 1);
+  console.timeEnd("insert backward");
+  console.time("solve backward");
+  var results = lookup(lookup(bans, 0, loginsIndex), 1, usersIndex);
+  console.timeEnd("solve backward");
+
+  return results.length;
+}
+
+function bench(numUsers, numLogins, numBans) {
   var users = [];
   for (var i = 0; i < numUsers; i++) {
     var email = i;
@@ -436,40 +480,10 @@ function bench(numUsers, numLogins, numBans) {
     bans.push(["ip" + ip]);
   }
 
-  console.time("insert");
-  //console.profile();
-  var usersTree = ZZTree.empty(2, [1]).insert(users);
-  var loginsTree = ZZTree.empty(2, [0, 1]).insert(logins);
-  var bansTree = ZZTree.empty(1, [0]).insert(bans);
-  //console.profileEnd();
-  console.timeEnd("insert");
-  console.log(numNodes(usersTree), numNodes(loginsTree), numNodes(bansTree));
-  console.log(usersTree, loginsTree, bansTree);
-  console.time("solve");
-  //console.profile();
-  results.push(solve([
-    new ZZContains(usersTree, [0]),
-    new ZZContains(loginsTree, [0, 1]),
-    new ZZContains(bansTree, [1])
-  ], 2));
-  //console.profileEnd();
-  console.timeEnd("solve");
-
-  console.time("insert forward");
-  var loginsIndex = index(logins, 0);
-  var bansIndex = index(bans, 0);
-  console.timeEnd("insert forward");
-  console.time("solve forward");
-  results.push(lookup(lookup(users, 1, loginsIndex), 3, bansIndex));
-  console.timeEnd("solve forward");
-
-  console.time("insert backward");
-  var usersIndex = index(users, 1);
-  var loginsIndex = index(logins, 1);
-  console.timeEnd("insert backward");
-  console.time("solve backward");
-  results.push(lookup(lookup(bans, 0, loginsIndex), 1, usersIndex));
-  console.timeEnd("solve backward");
+  var results = [];
+  results.push(benchZZ(users, logins, bans));
+  results.push(benchForward(users, logins, bans));
+  results.push(benchBackward(users, logins, bans));
 
   return results;
 }
