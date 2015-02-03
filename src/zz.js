@@ -93,32 +93,52 @@ function makeLeaf(values) {
   return leaf;
 }
 
+function getTag(node) {
+  return node[0];
+}
+
+function getHash(leaf, ix) {
+  return leaf[1 + ix];
+}
+
+function getEntries(branch) {
+  return branch[1];
+}
+
+function getChild(branch, path) {
+  return branch[2 + path];
+}
+
+function setChild(branch, path, child) {
+  branch[1] = branch[1] | (1 << path);
+  branch[2 + path] = child;
+}
+
 // the path interleaves nibbles from each of the hashes
 ZZTree.prototype.pathAt = function(leaf, depth) {
   var ixes = this.ixes;
   var numIxes = ixes.length;
-  var hash = leaf[1 + ixes[depth % numIxes]];
+  var hash = getHash(leaf, ixes[depth % numIxes]);
   return getNibble(hash, (depth / numIxes) | 0);
 };
 
-ZZTree.prototype.insertAt = function(parent, parentIx, node, depth, leaf) {
+ZZTree.prototype.insertAt = function(parent, parentPath, node, depth, leaf) {
   var path = this.pathAt(leaf, depth);
-  switch (node[0]) {
+  switch (getTag(node)) {
     case BRANCH:
-      var child = node[2 + path];
+      var child = getChild(node, path);
       if (child === undefined) {
-        node[1] = node[1] | (1 << path);
-        node[2 + path] = leaf;
+        setChild(node, path, leaf);
       } else {
-        this.insertAt(node, 2 + path, child, depth + 1, leaf);
+        this.insertAt(node, path, child, depth + 1, leaf);
       }
       break;
 
     case LEAF:
       var branch = makeBranch();
-      parent[parentIx] = branch;
-      this.insertAt(parent, parentIx, branch, depth, leaf);
-      this.insertAt(parent, parentIx, branch, depth, node);
+      setChild(parent, parentPath, branch);
+      this.insertAt(parent, parentPath, branch, depth, leaf);
+      this.insertAt(parent, parentPath, branch, depth, node);
       break;
   }
 };
@@ -141,14 +161,14 @@ ZZTree.prototype.setNextNibblesFromLeaf = function(node, maxDepth, nextNibbles, 
   for (var i = 0, len = index2solver.length; i < len; i++) {
     var nodeIx = ixes[i];
     var solverIx = index2solver[i];
-    var nodeValue = node[1 + nodeIx];
+    var nodeValue = getHash(node, nodeIx);
     nextNibbles[solverIx] = nextNibbles[solverIx] & (1 << getNibble(nodeValue, nextNibble));
   }
 };
 
 ZZTree.prototype.setNextNibblesFromBranch = function(node, maxDepth, nextNibbles, index2solver) {
   var solverIx = index2solver[maxDepth % index2solver.length];
-  nextNibbles[solverIx] = nextNibbles[solverIx] & node[1];
+  nextNibbles[solverIx] = nextNibbles[solverIx] & getEntries(node);
 };
 
 ZZTree.prototype.probeLeaf = function(node, depth, maxDepth, nextNibbles, hashes, index2solver) {
@@ -157,7 +177,7 @@ ZZTree.prototype.probeLeaf = function(node, depth, maxDepth, nextNibbles, hashes
   for (var i = 0, len = ixes.length; i < len; i++) {
     var nodeIx = ixes[i];
     var solverIx = index2solver[i];
-    var nodeValue = node[1 + nodeIx];
+    var nodeValue = getHash(node, nodeIx);
     var hashValue = hashes[solverIx];
     if ((nodeValue >> (32 - numBits)) !== (hashValue >> (32 - numBits))) return 0;
   }
@@ -174,10 +194,10 @@ ZZTree.prototype.probePathAt = function(depth, hashes, index2solver) {
 
 ZZTree.prototype.probeIn = function(node, depth, maxDepth, nextNibbles, hashes, index2solver, solver2index) {
   if (depth < maxDepth) {
-    switch (node[0]) {
+    switch (getTag(node)) {
       case BRANCH:
         var path = this.probePathAt(depth, hashes, index2solver);
-        var child = node[2 + path];
+        var child = getChild(node, path);
         if (child === undefined) {
           return 0;
         } else {
@@ -188,7 +208,7 @@ ZZTree.prototype.probeIn = function(node, depth, maxDepth, nextNibbles, hashes, 
         return this.probeLeaf(node, depth, maxDepth, nextNibbles, hashes, index2solver);
     }
   } else {
-    switch (node[0]) {
+    switch (getTag(node)) {
       case BRANCH:
         this.setNextNibblesFromBranch(node, maxDepth, nextNibbles, index2solver);
         return 2;
@@ -322,12 +342,12 @@ function numNodes(tree) {
   var nodes = [tree.root];
   while (nodes.length > 0) {
     var node = nodes.pop();
-    switch (node[0]) {
+    switch (getTag(node)) {
       case BRANCH:
         var numChildren = 0;
         branches += 1;
         for (var i = 0; i < 16; i++) {
-          var child = node[2 + i];
+          var child = getChild(node, i);
           if (child !== undefined) {
             numChildren += 1;
             nodes.push(child);
@@ -367,9 +387,11 @@ function bench(numUsers, numLogins, numBans) {
   }
 
   console.time("insert");
+  //console.profile();
   var usersTree = ZZTree.empty(2, [1]).inserts(users);
   var loginsTree = ZZTree.empty(2, [0, 1]).inserts(logins);
   var bansTree = ZZTree.empty(1, [0]).inserts(bans);
+  //console.profileEnd();
   console.timeEnd("insert");
   console.log(numNodes(usersTree), numNodes(loginsTree), numNodes(bansTree));
   console.log(usersTree, loginsTree, bansTree);
