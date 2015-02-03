@@ -394,9 +394,9 @@ function bench(numUsers, numLogins, numBans) {
 
   console.time("insert");
   //console.profile();
-  var usersTree = ZZTree.empty(2, [1]).inserts(users);
-  var loginsTree = ZZTree.empty(2, [0, 1]).inserts(logins);
-  var bansTree = ZZTree.empty(1, [0]).inserts(bans);
+  var usersTree = ZZTree.empty(2, [1]).insert(users);
+  var loginsTree = ZZTree.empty(2, [0, 1]).insert(logins);
+  var bansTree = ZZTree.empty(1, [0]).insert(bans);
   //console.profileEnd();
   console.timeEnd("insert");
   console.log(numNodes(usersTree), numNodes(loginsTree), numNodes(bansTree));
