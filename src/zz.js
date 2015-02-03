@@ -114,45 +114,51 @@ function setChild(branch, path, child) {
   branch[2 + path] = child;
 }
 
-// the path interleaves nibbles from each of the hashes
-ZZTree.prototype.pathAt = function(leaf, depth) {
+ZZTree.prototype.nibbleSort = function(leaves, depth) {
   var ixes = this.ixes;
   var numIxes = ixes.length;
-  var hash = getHash(leaf, ixes[depth % numIxes]);
-  return getNibble(hash, (depth / numIxes) | 0);
+  var hashIx = ixes[depth % numIxes];
+  var nibbleIx = (depth / numIxes) | 0;
+  var buckets = [];
+  for (var i = 0; i < 16; i++) {
+    buckets[i] = [];
+  }
+  for (var i = 0, len = leaves.length; i < len; i++) {
+    var leaf = leaves[i];
+    var bucket = getNibble(getHash(leaf, hashIx), nibbleIx);
+    buckets[bucket].push(leaf);
+  }
+  return buckets;
 };
 
-ZZTree.prototype.insertAt = function(parent, parentPath, node, depth, leaf) {
-  var path = this.pathAt(leaf, depth);
-  switch (getTag(node)) {
-    case BRANCH:
-      var child = getChild(node, path);
-      if (child === undefined) {
-        setChild(node, path, leaf);
-      } else {
-        this.insertAt(node, path, child, depth + 1, leaf);
+ZZTree.prototype.create = function(leaves, depth) {
+  if (leaves.length === 1) {
+    return leaves[0];
+  } else {
+    var branch = makeBranch();
+    var buckets = this.nibbleSort(leaves, depth);
+    for (var path = 0; path < 16; path++) {
+      var bucket = buckets[path];
+      if (bucket.length > 0) {
+        setChild(branch, path, this.create(bucket, depth + 1));
       }
-      break;
-
-    case LEAF:
-      var branch = makeBranch();
-      setChild(parent, parentPath, branch);
-      this.insertAt(parent, parentPath, branch, depth, leaf);
-      this.insertAt(parent, parentPath, branch, depth, node);
-      break;
+    }
+    return branch;
   }
 };
 
-ZZTree.prototype.insert = function(values) {
-  this.insertAt(null, 0, this.root, 0, makeLeaf(values));
-  return this;
+ZZTree.prototype.include = function(node, leaves, depth) {
+  // TODO dont throw away node
+  return this.create(leaves, depth);
 };
 
-ZZTree.prototype.inserts = function(valuess) {
-  for (var i = 0, len = valuess.length; i < len; i++) {
-    this.insert(valuess[i]);
+ZZTree.prototype.insert = function(rows) {
+  var leaves = [];
+  for (var i = 0, len = rows.length; i < len; i++) {
+    leaves.push(makeLeaf(rows[i]));
   }
-  return this;
+  var root = this.include(this.root, leaves, 0);
+  return new ZZTree(this.numValues, this.ixes, root);
 };
 
 ZZTree.prototype.setNextNibblesFromLeaf = function(node, maxDepth, nextNibbles, index2solver) {
