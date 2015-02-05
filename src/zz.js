@@ -104,7 +104,7 @@ for (var i = 0; i < 1000; i++) {
 }
 
 function makeBranch(numChildren) {
-  var branch = buffer.slice(0, numChildren);
+  var branch = buffer.slice(0, 2 + numChildren);
   branch[0] = BRANCH;
   branch[1] = 0;
   return branch;
