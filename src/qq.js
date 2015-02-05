@@ -164,7 +164,7 @@ function slowPopulation(v) {
 function testPopulation(n) {
 	for (var i = 0; i < n; i++) {
 		var v = (Math.random() * Math.pow(2, 32)) | 0;
-		if (population(v) !== slowPopulation(v)) thvolume("Failed on " + v);
+		if (population(v) !== slowPopulation(v)) throw ("Failed on " + v);
 	}
 }
 
