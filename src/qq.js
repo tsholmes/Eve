@@ -145,6 +145,14 @@ function insert(parent, parentPath, node, pathIter) {
 
 QQTree.prototype.insert = function(volume) {
 	insert(this.root, 0, this.root, makePathIter(this.numDims, volume));
+	return this;
+};
+
+QQTree.prototype.inserts = function(volumes) {
+	for (var i = 0, len = volumes.length; i < len; i++) {
+		insert(this.root, 0, this.root, makePathIter(this.numDims, volumes[i]));
+	}
+	return this;
 };
 
 function makeQQTree(numDims) {
@@ -175,3 +183,189 @@ function bits(n) {
 	}
 	return s;
 }
+
+// BENCH
+
+function index(facts, ix) {
+	var index = {};
+	for (var i = 0, len = facts.length; i < len; i++) {
+		var fact = facts[i];
+		var value = fact[ix];
+		var bucket = index[value] || (index[value] = []);
+		bucket.push(fact);
+	}
+	return index;
+}
+
+function lookup(facts, ix, index) {
+	var results = [];
+	for (var i = 0, factsLen = facts.length; i < factsLen; i++) {
+		var fact = facts[i];
+		var value = fact[ix];
+		var bucket = index[value];
+		if (bucket !== undefined) {
+			for (var j = 0, bucketLen = bucket.length; j < bucketLen; j++) {
+				results.push(fact.concat(bucket[j]));
+			}
+		}
+	}
+	return results;
+}
+
+function numNodes(tree) {
+	var branches = 0;
+	var leaves = 0;
+	var children = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+	var nodes = [tree.root];
+	while (nodes.length > 0) {
+		var node = nodes.pop();
+		switch (getTag(node)) {
+			case BRANCH:
+				var numChildren = 0;
+				branches += 1;
+				for (var i = 0, max = node.length - 2; i < max; i++) {
+					var child = node[2 + i];
+					numChildren += 1;
+					nodes.push(child);
+				}
+				children[numChildren] += 1;
+				break;
+
+			case LEAF:
+				leaves += 1;
+		}
+	}
+	return {
+		leaves: leaves,
+		branches: branches,
+		children: children
+	};
+}
+
+function benchQQ(users, logins, bans) {
+	console.time("insert");
+	console.profile();
+	var usersTree = makeQQTree(2).inserts(users);
+	var loginsTree = makeQQTree(2).inserts(logins);
+	var bansTree = makeQQTree(1).inserts(bans);
+	//console.profileEnd();
+	console.timeEnd("insert");
+	//console.log(numNodes(usersTree), numNodes(loginsTree), numNodes(bansTree));
+	//console.log(usersTree, loginsTree, bansTree);
+	console.time("solve");
+	//console.profile();
+	var results = [];
+	//console.profileEnd();
+	console.timeEnd("solve");
+	return results.length;
+}
+
+function benchForward(users, logins, bans) {
+	console.time("insert forward");
+	var loginsIndex = index(logins, 0);
+	var bansIndex = index(bans, 0);
+	console.timeEnd("insert forward");
+	console.time("solve forward");
+	var results = lookup(lookup(users, 1, loginsIndex), 3, bansIndex);
+	console.timeEnd("solve forward");
+
+	return results.length;
+}
+
+function benchBackward(users, logins, bans) {
+	console.time("insert backward");
+	var usersIndex = index(users, 1);
+	var loginsIndex = index(logins, 1);
+	console.timeEnd("insert backward");
+	console.time("solve backward");
+	var results = lookup(lookup(bans, 0, loginsIndex), 1, usersIndex);
+	console.timeEnd("solve backward");
+
+	return results.length;
+}
+
+function bench(numUsers, numLogins, numBans) {
+	var users = [];
+	for (var i = 0; i < numUsers; i++) {
+		var email = m3_hash_int(i);
+		var user = m3_hash_int(i);
+		users.push([0, email, user, 32, 32]);
+	}
+	var logins = [];
+	for (var i = 0; i < numLogins; i++) {
+		var user = m3_hash_int(Math.floor(Math.random() * numUsers));
+		var ip = m3_hash_int(i);
+		logins.push([0, user, ip, 32, 32]);
+	}
+	var bans = [];
+	for (var i = 0; i < numBans; i++) {
+		var ip = m3_hash_int(i);
+		bans.push([0, ip, 32]);
+	}
+
+	var results = [];
+	results.push(benchQQ(users, logins, bans));
+	//results.push(benchForward(users, logins, bans));
+	//results.push(benchBackward(users, logins, bans));
+
+	return results;
+}
+
+// --- from cljs.core ---
+
+function int_rotate_left(x, n) {
+	return ((x << n) | (x >>> (-n)));
+}
+
+var m3_seed = 0;
+var m3_C1 = 3432918353;
+var m3_C2 = 461845907;
+
+function m3_mix_K1(k1) {
+	return Math.imul(int_rotate_left(Math.imul(k1, m3_C1), (15)), m3_C2);
+}
+
+function m3_mix_H1(h1, k1) {
+	return (Math.imul(int_rotate_left((h1 ^ k1), (13)), (5)) + (3864292196));
+}
+
+function m3_fmix(h1, len) {
+	var h1__$1 = h1;
+	var h1__$2 = (h1__$1 ^ len);
+	var h1__$3 = (h1__$2 ^ (h1__$2 >>> (16)));
+	var h1__$4 = Math.imul(h1__$3, (2246822507));
+	var h1__$5 = (h1__$4 ^ (h1__$4 >>> (13)));
+	var h1__$6 = Math.imul(h1__$5, (3266489909));
+	var h1__$7 = (h1__$6 ^ (h1__$6 >>> (16)));
+	return h1__$7;
+}
+
+function m3_hash_int(in$) {
+	var k1 = m3_mix_K1(in$);
+	var h1 = m3_mix_H1(m3_seed, k1);
+	return m3_fmix(h1, (4));
+}
+
+function hash_string(s) {
+	var hash = 0;
+	for (var i = 0, len = s.length; i < len; i++) {
+		hash = Math.imul(31, hash) + s.charCodeAt(i);
+	}
+	return hash;
+}
+
+function hash(o) {
+	if (typeof o === 'number') {
+		return Math.floor(o) % 2147483647;
+	} else if (typeof o === 'string') {
+		return m3_hash_int(hash_string(o));
+	} else if (o === true) {
+		return 1;
+	} else if (o === false) {
+		return 0;
+	} else {
+		throw new Error("Cannot hash: " + typeof(o) + " " + o);
+	}
+}
+
+// --- end of cljs.core ---
