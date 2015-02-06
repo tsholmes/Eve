@@ -26,6 +26,10 @@ function getNumBits(volume, numDims, dim) {
 	return volume[1 + numDims + dim];
 }
 
+function setNumBits(volume, numDims, dim, numBits) {
+	volume[1 + numDims + dim] = numBits;
+}
+
 // PATHS
 
 function getPath(value, bitsBefore, bitsAfter) {
@@ -64,6 +68,17 @@ PathIter.prototype.copy = function(volume) {
 	var value = getValue(volume, this.dim);
 	var bitsAfter = getNumBits(volume, this.numDims, this.dim) - this.bitsBefore;
 	return new PathIter(this.numDims, volume, this.dim, value, this.bitsBefore, bitsAfter);
+};
+
+// returns the volume *before* the last call to nextPath()
+PathIter.prototype.prevVolume = function() {
+	var prev = this.volume.slice();
+	var numDims = this.numDims;
+	setNumBits(prev, this.dim, numDims, this.bitsBefore);
+	for (var dim = this.dim + 1; dim < numDims; dim++) {
+		setNumBits(prev, dim, numDims, 0);
+	}
+	return prev;
 };
 
 function makePathIter(numDims, volume) {
