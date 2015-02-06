@@ -6,6 +6,8 @@ for (var i = 0; i < 1000; i++) {
 var VOLUME = 0;
 var BRANCH = 1;
 
+var END_OF_PATH = -1;
+
 function getTag(node) {
 	return node[0];
 }
@@ -41,7 +43,7 @@ function PathIter(numDims, volume, dim, value, bitsBefore, bitsAfter) {
 	this.bitsAfter = bitsAfter;
 }
 
-PathIter.prototype.next = function() {
+PathIter.prototype.nextPath = function() {
 	if (this.bitsAfter >= 4) {
 		this.bitsBefore += 4;
 		this.bitsAfter -= 4;
@@ -52,7 +54,7 @@ PathIter.prototype.next = function() {
 			this.bitsBefore = 0;
 			this.bitsAfter = getNumBits(this.volume, this.numDims, this.dim);
 		} else {
-			throw "End of path!";
+			return END_OF_PATH;
 		}
 	}
 	return getPath(this.value, this.bitsBefore, this.bitsAfter);
@@ -124,13 +126,17 @@ function QQTree(numDims, root) {
 function insert(parent, parentPath, node, pathIter) {
 	switch (getTag(node)) {
 		case BRANCH:
-			var path = pathIter.next();
+			var path = pathIter.nextPath();
 			var entries = getEntries(node);
-			if (entries & (1 << path)) {
-				var child = getChild(node, path);
-				insert(node, path, child, pathIter);
+			if (path !== END_OF_PATH) {
+				if (entries & (1 << path)) {
+					var child = getChild(node, path);
+					insert(node, path, child, pathIter);
+				} else {
+					insertChild(node, path, pathIter.volume);
+				}
 			} else {
-				insertChild(node, path, pathIter.volume);
+				throw "Unexpected end of path";
 			}
 			break;
 
