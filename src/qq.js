@@ -235,8 +235,8 @@ function lookup(facts, ix, index) {
 
 function numNodes(tree) {
 	var branches = 0;
-	var leaves = 0;
-	var children = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+	var volumes = 0;
+	var children = new Int32Array(33);
 	var nodes = [tree.root];
 	while (nodes.length > 0) {
 		var node = nodes.pop();
@@ -252,12 +252,12 @@ function numNodes(tree) {
 				children[numChildren] += 1;
 				break;
 
-			case LEAF:
-				leaves += 1;
+			case VOLUME:
+				volumes += 1;
 		}
 	}
 	return {
-		leaves: leaves,
+		volumes: volumes,
 		branches: branches,
 		children: children
 	};
