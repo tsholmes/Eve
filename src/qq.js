@@ -6,7 +6,9 @@ for (var i = 0; i < 1000; i++) {
 var VOLUME = 0;
 var BRANCH = 1;
 
-var END_OF_PATH = -1;
+var END_OF_PATH = ["End of path"];
+
+var NO_GAP = ["No gap"];
 
 function getTag(node) {
 	return node[0];
@@ -54,13 +56,43 @@ function getEnclosingVolume(volume, numDims, depth) {
 	var enclosingVolume = volume.slice();
 	var depthBits = depth * 4;
 	for (var dim = 0; dim < numDims; dim++) {
-		var valueBits = getNumBits(enclosingVolume, numDims, dim);
-		if (depthBits < valueBits) {
-			setNumBits(enclosingVolume, numDims, dim, depthBits);
-		} else if (depthBits < 0) {
+		var valueBits = getNumBits(volume, numDims, dim);
+		var numChunks = 1 + (valueBits >> 2);
+		if (depth < 0) {
 			setNumBits(enclosingVolume, numDims, dim, 0);
+		} else if (depth < numChunks) {
+			setNumBits(enclosingVolume, numDims, dim, depth * 4);
 		}
-		depthBits -= 1 + (valueBits >> 2);
+		depth -= numChunks;
+	}
+	return enclosingVolume;
+}
+
+var CHUNK_BITS = [];
+for (var chunkBits = 0; chunkBits < 5; chunkBits++) {
+	for (var chunk = 0; chunk < Math.pow(2, chunkBits); chunk++) {
+		var path = chunk + (1 << chunkBits) - 1;
+		CHUNK_BITS[path] = chunkBits;
+	}
+}
+
+var ENCLOSED_PATHS = [];
+for (var chunkBits = 0; chunkBits < 5; chunkBits++) {
+	for (var chunk = 0; chunk < Math.pow(2, chunkBits); chunk++) {
+		var path = chunk + (1 << chunkBits) - 1;
+		var matches = 0;
+
+		for (var matchingChunkBits = 0; matchingChunkBits < 5; matchingChunkBits++) {
+			for (var matchingChunk = 0; matchingChunk < Math.pow(2, matchingChunkBits); matchingChunk++) {
+				var matchingPath = matchingChunk + (1 << matchingChunkBits) - 1;
+				var chunkMask = (1 << matchingChunkBits) - 1;
+				if (((chunk & chunkMask) === matchingChunk)) {
+					matches = matches | (1 << matchingPath);
+				}
+			}
+		}
+
+		ENCLOSED_PATHS[path] = matches;
 	}
 }
 
@@ -83,31 +115,35 @@ function population(v) {
 	return c;
 }
 
+function getIx(entries, pathBit) {
+	return population(entries & (pathBit ^ -pathBit));
+}
+
 function getEntries(branch) {
 	return branch[1];
 }
 
-function getChild(branch, path) {
+function getChild(branch, pathBit) {
 	var entries = branch[1];
-	var ix = population(entries >> (path + 1));
+	var ix = getIx(entries, pathBit);
 	return branch[2 + ix];
 }
 
-function replaceChild(branch, path, child) {
+function replaceChild(branch, pathBit, child) {
 	var entries = branch[1];
-	var ix = population(entries >> (path + 1));
+	var ix = getIx(entries, pathBit);
 	branch[2 + ix] = child;
 }
 
-function insertChild(branch, path, child) {
+function insertChild(branch, pathBit, child) {
 	var entries = branch[1];
-	for (var ix = population(entries >> (path + 1)), numIxes = population(entries); ix < numIxes; ix++) {
+	for (var ix = getIx(entries, pathBit), numIxes = population(entries); ix < numIxes; ix++) {
 		var tmp = branch[2 + ix];
 		branch[2 + ix] = child;
 		child = tmp;
 	}
 	branch[2 + numIxes] = child;
-	branch[1] = entries | (1 << path);
+	branch[1] = entries | pathBit;
 }
 
 // TREES
@@ -124,13 +160,13 @@ function insert(parent, parentPath, node, volume, numDims, depth) {
 				var path = getPath(volume, numDims, depth);
 				if (path === END_OF_PATH) throw "Unexpected end of path - is the number of dimensions right?";
 				var entries = getEntries(node);
-				if (entries & (1 << path)) {
+				if ((entries & (1 << path)) !== 0) {
 					parent = node;
 					parentPath = path;
-					node = getChild(node, path);
+					node = getChild(node, 1 << path);
 					depth += 1;
 				} else {
-					insertChild(node, path, volume);
+					insertChild(node, 1 << path, volume);
 					return;
 				}
 				break;
@@ -138,8 +174,8 @@ function insert(parent, parentPath, node, volume, numDims, depth) {
 			case VOLUME:
 				var tmp = node;
 				node = makeBranch(2);
-				replaceChild(parent, parentPath, node);
-				insertChild(node, getPath(tmp, numDims, depth), tmp);
+				replaceChild(parent, 1 << parentPath, node);
+				insertChild(node, 1 << getPath(tmp, numDims, depth), tmp);
 				break;
 		}
 	}
@@ -163,34 +199,39 @@ function makeQQTree(numDims) {
 
 // SEARCHING
 
-// TODO this only handles points - doesn't handle the case where some variables are underspecified
-function findGap(node, pathIter) {
-	switch (getTag(node)) {
-		case BRANCH:
-			var path = pathIter.path();
-			var entries = getEntries(node);
-			if (entries & (1 << path)) {
-				if (path.next() === false) return null; // ie no gap, point exists in tree
-				var child = getChild(node, path);
-				return findGap(child, pathIter);
-			} else {
-				// TODO needs path.next() ?
-				return pathIter.currentVolume();
-			}
-			break;
+// find maximum gap, given a tree of points and a search point
+// TODO this is somewhat lazy - we always give chunk -ligned gaps when we could sometimes do better
+//      instead, when we find a gap we should try less bits until we find a tight gap
+//      but is difficult to calculate with the path stuff
+function findGap(node, volume, searchDims, treeDims, depth) {
+	while (true) {
+		switch (getTag(node)) {
+			case BRANCH:
+				var path = getPath(volume, searchDims, depth);
+				if (path === END_OF_PATH) return NO_GAP;
+				var entries = getEntries(node);
+				if ((entries & (1 << path)) !== 0) {
+					node = getChild(node, 1 << path);
+					depth += 1;
+				} else {
+					return getEnclosingVolume(volume, searchDims, depth + 1);
+				}
+				break;
 
-		case VOLUME:
-			var treeIter = pathIter.copy(node);
-			while (pathIter.path() === treeIter.path()) {
-				if (path.next() === false) return null; // ie no gap, point exists in tree
-			}
-			return pathIter.currentVolume();
+			case VOLUME:
+				while (true) {
+					var path = getPath(volume, searchDims, depth);
+					if (path === END_OF_PATH) return NO_GAP;
+					if (path !== getPath(node, treeDims, depth)) return getEnclosingVolume(volume, searchDims, depth + 1);
+					depth += 1;
+				}
+		}
 	}
 }
 
 // NOTE numDims may be less than this.numDims, if we don't care about the trailing values in the index
-QQTree.prototype.findGap = function(numDims, volume) {
-	findGap(this.root, makePathIter(numDims, volume));
+QQTree.prototype.findGap = function(volume, numDims) {
+	return findGap(this.root, volume, numDims, this.numDims, 0);
 };
 
 // find empty vs find full?
