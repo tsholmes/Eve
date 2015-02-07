@@ -118,25 +118,30 @@ function QQTree(numDims, root) {
 }
 
 function insert(parent, parentPath, node, volume, numDims, depth) {
-	switch (getTag(node)) {
-		case BRANCH:
-			var path = getPath(volume, numDims, depth);
-			if (path === END_OF_PATH) throw "Unexpected end of path - is the number of dimensions right?";
-			var entries = getEntries(node);
-			if (entries & (1 << path)) {
-				var child = getChild(node, path);
-				insert(node, path, child, volume, numDims, depth + 1);
-			} else {
-				insertChild(node, path, volume);
-			}
-			break;
+	while (true) {
+		switch (getTag(node)) {
+			case BRANCH:
+				var path = getPath(volume, numDims, depth);
+				if (path === END_OF_PATH) throw "Unexpected end of path - is the number of dimensions right?";
+				var entries = getEntries(node);
+				if (entries & (1 << path)) {
+					parent = node;
+					parentPath = path;
+					node = getChild(node, path);
+					depth += 1;
+				} else {
+					insertChild(node, path, volume);
+					return;
+				}
+				break;
 
-		case VOLUME:
-			var child = makeBranch(2);
-			replaceChild(parent, parentPath, child);
-			insert(parent, parentPath, child, node, numDims, depth);
-			insert(parent, parentPath, child, volume, numDims, depth);
-			break;
+			case VOLUME:
+				var tmp = node;
+				node = makeBranch(2);
+				replaceChild(parent, parentPath, node);
+				insertChild(node, getPath(tmp, numDims, depth), tmp);
+				break;
+		}
 	}
 }
 
