@@ -32,57 +32,36 @@ function setNumBits(volume, numDims, dim, numBits) {
 
 // PATHS
 
-function getPath(value, bitsBefore, bitsAfter) {
-	var numBits = Math.min(bitsAfter, 4);
-	var chunk = (value >> (32 - bitsBefore - numBits)) & ((1 << numBits) - 1); // grab `numBits` bits from position `bitsBefore`
-	return chunk + (1 << numBits) - 1; // stagger path so that there is space for all combinations of 0-4 bits
-}
-
-function PathIter(numDims, volume, dim, value, bitsBefore, bitsAfter) {
-	this.numDims = numDims;
-	this.volume = volume;
-	this.dim = dim;
-	this.value = value;
-	this.bitsBefore = bitsBefore;
-	this.bitsAfter = bitsAfter;
-}
-
-PathIter.prototype.nextPath = function() {
-	if (this.bitsAfter >= 4) {
-		this.bitsBefore += 4;
-		this.bitsAfter -= 4;
-	} else {
-		this.dim += 1;
-		if (this.dim < this.numDims) {
-			this.value = getValue(this.volume, this.dim);
-			this.bitsBefore = 0;
-			this.bitsAfter = getNumBits(this.volume, this.numDims, this.dim);
-		} else {
-			return END_OF_PATH;
+function getPath(volume, numDims, depth) {
+	for (var dim = 0; dim < numDims; dim++) {
+		var valueBits = getNumBits(volume, numDims, dim);
+		var numChunks = 1 + (valueBits >> 2);
+		if (depth < numChunks) {
+			var chunkStart = depth * 4;
+			var chunkEnd = Math.min(chunkStart + 4, valueBits);
+			var chunkBits = chunkEnd - chunkStart;
+			var chunkMask = ((1 << chunkBits) - 1);
+			var chunk = (getValue(volume, dim) >> (32 - chunkEnd)) & chunkMask;
+			// stagger path so that there is space for all combinations of 0-4 bit chunks
+			return chunk + (1 << chunkBits) - 1;
 		}
+		depth -= numChunks;
 	}
-	return getPath(this.value, this.bitsBefore, this.bitsAfter);
-};
+	return END_OF_PATH;
+}
 
-PathIter.prototype.copy = function(volume) {
-	var value = getValue(volume, this.dim);
-	var bitsAfter = getNumBits(volume, this.numDims, this.dim) - this.bitsBefore;
-	return new PathIter(this.numDims, volume, this.dim, value, this.bitsBefore, bitsAfter);
-};
-
-// returns the volume *before* the last call to nextPath()
-PathIter.prototype.prevVolume = function() {
-	var prev = this.volume.slice();
-	var numDims = this.numDims;
-	setNumBits(prev, this.dim, numDims, this.bitsBefore);
-	for (var dim = this.dim + 1; dim < numDims; dim++) {
-		setNumBits(prev, dim, numDims, 0);
+function getEnclosingVolume(volume, numDims, depth) {
+	var enclosingVolume = volume.slice();
+	var depthBits = depth * 4;
+	for (var dim = 0; dim < numDims; dim++) {
+		var valueBits = getNumBits(enclosingVolume, numDims, dim);
+		if (depthBits < valueBits) {
+			setNumBits(enclosingVolume, numDims, dim, depthBits);
+		} else if (depthBits < 0) {
+			setNumBits(enclosingVolume, numDims, dim, 0);
+		}
+		depthBits -= 1 + (valueBits >> 2);
 	}
-	return prev;
-};
-
-function makePathIter(numDims, volume) {
-	return new PathIter(numDims, volume, -1, null, 0, 0);
 }
 
 // BRANCHES
@@ -138,40 +117,37 @@ function QQTree(numDims, root) {
 	this.root = root;
 }
 
-function insert(parent, parentPath, node, pathIter) {
+function insert(parent, parentPath, node, volume, numDims, depth) {
 	switch (getTag(node)) {
 		case BRANCH:
-			var path = pathIter.nextPath();
+			var path = getPath(volume, numDims, depth);
+			if (path === END_OF_PATH) throw "Unexpected end of path - is the number of dimensions right?";
 			var entries = getEntries(node);
-			if (path !== END_OF_PATH) {
-				if (entries & (1 << path)) {
-					var child = getChild(node, path);
-					insert(node, path, child, pathIter);
-				} else {
-					insertChild(node, path, pathIter.volume);
-				}
+			if (entries & (1 << path)) {
+				var child = getChild(node, path);
+				insert(node, path, child, volume, numDims, depth + 1);
 			} else {
-				throw "Unexpected end of path";
+				insertChild(node, path, volume);
 			}
 			break;
 
 		case VOLUME:
 			var child = makeBranch(2);
 			replaceChild(parent, parentPath, child);
-			insert(parent, parentPath, child, pathIter.copy(node));
-			insert(parent, parentPath, child, pathIter);
+			insert(parent, parentPath, child, node, numDims, depth);
+			insert(parent, parentPath, child, volume, numDims, depth);
 			break;
 	}
 }
 
 QQTree.prototype.insert = function(volume) {
-	insert(this.root, 0, this.root, makePathIter(this.numDims, volume));
+	insert(this.root, 0, this.root, volume, this.numDims, 0);
 	return this;
 };
 
 QQTree.prototype.inserts = function(volumes) {
 	for (var i = 0, len = volumes.length; i < len; i++) {
-		insert(this.root, 0, this.root, makePathIter(this.numDims, volumes[i]));
+		insert(this.root, 0, this.root, volumes[i], this.numDims, 0);
 	}
 	return this;
 };
@@ -179,6 +155,61 @@ QQTree.prototype.inserts = function(volumes) {
 function makeQQTree(numDims) {
 	return new QQTree(numDims, makeBranch(2));
 }
+
+// SEARCHING
+
+// TODO this only handles points - doesn't handle the case where some variables are underspecified
+function findGap(node, pathIter) {
+	switch (getTag(node)) {
+		case BRANCH:
+			var path = pathIter.path();
+			var entries = getEntries(node);
+			if (entries & (1 << path)) {
+				if (path.next() === false) return null; // ie no gap, point exists in tree
+				var child = getChild(node, path);
+				return findGap(child, pathIter);
+			} else {
+				// TODO needs path.next() ?
+				return pathIter.currentVolume();
+			}
+			break;
+
+		case VOLUME:
+			var treeIter = pathIter.copy(node);
+			while (pathIter.path() === treeIter.path()) {
+				if (path.next() === false) return null; // ie no gap, point exists in tree
+			}
+			return pathIter.currentVolume();
+	}
+}
+
+// NOTE numDims may be less than this.numDims, if we don't care about the trailing values in the index
+QQTree.prototype.findGap = function(numDims, volume) {
+	findGap(this.root, makePathIter(numDims, volume));
+};
+
+// find empty vs find full?
+
+// gap
+// convert query point to local volume
+// make a pathIter for the query
+// walk path until something is missing
+// extract current volume from the pathIter
+
+// cover
+// query volume should not need converting
+// at each node, want to check all 0-4, starting at 0
+// need to be able to backtrack...
+
+// SOLVING
+
+// if cover in provenance, return
+// if point, return
+// split and recurse
+// take first point or resolve and readd both gaps
+
+// with point, lookup all gaps and add to cover
+// if no gaps, add to solutions
 
 // TESTS
 
@@ -265,7 +296,7 @@ function numNodes(tree) {
 
 function benchQQ(users, logins, bans) {
 	console.time("insert");
-	console.profile();
+	//console.profile();
 	var usersTree = makeQQTree(2).inserts(users);
 	var loginsTree = makeQQTree(2).inserts(logins);
 	var bansTree = makeQQTree(1).inserts(bans);
