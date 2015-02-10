@@ -10,6 +10,8 @@ var END_OF_PATH = ["End of path"];
 
 var NO_GAP = ["No gap"];
 
+var NO_COVER = ["No cover"];
+
 function getTag(node) {
 	return node[0];
 }
@@ -32,38 +34,67 @@ function setNumBits(volume, numDims, dim, numBits) {
 	volume[1 + numDims + dim] = numBits;
 }
 
-// PATHS
+// PATH ITERS
+// pathIter is (dim, chunkStart) packed into a int so we don't have to stack allocate
 
-function getPath(volume, numDims, depth) {
-	for (var dim = 0; dim < numDims; dim++) {
-		var valueBits = getNumBits(volume, numDims, dim);
-		var numChunks = 1 + (valueBits >> 2);
-		if (depth < numChunks) {
-			var chunkStart = depth * 4;
-			var chunkEnd = Math.min(chunkStart + 4, valueBits);
-			var chunkBits = chunkEnd - chunkStart;
-			var chunkMask = ((1 << chunkBits) - 1);
-			var chunk = (getValue(volume, dim) >> (32 - chunkEnd)) & chunkMask;
-			// stagger path so that there is space for all combinations of 0-4 bit chunks
-			return chunk + (1 << chunkBits) - 1;
-		}
-		depth -= numChunks;
-	}
-	return END_OF_PATH;
+var pathMult = Math.pow(2, 32);
+
+function makePathIter(dim, chunkStart) {
+	return (dim * pathMult) + chunkStart;
 }
 
-function getEnclosingVolume(volume, numDims, depth) {
-	var enclosingVolume = volume.slice();
-	var depthBits = depth * 4;
-	for (var dim = 0; dim < numDims; dim++) {
-		var valueBits = getNumBits(volume, numDims, dim);
-		var numChunks = 1 + (valueBits >> 2);
-		if (depth < 0) {
-			setNumBits(enclosingVolume, numDims, dim, 0);
-		} else if (depth < numChunks) {
-			setNumBits(enclosingVolume, numDims, dim, depth * 4);
+function getPath(pathIter, volume, numDims) {
+	var dim = (pathIter / pathMult) | 0;
+	var chunkStart = pathIter | 0;
+	var numBits = getNumBits(volume, dim);
+	var chunkEnd = Math.min(chunkStart + 4, numBits);
+	var chunkBits = chunkEnd - chunkStart;
+	var chunkMask = ((1 << chunkBits) - 1);
+	var chunk = (getValue(volume, dim) >> (32 - chunkEnd)) & chunkMask;
+	// stagger path so that there is space for all combinations of 0-4 bit chunks
+	return chunk + (1 << chunkBits) - 1;
+}
+
+function nextDim(pathIter, volume, numDims) {
+	var dim = (pathIter / pathMult) | 0;
+	if (dim < numDims) {
+		return makePathIter(dim + 1, 0);
+	} else {
+		return END_OF_PATH;
+	}
+}
+
+function thisChunk(pathIter, volume, numDims) {
+	var dim = (pathIter / pathMult) | 0;
+	var chunkStart = pathIter | 0;
+	var numBits = getNumBits(volume, dim);
+	if (chunkStart <= numBits) {
+		return makePathIter(dim, chunkStart);
+	} else {
+		if (dim < numDims) {
+			return makePathIter(dim + 1, 0);
+		} else {
+			return END_OF_PATH;
 		}
-		depth -= numChunks;
+	}
+}
+
+function nextChunk(pathIter, volume, numDims) {
+	return thisChunk(pathIter + 4, volume, numDims);
+}
+
+function isPartial(pathBit) {
+	return pathBit >= 32768; // ie chunk was 4 bits
+}
+
+function getEnclosingVolume(pathIter, volume, numDims) {
+	var dim = (pathIter / pathMult) | 0;
+	var chunkStart = pathIter | 0;
+	var enclosingVolume = volume.slice();
+	var numBits = getNumBits(enclosingVolume, numDims, dim);
+	setNumBits(enclosingVolume, numDims, dim, Math.min(chunkStart + 4, numBits));
+	for (var unusedDim = dim + 1; unusedDim < numDims; unusedDim++) {
+		setNumBits(enclosingVolume, numDims, unusedDim, 0);
 	}
 	return enclosingVolume;
 }
@@ -76,7 +107,8 @@ for (var chunkBits = 0; chunkBits < 5; chunkBits++) {
 	}
 }
 
-var ENCLOSED_PATHS = [];
+// all paths which are a prefix of this path
+var PREFIXES = [];
 for (var chunkBits = 0; chunkBits < 5; chunkBits++) {
 	for (var chunk = 0; chunk < Math.pow(2, chunkBits); chunk++) {
 		var path = chunk + (1 << chunkBits) - 1;
@@ -86,13 +118,13 @@ for (var chunkBits = 0; chunkBits < 5; chunkBits++) {
 			for (var matchingChunk = 0; matchingChunk < Math.pow(2, matchingChunkBits); matchingChunk++) {
 				var matchingPath = matchingChunk + (1 << matchingChunkBits) - 1;
 				var chunkMask = (1 << matchingChunkBits) - 1;
-				if (((chunk & chunkMask) === matchingChunk)) {
+				if ((chunkBits >= matchingChunkBits) && ((chunk & chunkMask) === matchingChunk)) {
 					matches = matches | (1 << matchingPath);
 				}
 			}
 		}
 
-		ENCLOSED_PATHS[path] = matches;
+		PREFIXES[path] = matches;
 	}
 }
 
@@ -153,18 +185,21 @@ function QQTree(numDims, root) {
 	this.root = root;
 }
 
-function insert(parent, parentPath, node, volume, numDims, depth) {
+function insert(parent, parentPath, node, volume, numDims) {
+	var pathIter = makePathIter(0, 0);
 	while (true) {
 		switch (getTag(node)) {
 			case BRANCH:
-				var path = getPath(volume, numDims, depth);
-				if (path === END_OF_PATH) throw "Unexpected end of path - is the number of dimensions right?";
+				var path = getPath(pathIter, volume, numDims);
 				var entries = getEntries(node);
 				if ((entries & (1 << path)) !== 0) {
 					parent = node;
 					parentPath = path;
 					node = getChild(node, 1 << path);
-					depth += 1;
+					pathIter = nextChunk(pathIter, volume, numDims);
+					if (pathIter === END_OF_PATH) {
+						throw "Unexpected end of path - is the number of dimensions right?";
+					}
 				} else {
 					insertChild(node, 1 << path, volume);
 					return;
@@ -175,20 +210,20 @@ function insert(parent, parentPath, node, volume, numDims, depth) {
 				var tmp = node;
 				node = makeBranch(2);
 				replaceChild(parent, 1 << parentPath, node);
-				insertChild(node, 1 << getPath(tmp, numDims, depth), tmp);
+				insertChild(node, 1 << getPath(pathIter, tmp, numDims), tmp);
 				break;
 		}
 	}
 }
 
 QQTree.prototype.insert = function(volume) {
-	insert(this.root, 0, this.root, volume, this.numDims, 0);
+	insert(this.root, 0, this.root, volume, this.numDims);
 	return this;
 };
 
 QQTree.prototype.inserts = function(volumes) {
 	for (var i = 0, len = volumes.length; i < len; i++) {
-		insert(this.root, 0, this.root, volumes[i], this.numDims, 0);
+		insert(this.root, 0, this.root, volumes[i], this.numDims);
 	}
 	return this;
 };
@@ -200,38 +235,84 @@ function makeQQTree(numDims) {
 // SEARCHING
 
 // find maximum gap, given a tree of points and a search point
-// TODO this is somewhat lazy - we always give chunk -ligned gaps when we could sometimes do better
+// TODO this is somewhat lazy - we always give chunk-aligned gaps when we could sometimes do better
 //      instead, when we find a gap we should try less bits until we find a tight gap
-//      but is difficult to calculate with the path stuff
-function findGap(node, volume, searchDims, treeDims, depth) {
+function findGap(node, volume, numDims) {
+	var pathIter = makePathIter(0, 0);
 	while (true) {
 		switch (getTag(node)) {
 			case BRANCH:
-				var path = getPath(volume, searchDims, depth);
-				if (path === END_OF_PATH) return NO_GAP;
+				var path = getPath(pathIter, volume, numDims);
 				var entries = getEntries(node);
 				if ((entries & (1 << path)) !== 0) {
 					node = getChild(node, 1 << path);
-					depth += 1;
+					pathIter = nextChunk(pathIter, volume, numDims);
+					if (pathIter === END_OF_PATH) return NO_GAP;
 				} else {
-					return getEnclosingVolume(volume, searchDims, depth + 1);
+					return getEnclosingVolume(pathIter, 0, volume, numDims);
 				}
 				break;
 
 			case VOLUME:
 				while (true) {
-					var path = getPath(volume, searchDims, depth);
-					if (path === END_OF_PATH) return NO_GAP;
-					if (path !== getPath(node, treeDims, depth)) return getEnclosingVolume(volume, searchDims, depth + 1);
-					depth += 1;
+					if (getPath(pathIter, volume, numDims) !== getPath(pathIter, node, numDims)) {
+						return getEnclosingVolume(pathIter, volume, numDims);
+					}
+					pathIter = nextChunk(pathIter, volume, numDims);
+					if (pathIter === END_OF_PATH) return NO_GAP;
 				}
 		}
 	}
 }
 
-// NOTE numDims may be less than this.numDims, if we don't care about the trailing values in the index
+// NOTE numDims may be less than this.numDims if we don't care about the trailing values in the index
 QQTree.prototype.findGap = function(volume, numDims) {
-	return findGap(this.root, volume, numDims, this.numDims, 0);
+	if (numDims > this.numDims) throw "Too many dims!";
+	return findGap(this.root, volume, numDims);
+};
+
+function findCover(node, numDims, volume) {
+	var pathIter = makePathIter(0, 0);
+	var queue = [node, pathIter];
+	var startIx = -2;
+	var endIx = 2;
+	nextNode: while (true) {
+		startIx += 2;
+		if (startIx === endIx) return NO_COVER;
+		node = queue[startIx];
+		pathIter = queue[startIx + 1];
+		handleNode: switch (getTag(node)) {
+			case BRANCH:
+				if (pathIter === END_OF_PATH) continue nextNode;
+				var path = getPath(pathIter, volume, numDims);
+				var matches = getEntries(node) & PREFIXES[path];
+				while (matches !== 0) {
+					var pathBit = matches & -matches; // smallest one bit
+					matches = matches & ~pathBit; // pop path
+					var child = getChild(node, pathBit);
+					var childPathIter = isPartial(pathBit) ? nextDim(pathIter, volume, numDims) : nextChunk(pathIter, volume, numDims);
+					queue[endIx++] = child;
+					pathIter[endIx++] = childPathIter;
+				}
+				break;
+
+			case VOLUME:
+				for (var dim = (pathIter / pathMult) | 0; dim < numDims; dim++) {
+					var numBits = getNumBits(volume, dim, numDims);
+					var nodeNumBits = getNumBits(node, dim, numDims);
+					if (nodeNumBits > numBits) continue nextNode;
+					var value = getValue(volume, dim);
+					var nodeValue = getValue(node, dim);
+					var mask = (1 << nodeNumBits) - 1;
+					if ((value & mask) !== nodeValue) continue nextNode;
+				}
+				return node;
+		}
+	}
+}
+
+QQTree.prototype.findCover = function(volume) {
+	return findCover(this.root, this.numDims, volume);
 };
 
 // find empty vs find full?
@@ -256,6 +337,9 @@ QQTree.prototype.findGap = function(volume, numDims) {
 
 // with point, lookup all gaps and add to cover
 // if no gaps, add to solutions
+
+// findGap => =
+// findCover => <=
 
 // TESTS
 
