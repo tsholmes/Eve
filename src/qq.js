@@ -30,6 +30,10 @@ function getNumBits(volume, numDims, dim) {
 	return volume[1 + numDims + dim];
 }
 
+function setValue(volume, dim, value) {
+	volume[1 + dim] = value;
+}
+
 function setNumBits(volume, numDims, dim, numBits) {
 	volume[1 + numDims + dim] = numBits;
 }
@@ -46,7 +50,7 @@ function makePathIter(dim, chunkStart) {
 function getPath(pathIter, volume, numDims) {
 	var dim = (pathIter / pathMult) | 0;
 	var chunkStart = pathIter | 0;
-	var numBits = getNumBits(volume, dim);
+	var numBits = getNumBits(volume, numDims, dim);
 	var chunkEnd = Math.min(chunkStart + 4, numBits);
 	var chunkBits = chunkEnd - chunkStart;
 	var chunkMask = ((1 << chunkBits) - 1);
@@ -64,10 +68,11 @@ function nextDim(pathIter, volume, numDims) {
 	}
 }
 
-function thisChunk(pathIter, volume, numDims) {
+function nextChunk(pathIter, volume, numDims) {
 	var dim = (pathIter / pathMult) | 0;
 	var chunkStart = pathIter | 0;
-	var numBits = getNumBits(volume, dim);
+	var numBits = getNumBits(volume, numDims, dim);
+	chunkStart += 4;
 	if (chunkStart <= numBits) {
 		return makePathIter(dim, chunkStart);
 	} else {
@@ -77,10 +82,6 @@ function thisChunk(pathIter, volume, numDims) {
 			return END_OF_PATH;
 		}
 	}
-}
-
-function nextChunk(pathIter, volume, numDims) {
-	return thisChunk(pathIter + 4, volume, numDims);
 }
 
 function isPartial(pathBit) {
@@ -341,32 +342,7 @@ QQTree.prototype.findCover = function(volume) {
 // findGap => =
 // findCover => <=
 
-// TESTS
-
-function slowPopulation(v) {
-	var c = 0;
-	for (var i = 0; i < 32; i++) {
-		c += (v >> i) & 1;
-	}
-	return c;
-}
-
-function testPopulation(n) {
-	for (var i = 0; i < n; i++) {
-		var v = (Math.random() * Math.pow(2, 32)) | 0;
-		if (population(v) !== slowPopulation(v)) throw ("Failed on " + v);
-	}
-}
-
-function bits(n) {
-	var s = "";
-	for (var i = 31; i >= 0; i--) {
-		s += (n >> i) & 1;
-	}
-	return s;
-}
-
-// BENCH
+// BENCHMARKS
 
 function index(facts, ix) {
 	var index = {};
@@ -551,3 +527,92 @@ function hash(o) {
 }
 
 // --- end of cljs.core ---
+
+var q = makeQQTree(2);
+for (var i = 0; i < 1000; i++) {
+	q.insert([0, i, i, 32, 32]);
+}
+
+// TESTS
+
+var bigcheck = bigcheck; // make jshint happy
+
+function slowPopulation(v) {
+	var c = 0;
+	for (var i = 0; i < 32; i++) {
+		c += (v >> i) & 1;
+	}
+	return c;
+}
+
+function testPopulation(n) {
+	for (var i = 0; i < n; i++) {
+		var v = (Math.random() * Math.pow(2, 32)) | 0;
+		if (population(v) !== slowPopulation(v)) throw ("Failed on " + v);
+	}
+}
+
+function bits(n) {
+	var s = "";
+	for (var i = 31; i >= 0; i--) {
+		s += (n >> i) & 1;
+	}
+	return s;
+}
+
+bigcheck.value = bigcheck.integer;
+
+bigcheck.numBits = new bigcheck.Generator(
+	function numBitsGrow(size) {
+		return Math.floor(Math.min(size, 32) * Math.random());
+	},
+	function numBitsShrink(value, bias) {
+		if (Math.random() < bias) {
+			return 0;
+		} else {
+			return Math.floor(value * Math.random());
+		}
+	});
+
+bigcheck.point = function(numDims) {
+	var value = bigcheck.value;
+	return new bigcheck.Generator(
+		function tupleGrow(size) {
+			var volume = makeVolume(numDims);
+			for (var dim = 0; dim < numDims; dim++) {
+				setValue(volume, dim, value.grow(bigcheck.resize(size)));
+				setNumBits(volume, dim, numDims, 32);
+			}
+			return volume;
+		},
+		function tupleShrink(volume, bias) {
+			volume = volume.slice();
+			var dim = Math.floor(Math.random() * numDims);
+			setValue(volume, dim, value.shrink(getValue(volume, dim), bigcheck.rebias(bias)));
+			return volume;
+		});
+};
+
+bigcheck.volume = function(numDims) {
+	var value = bigcheck.value;
+	var numBits = bigcheck.numBits;
+	return new bigcheck.Generator(
+		function tupleGrow(size) {
+			var volume = [0];
+			for (var dim = 0; dim < numDims; dim++) {
+				setValue(volume, dim, value.grow(bigcheck.resize(size)));
+				setNumBits(volume, dim, numDims, numBits.grow(bigcheck.resize(size)));
+			}
+			return volume;
+		},
+		function tupleShrink(volume, bias) {
+			volume = volume.slice();
+			var dim = Math.floor(Math.random() * numDims);
+			if (Math.random() > 0.5) {
+				setValue(volume, dim, value.shrink(getValue(volume, dim), bigcheck.rebias(bias)));
+			} else {
+				setNumBits(volume, dim, numDims, numBits.shrink(getValue(volume, dim, numDims), bigcheck.rebias(bias)));
+			}
+			return volume;
+		});
+};

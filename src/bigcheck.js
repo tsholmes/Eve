@@ -1,8 +1,8 @@
-var bigcheck = (function () {
+var bigcheck = (function() {
   var exports;
 
   function isInteger(n) {
-    return n === +n && n === (n|0);
+    return n === +n && n === (n | 0);
   }
 
   // GENERATORS
@@ -133,11 +133,13 @@ var bigcheck = (function () {
     var name = gens.shift();
     var fun = gens.pop();
     var gen = tuple(gens);
-    return new ForAll(name, gen, function (values) {fun.apply(null, values)});
+    return new ForAll(name, gen, function(values) {
+      fun.apply(null, values)
+    });
   }
 
   ForAll.prototype = {
-    check: function (options) {
+    check: function(options) {
       console.info("Testing: " + this.name);
       console.time(this.name);
 
@@ -242,7 +244,19 @@ var bigcheck = (function () {
   //        }).check({maxTests: 10000000, maxShrinks: 20000000, bias: 0});
   // console.timeEnd("Arrays are not strictly sorted");
 
-  exports = {number: number, integer: integer, array: array, tuple: tuple, value: value, facts: facts, forall: forall, foralls: foralls};
+  exports = {
+    Generator: Generator,
+    resize: resize,
+    rebias: rebias,
+    number: number,
+    integer: integer,
+    array: array,
+    tuple: tuple,
+    value: value,
+    facts: facts,
+    forall: forall,
+    foralls: foralls
+  };
 
   return exports;
 })();
