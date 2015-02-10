@@ -302,7 +302,7 @@ function findCover(node, numDims, volume) {
 					if (nodeNumBits > numBits) continue nextNode;
 					var value = getValue(volume, dim);
 					var nodeValue = getValue(node, dim);
-					var mask = (1 << nodeNumBits) - 1;
+					var mask = -Math.pow(2, 32 - nodeNumBits);
 					if ((value & mask) !== nodeValue) continue nextNode;
 				}
 				return node;
@@ -604,6 +604,19 @@ function dedupe(as) {
 
 function sameContents(a, b) {
 	return sameValue(dedupe(a), dedupe(b));
+}
+
+function contains(numDims, volume, point) {
+	for (var dim = 0; dim < numDims; dim++) {
+		var volumeNumBits = getNumBits(volume, numDims, dim);
+		var pointNumBits = getNumBits(point, numDims, dim);
+		if (volumeNumBits > pointNumBits) return false;
+		var volumeValue = getValue(volume, dim);
+		var pointValue = getValue(point, dim);
+		var mask = -Math.pow(2, 32 - volumeNumBits);
+		if (volumeValue !== (pointValue & mask)) return false;
+	}
+	return true;
 }
 
 bigcheck.value = bigcheck.integer;
