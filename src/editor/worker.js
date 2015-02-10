@@ -25,6 +25,10 @@ var console = {
 
 
 eveApp.timerWatcher = function(application, storage, system) {
+  const TIMER_ID = 2;
+  const TIMER_EVENT = 1;
+  const TIMER_RATE = 3;
+
   var timers = system.getStore("timer");
   if(!timers) return;
 
@@ -35,15 +39,15 @@ eveApp.timerWatcher = function(application, storage, system) {
   timeouts = storage["timeouts"] || {};
 
   foreach(remove of removes) {
-    var id = remove[1];
+    var id = remove[TIMER_ID];
     clearTimeout(timeouts[id]);
     timeouts[id] = null;
   }
 
   foreach(add of adds) {
-    var id = add[1];
-    var event = add[0];
-    var rate = add[2];
+    var id = add[TIMER_ID];
+    var event = add[TIMER_EVENT];
+    var rate = add[TIMER_RATE];
 
     if(!id) continue;
     if(!rate || typeof(rate) === "string" || rate < 16) rate = 16;
