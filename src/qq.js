@@ -198,9 +198,7 @@ function insert(parent, parentPath, node, volume, numDims) {
 					parentPath = path;
 					node = getChild(node, 1 << path);
 					pathIter = nextChunk(pathIter, volume, numDims);
-					if (pathIter === END_OF_PATH) {
-						throw "Unexpected end of path - is the number of dimensions right?";
-					}
+					if (pathIter === END_OF_PATH) return; // already inserted
 				} else {
 					insertChild(node, 1 << path, volume);
 					return;
@@ -344,26 +342,26 @@ QQTree.prototype.findCover = function(volume) {
 
 // BENCHMARKS
 
-function index(facts, ix) {
+function index(as, ix) {
 	var index = {};
-	for (var i = 0, len = facts.length; i < len; i++) {
-		var fact = facts[i];
-		var value = fact[ix];
+	for (var i = 0, len = as.length; i < len; i++) {
+		var a = as[i];
+		var value = a[ix];
 		var bucket = index[value] || (index[value] = []);
-		bucket.push(fact);
+		bucket.push(a);
 	}
 	return index;
 }
 
-function lookup(facts, ix, index) {
+function lookup(as, ix, index) {
 	var results = [];
-	for (var i = 0, factsLen = facts.length; i < factsLen; i++) {
-		var fact = facts[i];
-		var value = fact[ix];
+	for (var i = 0, asLen = as.length; i < asLen; i++) {
+		var a = as[i];
+		var value = a[ix];
 		var bucket = index[value];
 		if (bucket !== undefined) {
 			for (var j = 0, bucketLen = bucket.length; j < bucketLen; j++) {
-				results.push(fact.concat(bucket[j]));
+				results.push(a.concat(bucket[j]));
 			}
 		}
 	}
@@ -528,12 +526,26 @@ function hash(o) {
 
 // --- end of cljs.core ---
 
-var q = makeQQTree(2);
-for (var i = 0; i < 1000; i++) {
-	q.insert([0, i, i, 32, 32]);
-}
-
 // TESTS
+
+QQTree.prototype.volumes = function() {
+	var volumes = [];
+	var nodes = [this.root];
+	while (nodes.length > 0) {
+		var node = nodes.pop();
+		switch (getTag(node)) {
+			case BRANCH:
+				for (var i = 0, max = node.length - 2; i < max; i++) {
+					nodes.push(node[2 + i]);
+				}
+				break;
+
+			case VOLUME:
+				volumes.push(node);
+		}
+	}
+	return volumes;
+};
 
 var bigcheck = bigcheck; // make jshint happy
 
@@ -558,6 +570,40 @@ function bits(n) {
 		s += (n >> i) & 1;
 	}
 	return s;
+}
+
+function sameValue(a, b) {
+	if (typeof(a) !== typeof(b)) return false;
+	if (Array.isArray(a)) {
+		if (a.length !== b.length) return false;
+		for (var i = 0; i < a.length; i++) {
+			if (sameValue(a[i], b[i]) === false) return false;
+		}
+		return true;
+	} else {
+		return (a === b);
+	}
+}
+
+function dedupe(as) {
+	var len = as.length;
+	if (len === 0) return [];
+	as.sort();
+	var next = as[0];
+	var last;
+	var deduped = [next];
+	for (var i = 1; i < len; i++) {
+		last = next;
+		next = as[i];
+		if (sameValue(last, next) === false) {
+			deduped.push(next);
+		}
+	}
+	return deduped;
+}
+
+function sameContents(a, b) {
+	return sameValue(dedupe(a), dedupe(b));
 }
 
 bigcheck.value = bigcheck.integer;
@@ -611,8 +657,24 @@ bigcheck.volume = function(numDims) {
 			if (Math.random() > 0.5) {
 				setValue(volume, dim, value.shrink(getValue(volume, dim), bigcheck.rebias(bias)));
 			} else {
-				setNumBits(volume, dim, numDims, numBits.shrink(getValue(volume, dim, numDims), bigcheck.rebias(bias)));
+				setNumBits(volume, dim, numDims, numBits.shrink(getNumBits(volume, dim, numDims), bigcheck.rebias(bias)));
 			}
 			return volume;
 		});
 };
+
+var testDims = 3;
+
+var testTrees =
+	bigcheck.forall("Trees don't lose volumes",
+		bigcheck.array(bigcheck.volume(testDims)),
+		function(volumes) {
+			var qq = makeQQTree(testDims).inserts(volumes);
+			var outVolumes = qq.volumes();
+			return sameContents(volumes, outVolumes);
+		});
+
+testTrees.check({
+	maxTests: 1000,
+	maxSize: 1000
+});

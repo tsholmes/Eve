@@ -134,7 +134,7 @@ var bigcheck = (function() {
     var fun = gens.pop();
     var gen = tuple(gens);
     return new ForAll(name, gen, function(values) {
-      fun.apply(null, values)
+      fun.apply(null, values);
     });
   }
 
@@ -163,7 +163,9 @@ var bigcheck = (function() {
         numTests += 1;
         if (numTests >= maxTests) {
           console.timeEnd(this.name);
-          return new Success(numTests, options, this);
+          var success = new Success(numTests, options, this);
+          console.log(success);
+          return success;
         }
       }
 
@@ -188,7 +190,10 @@ var bigcheck = (function() {
         numShrinks += 1;
         if (numShrinks >= maxShrinks) {
           console.timeEnd(this.name);
-          return new Failure(size, numTests, numShrinks, shrunkInput, shrunkOutput, input, output, options, this);
+          var failure = new Failure(size, numTests, numShrinks, shrunkInput, shrunkOutput, input, output, options, this);
+          console.log(failure);
+          console.log("Counterexample:", JSON.stringify(shrunkInput));
+          return failure;
         }
       }
     },
@@ -205,7 +210,7 @@ var bigcheck = (function() {
 
     recheck: function(input) {
       var input = input || exports.lastFailure.shrunkInput;
-      if (input) {
+      if (input !== undefined) {
         return this.fun.call(null, input);
       } else {
         return true;
