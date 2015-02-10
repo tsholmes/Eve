@@ -169,6 +169,8 @@ var bigcheck = (function() {
         }
       }
 
+      console.log("Shrinking:", JSON.stringify(input));
+
       var numShrinks = 0;
       var maxShrinks = options.maxShrinks || (2 * maxTests);
       var bias = options.bias || 0.25; // TODO grow/shrink bias
@@ -192,7 +194,7 @@ var bigcheck = (function() {
           console.timeEnd(this.name);
           var failure = new Failure(size, numTests, numShrinks, shrunkInput, shrunkOutput, input, output, options, this);
           console.log(failure);
-          console.log("Counterexample:", JSON.stringify(shrunkInput));
+          console.log("Shrunk:", JSON.stringify(shrunkInput));
           return failure;
         }
       }

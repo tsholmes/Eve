@@ -625,7 +625,9 @@ bigcheck.point = function(numDims) {
 		function tupleGrow(size) {
 			var volume = makeVolume(numDims);
 			for (var dim = 0; dim < numDims; dim++) {
-				setValue(volume, dim, bigcheck.value.grow(bigcheck.resize(size)));
+				var value = bigcheck.value.grow(bigcheck.resize(size));
+				value = value | 0;
+				setValue(volume, dim, value);
 				setNumBits(volume, dim, numDims, 32);
 			}
 			return volume;
@@ -645,7 +647,7 @@ bigcheck.volume = function(numDims) {
 			for (var dim = 0; dim < numDims; dim++) {
 				var numBits = bigcheck.numBits.grow(bigcheck.resize(size));
 				var value = bigcheck.value.grow(bigcheck.resize(size));
-				value *= Math.pow(2, 32 - numBits);
+				value = (value * Math.pow(2, 32 - numBits)) | 0;
 				setValue(volume, dim, value);
 				setNumBits(volume, dim, numDims, numBits);
 			}
@@ -674,7 +676,12 @@ var testTrees =
 			return sameContents(volumes, outVolumes);
 		});
 
-testTrees.check({
-	maxTests: 1000,
-	maxSize: 1000
-});
+function test() {
+	testTrees.check({
+		maxTests: 1000,
+		maxSize: 1000,
+		maxShrinks: 10000
+	})
+}
+
+test();
