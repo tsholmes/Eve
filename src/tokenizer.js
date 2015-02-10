@@ -935,6 +935,7 @@ function injectParsed(parsed, program, prefix, programName) {
   var context = {nextId: 0, programName: programName};
   var facts = [];
   var values = {};
+  var autoId = {};
   for(var ix = 0; ix < parsed.rules.length; ix++) {
     var curId = context.nextId;
     var curRule = parsed.rules[ix];
@@ -1044,6 +1045,10 @@ function injectParsed(parsed, program, prefix, programName) {
 
      // handle fields
     if(curRule.header) {
+      facts.push(["isInput", curRule.name]);
+      if(!autoId[curRule.name]) autoId[curRule.name] = 0;
+      facts.push(["tag", makeLocalField("__id__"), "hidden"]);
+
       curRule.header.fields.forEach(function(cur) {
         makeLocalField(cur.name);
       });
@@ -1065,24 +1070,25 @@ function injectParsed(parsed, program, prefix, programName) {
 
     // handle header
     if(curRule.header) {
-      facts.push(["isInput", curRule.name]);
+
       var tableFields = curRule.header.fields.map(function(cur) {
         return cur.name;
       });
-      var orderedTableFields = tableFields.slice();
-      orderedTableFields.sort();
+      var orderedTableFields = orderedFields;
 
       if(!values[curRule.name]) values[curRule.name] = [];
 
       // have to reorder insert facts to match the default field ordering
       for(var valueIx = curRule.values.length - 1; valueIx >= 0; valueIx--) {
         var insert = curRule.values[valueIx].values;
-        var value = [];
+        var value = [autoId[curRule.name]++];
         for (var insertIx = insert.length - 1; insertIx >= 0; insertIx--) {
           value[orderedTableFields.indexOf(tableFields[insertIx])] = insert[insertIx];
         }
+
         if(value.length === orderedTableFields.length) {
           values[curRule.name].push(value);
+
         } else {
           errors.push({message: "Inserted value must contain " + orderedTableFields.length + " fields. " + value.length + " currently provided.", line: curRule.values[valueIx].line});
         }

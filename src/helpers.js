@@ -328,7 +328,7 @@ function view(name, fields, tags) {
   }
 
   if(tags.indexOf("input") > -1 && tags.indexOf("system input") === -1) {
-    var field = "__insertion id__";
+    var field = "__id__";
     var id = name + "|field=" + field;
     facts.push(
       ["displayName", id, field],
