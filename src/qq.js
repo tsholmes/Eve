@@ -621,12 +621,11 @@ bigcheck.numBits = new bigcheck.Generator(
 	});
 
 bigcheck.point = function(numDims) {
-	var value = bigcheck.value;
 	return new bigcheck.Generator(
 		function tupleGrow(size) {
 			var volume = makeVolume(numDims);
 			for (var dim = 0; dim < numDims; dim++) {
-				setValue(volume, dim, value.grow(bigcheck.resize(size)));
+				setValue(volume, dim, bigcheck.value.grow(bigcheck.resize(size)));
 				setNumBits(volume, dim, numDims, 32);
 			}
 			return volume;
@@ -634,20 +633,21 @@ bigcheck.point = function(numDims) {
 		function tupleShrink(volume, bias) {
 			volume = volume.slice();
 			var dim = Math.floor(Math.random() * numDims);
-			setValue(volume, dim, value.shrink(getValue(volume, dim), bigcheck.rebias(bias)));
+			setValue(volume, dim, bigcheck.value.shrink(getValue(volume, dim), bigcheck.rebias(bias)));
 			return volume;
 		});
 };
 
 bigcheck.volume = function(numDims) {
-	var value = bigcheck.value;
-	var numBits = bigcheck.numBits;
 	return new bigcheck.Generator(
 		function tupleGrow(size) {
 			var volume = [0];
 			for (var dim = 0; dim < numDims; dim++) {
-				setValue(volume, dim, value.grow(bigcheck.resize(size)));
-				setNumBits(volume, dim, numDims, numBits.grow(bigcheck.resize(size)));
+				var numBits = bigcheck.numBits.grow(bigcheck.resize(size));
+				var value = bigcheck.value.grow(bigcheck.resize(size));
+				value *= Math.pow(2, 32 - numBits);
+				setValue(volume, dim, value);
+				setNumBits(volume, dim, numDims, numBits);
 			}
 			return volume;
 		},
@@ -655,9 +655,9 @@ bigcheck.volume = function(numDims) {
 			volume = volume.slice();
 			var dim = Math.floor(Math.random() * numDims);
 			if (Math.random() > 0.5) {
-				setValue(volume, dim, value.shrink(getValue(volume, dim), bigcheck.rebias(bias)));
+				setValue(volume, dim, bigcheck.value.shrink(getValue(volume, dim), bigcheck.rebias(bias)));
 			} else {
-				setNumBits(volume, dim, numDims, numBits.shrink(getNumBits(volume, dim, numDims), bigcheck.rebias(bias)));
+				setNumBits(volume, dim, numDims, bigcheck.numBits.shrink(getNumBits(volume, dim, numDims), bigcheck.rebias(bias)));
 			}
 			return volume;
 		});
