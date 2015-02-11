@@ -134,7 +134,7 @@ var bigcheck = (function() {
     var fun = gens.pop();
     var gen = tuple(gens);
     return new ForAll(name, gen, function(values) {
-      fun.apply(null, values);
+      return fun.apply(null, values);
     });
   }
 
@@ -211,9 +211,10 @@ var bigcheck = (function() {
     },
 
     recheck: function(input) {
-      var input = input || exports.lastFailure.shrunkInput;
       if (input !== undefined) {
         return this.fun.call(null, input);
+      } else if (exports.lastFailure !== undefined) {
+        return this.fun.call(null, exports.lastFailure.shrunkInput);
       } else {
         return true;
       }

@@ -38,6 +38,24 @@ function setNumBits(volume, numDims, dim, numBits) {
 	volume[1 + numDims + dim] = numBits;
 }
 
+function containsDim(numDims, dim, volume, point) {
+	var volumeNumBits = getNumBits(volume, numDims, dim);
+	var pointNumBits = getNumBits(point, numDims, dim);
+	if (volumeNumBits > pointNumBits) return false;
+	var volumeValue = getValue(volume, dim);
+	var pointValue = getValue(point, dim);
+	var mask = -Math.pow(2, 32 - volumeNumBits);
+	if ((volumeValue & mask) !== (pointValue & mask)) return false;
+	return true;
+}
+
+function contains(numDims, volume, point) {
+	for (var dim = 0; dim < numDims; dim++) {
+		if (containsDim(numDims, dim, volume, point) === false) return false;
+	}
+	return true;
+}
+
 // PATH ITERS
 // pathIter is (dim, chunkStart) packed into a int so we don't have to stack allocate
 
@@ -248,7 +266,7 @@ function findGap(node, volume, numDims) {
 					pathIter = nextChunk(pathIter, volume, numDims);
 					if (pathIter === END_OF_PATH) return NO_GAP;
 				} else {
-					return getEnclosingVolume(pathIter, 0, volume, numDims);
+					return getEnclosingVolume(pathIter, volume, numDims);
 				}
 				break;
 
@@ -297,13 +315,7 @@ function findCover(node, numDims, volume) {
 
 			case VOLUME:
 				for (var dim = (pathIter / pathMult) | 0; dim < numDims; dim++) {
-					var numBits = getNumBits(volume, dim, numDims);
-					var nodeNumBits = getNumBits(node, dim, numDims);
-					if (nodeNumBits > numBits) continue nextNode;
-					var value = getValue(volume, dim);
-					var nodeValue = getValue(node, dim);
-					var mask = -Math.pow(2, 32 - nodeNumBits);
-					if ((value & mask) !== nodeValue) continue nextNode;
+					if (containsDim(numDims, dim, node, volume) === false) continue nextNode;
 				}
 				return node;
 		}
@@ -606,19 +618,6 @@ function sameContents(a, b) {
 	return sameValue(dedupe(a), dedupe(b));
 }
 
-function contains(numDims, volume, point) {
-	for (var dim = 0; dim < numDims; dim++) {
-		var volumeNumBits = getNumBits(volume, numDims, dim);
-		var pointNumBits = getNumBits(point, numDims, dim);
-		if (volumeNumBits > pointNumBits) return false;
-		var volumeValue = getValue(volume, dim);
-		var pointValue = getValue(point, dim);
-		var mask = -Math.pow(2, 32 - volumeNumBits);
-		if (volumeValue !== (pointValue & mask)) return false;
-	}
-	return true;
-}
-
 bigcheck.value = bigcheck.integer;
 
 bigcheck.numBits = new bigcheck.Generator(
@@ -680,8 +679,8 @@ bigcheck.volume = function(numDims) {
 
 var testDims = 3;
 
-var testTrees =
-	bigcheck.forall("Trees don't lose volumes",
+var testInserts =
+	bigcheck.foralls("Trees don't lose volumes",
 		bigcheck.array(bigcheck.volume(testDims)),
 		function(volumes) {
 			var qq = makeQQTree(testDims).inserts(volumes);
@@ -689,12 +688,39 @@ var testTrees =
 			return sameContents(volumes, outVolumes);
 		});
 
+var testFindGap =
+	bigcheck.foralls("findGap returns a gap",
+		bigcheck.array(bigcheck.point(testDims)),
+		bigcheck.point(testDims),
+		function(points, point) {
+			var qq = makeQQTree(testDims).inserts(points);
+			// TODO test with less dims
+			var gap = qq.findGap(point, testDims);
+			if (gap === NO_GAP) {
+				// point exists in points
+				return points.some(function(other) {
+					return sameValue(point, other);
+				});
+			} else {
+				// gap covers point and nothing else
+				// TODO test that gap is maximal ie reducing the numBits makes it cover something in points
+				return contains(testDims, gap, point) && !points.some(function(other) {
+					return contains(testDims, gap, other);
+				});
+			}
+		});
+
 function test() {
-	testTrees.check({
+	testInserts.check({
 		maxTests: 1000,
 		maxSize: 1000,
 		maxShrinks: 10000
-	})
+	});
+	testFindGap.check({
+		maxTests: 1000,
+		maxSize: 1000,
+		maxShrinks: 10000
+	});
 }
 
-test();
+// test();
