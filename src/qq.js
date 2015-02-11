@@ -309,7 +309,7 @@ function findCover(node, numDims, volume) {
 					var child = getChild(node, pathBit);
 					var childPathIter = isPartial(pathBit) ? nextDim(pathIter, volume, numDims) : nextChunk(pathIter, volume, numDims);
 					queue[endIx++] = child;
-					pathIter[endIx++] = childPathIter;
+					queue[endIx++] = childPathIter;
 				}
 				break;
 
@@ -671,7 +671,10 @@ bigcheck.volume = function(numDims) {
 			if (Math.random() > 0.5) {
 				setValue(volume, dim, bigcheck.value.shrink(getValue(volume, dim), bigcheck.rebias(bias)));
 			} else {
-				setNumBits(volume, dim, numDims, bigcheck.numBits.shrink(getNumBits(volume, dim, numDims), bigcheck.rebias(bias)));
+				var numBits = bigcheck.numBits.shrink(getNumBits(volume, dim, numDims), bigcheck.rebias(bias));
+				var value = (getValue(volume, dim) * Math.pow(2, 32 - numBits)) | 0;
+				setValue(volume, dim, value);
+				setNumBits(volume, dim, numDims, numBits);
 			}
 			return volume;
 		});
@@ -720,12 +723,12 @@ var testFindCover =
 			if (cover === NO_COVER) {
 				// no volumes cover the point
 				return !volumes.some(function(other) {
-					return contains(other, point);
+					return contains(testDims, other, point);
 				});
 			} else {
 				// cover covers the point and is from the volumes list
 				// TODO test that cover is maximal ie no other cover has a shorter path
-				return contains(cover, point) && volumes.some(function(other) {
+				return contains(testDims, cover, point) && volumes.some(function(other) {
 					return sameValue(other, cover);
 				});
 			}
