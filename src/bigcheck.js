@@ -152,6 +152,7 @@ var bigcheck = (function() {
       var output;
 
       while (true) {
+        console.log('Testing');
         var size = maxSize * (numTests / maxTests);
         input = this.gen.grow(size);
         try {

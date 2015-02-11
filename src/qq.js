@@ -424,7 +424,6 @@ function findUncovered(provenance, numDims) {
 
 // SOLVING
 
-
 function QQConstraint(index, variables) {
 	this.index = index;
 	this.variables = variables;
@@ -850,7 +849,6 @@ var testFindUncovered =
 		bigcheck.array(bigcheck.volume(testDims)),
 		bigcheck.point(testDims),
 		function(volumes, point) {
-			console.log('test');
 			var qq = makeQQTree(testDims).inserts(volumes);
 			var uncovered = findUncovered(qq, testDims);
 			if (uncovered === NO_UNCOVERED) {
