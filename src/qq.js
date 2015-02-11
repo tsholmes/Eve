@@ -24,6 +24,14 @@ function makeVolume(numDims) {
 	return buffer.slice(0, 1 + (2 * numDims));
 }
 
+function makePoint(numDims) {
+	var point = makeVolume(numDims);
+	for (var dim = 0; dim < numDims; dim++) {
+		setNumBits(point, numDims, dim, 32);
+	}
+	return point;
+}
+
 function getValue(volume, dim) {
 	return volume[1 + dim];
 }
@@ -298,6 +306,7 @@ QQTree.prototype.findGap = function(volume, numDims) {
 	return findGap(this.root, volume, numDims);
 };
 
+// TODO which cover should we prefer?
 function findCover(node, numDims, volume) {
 	var pathIter = makePathIter(0, 0);
 	var queue = [node, pathIter];
@@ -343,53 +352,78 @@ function QQConstraint(variables) {
 	this.variables = variables;
 }
 
-function findUncovered(provenance, volume, numDims) {
-	var stack = [];
-	var dim = 0;
-	var numBits = 0;
-	var value = getValue(volume, dim);
-	while (true) {
-		var cover = provenance.findCover(volume);
-		if (cover === NO_COVER) {
-			numBits += 1;
-			setNumBits(volume, numDims, dim, numBits);
-			if (numBits === 32) {
-				dim += 1;
-				if (dim === numDims) {
-					return volume; // found an uncovered point
-				}
-				numBits = 0;
-				value = getValue(volume, dim);
-			}
+// requires that volumeA and volumeB have a common suffix
+function resolve(volumeA, volumeB, numDims, mergeDim) {
+	var volume = makeVolume(numDims);
+	for (var dim = 0; dim < numDims; dim++) {
+		var numBitsA = getNumBits(volumeA, numDims, dim);
+		var numBitsB = getNumBits(volumeB, numDims, dim);
+		if (numBitsA > numBitsB) {
+			setValue(volume, dim, getValue(volumeA, dim));
+			setNumBits(volume, numDims, dim, numBitsA);
 		} else {
-			backtrack: while (true) {
-				var lastBit = (value >> (32 - numBits)) & 1; // ???
+			setValue(volume, dim, getValue(volumeB, dim));
+			setNumBits(volume, numDims, dim, numBitsB);
+		}
+	}
+	var numBits = getNumBits(volumeA, numDims, mergeDim) - 1;
+	setValue(volume, mergeDim, getValue(volumeA, mergeDim) & -Math.pow(2, 32 - numBits));
+	setNumBits(volume, numDims, mergeDim, numBits);
+	return volume;
+}
 
-				if (lastBit === 0) {
-					// try 1 instead
-					stack.push(cover);
-					value = value | (1 << (32 - numBits));
-					setValue(volume, dim, value);
-					// console.log("Trying 1", JSON.stringify(volume));
-					break backtrack;
-				} else {
-					// continue to backtrack
-					value = value & ~(1 << (32 - numBits));
-					setValue(volume, dim, value);
-					var prevCover = stack.pop();
-					// TODO resolve prevCover with cover and readd
-					if (numBits === 0) {
-						if (dim === 0) {
-							return NO_UNCOVERED; // found a cover for the whole space
-						}
-						dim -= 1;
-						numBits = 32;
-						value = getValue(volume, dim);
-					}
-					numBits -= 1;
-					setNumBits(volume, numDims, dim, numBits);
-				}
-			}
+function escape(volume, numDims) {
+	for (var dim = numDims - 1; dim >= 0; dim--) {
+		var numBits = getNumBits(volume, numDims, dim);
+		if (numBits > 0) {
+			return makePathIter(dim, numBits);
+		}
+	}
+	return makePathIter(0, 0);
+}
+
+function getBit(pathIter, volume) {
+	var dim = getDim(pathIter);
+	var numBits = getChunkStart(pathIter);
+	var value = getValue(volume, dim);
+	return (value >> (32 - numBits)) & 1;
+}
+
+function setBit(pathIter, volume, numDims) {
+	var dim = getDim(pathIter);
+	var numBits = getChunkStart(pathIter);
+	var value = getValue(volume, dim);
+	value = value & -Math.pow(2, 32 - numBits); // clear lower bits
+	value = value | (1 << (32 - numBits)); // set the escaping bit
+	setValue(volume, dim, value);
+	for (dim = dim + 1; dim < numDims; dim++) {
+		setValue(volume, dim, 0);
+	}
+}
+
+function findUncovered(provenance, numDims) {
+	var point = makePoint(numDims);
+	var cover = provenance.findCover(point);
+	if (cover === NO_COVER) return point;
+	var stack = [];
+	while (true) {
+		var pathIter = escape(cover, numDims);
+		if (pathIter === 0) return NO_UNCOVERED;
+		var lastBit = getBit(pathIter, cover);
+		if (lastBit === 0) {
+			stack.push(cover);
+			setBit(pathIter, point, numDims);
+			var cover = provenance.findCover(point);
+			if (cover === NO_COVER) return point;
+		} else {
+			var dim = getDim(pathIter);
+			var numBits = getChunkStart(pathIter);
+			var prevCover;
+			do {
+				prevCover = stack.pop();
+			} while (getNumBits(prevCover, numDims, dim) !== numBits);
+			cover = resolve(cover, prevCover, numDims, dim);
+			provenance.insert(cover);
 		}
 	}
 }
@@ -678,28 +712,17 @@ function sameContents(a, b) {
 	return sameValue(dedupe(a), dedupe(b));
 }
 
-bigcheck.value = bigcheck.integer;
 
-bigcheck.numBits = new bigcheck.Generator(
-	function numBitsGrow(size) {
-		return Math.floor(Math.min(size, 32) * Math.random());
-	},
-	function numBitsShrink(value, bias) {
-		if (Math.random() < bias) {
-			return 0;
-		} else {
-			return Math.floor(value * Math.random());
-		}
-	});
+function randomBits() {
+	return (Math.random() * Math.pow(2, 32)) | 0;
+}
 
 bigcheck.point = function(numDims) {
 	return new bigcheck.Generator(
 		function tupleGrow(size) {
 			var volume = makeVolume(numDims);
 			for (var dim = 0; dim < numDims; dim++) {
-				var value = bigcheck.value.grow(bigcheck.resize(size));
-				value = value | 0;
-				setValue(volume, dim, value);
+				setValue(volume, dim, randomBits());
 				setNumBits(volume, dim, numDims, 32);
 			}
 			return volume;
@@ -707,7 +730,9 @@ bigcheck.point = function(numDims) {
 		function tupleShrink(volume, bias) {
 			volume = volume.slice();
 			var dim = Math.floor(Math.random() * numDims);
-			setValue(volume, dim, bigcheck.value.shrink(getValue(volume, dim), bigcheck.rebias(bias)));
+			var value = getValue(volume, dim);
+			var mask = -(value & -value);
+			setValue(volume, dim, randomBits() & mask);
 			return volume;
 		});
 };
@@ -717,9 +742,8 @@ bigcheck.volume = function(numDims) {
 		function tupleGrow(size) {
 			var volume = [0];
 			for (var dim = 0; dim < numDims; dim++) {
-				var numBits = bigcheck.numBits.grow(bigcheck.resize(size));
-				var value = bigcheck.value.grow(bigcheck.resize(size));
-				value = (value * Math.pow(2, 32 - numBits)) | 0;
+				var value = randomBits();
+				var numBits = (Math.random() * Math.min(size, 32)) | 0;
 				setValue(volume, dim, value);
 				setNumBits(volume, dim, numDims, numBits);
 			}
@@ -729,9 +753,11 @@ bigcheck.volume = function(numDims) {
 			volume = volume.slice();
 			var dim = Math.floor(Math.random() * numDims);
 			if (Math.random() > 0.5) {
-				setValue(volume, dim, bigcheck.value.shrink(getValue(volume, dim), bigcheck.rebias(bias)));
+				var value = getValue(volume, dim);
+				var mask = -(value & -value);
+				setValue(volume, dim, randomBits(32) & mask);
 			} else {
-				var numBits = bigcheck.numBits.shrink(getNumBits(volume, dim, numDims), bigcheck.rebias(bias));
+				var numBits = (Math.random() * getNumBits(volume, numDims, dim)) | 0;
 				var value = (getValue(volume, dim) * Math.pow(2, 32 - numBits)) | 0;
 				setValue(volume, dim, value);
 				setNumBits(volume, dim, numDims, numBits);
@@ -795,14 +821,13 @@ var testFindCover =
 		});
 
 var testFindUncovered =
-	bigcheck.foralls("findCover returns a cover",
+	bigcheck.foralls("findUncovered returns an uncovered point if one exists",
 		bigcheck.array(bigcheck.volume(testDims)),
 		bigcheck.point(testDims),
 		function(volumes, point) {
-			localStorage.setItem("uncovered", JSON.stringify(volumes));
 			console.log('test');
 			var qq = makeQQTree(testDims).inserts(volumes);
-			var uncovered = findUncovered(qq, makeVolume(testDims), testDims, 0);
+			var uncovered = findUncovered(qq, testDims);
 			if (uncovered === NO_UNCOVERED) {
 				// there are no uncovered points, so the test point must be covered
 				// TODO test resolution is whole space
@@ -841,8 +866,3 @@ function test() {
 }
 
 // test();
-
-testFindUncovered.recheck([
-	[0, 0, 0, 0, 0, 1, 0],
-	[0, 0, -2147483648, 0, 0, 1, 0]
-]);
