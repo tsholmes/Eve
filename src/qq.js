@@ -742,8 +742,8 @@ bigcheck.volume = function(numDims) {
 		function tupleGrow(size) {
 			var volume = [0];
 			for (var dim = 0; dim < numDims; dim++) {
-				var value = randomBits();
 				var numBits = (Math.random() * Math.min(size, 32)) | 0;
+				var value = randomBits() & -Math.pow(2, numBits);
 				setValue(volume, dim, value);
 				setNumBits(volume, dim, numDims, numBits);
 			}
@@ -758,7 +758,7 @@ bigcheck.volume = function(numDims) {
 				setValue(volume, dim, randomBits(32) & mask);
 			} else {
 				var numBits = (Math.random() * getNumBits(volume, numDims, dim)) | 0;
-				var value = (getValue(volume, dim) * Math.pow(2, 32 - numBits)) | 0;
+				var value = getValue(volume, dim) & -Math.pow(2, numBits);
 				setValue(volume, dim, value);
 				setNumBits(volume, dim, numDims, numBits);
 			}
