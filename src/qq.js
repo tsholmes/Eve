@@ -103,7 +103,7 @@ function nextChunk(pathIter, volume, numDims) {
 }
 
 function isPartial(pathBit) {
-	return pathBit >= 32768; // ie chunk was 4 bits
+	return pathBit <= (1 << 14); // ie chunk was < 4 bits
 }
 
 function getEnclosingVolume(pathIter, volume, numDims) {
@@ -136,8 +136,8 @@ for (var chunkBits = 0; chunkBits < 5; chunkBits++) {
 		for (var matchingChunkBits = 0; matchingChunkBits < 5; matchingChunkBits++) {
 			for (var matchingChunk = 0; matchingChunk < Math.pow(2, matchingChunkBits); matchingChunk++) {
 				var matchingPath = matchingChunk + (1 << matchingChunkBits) - 1;
-				var chunkMask = (1 << matchingChunkBits) - 1;
-				if ((chunkBits >= matchingChunkBits) && ((chunk & chunkMask) === matchingChunk)) {
+				if ((chunkBits >= matchingChunkBits) &&
+					((chunk >> (chunkBits - matchingChunkBits)) === matchingChunk)) {
 					matches = matches | (1 << matchingPath);
 				}
 			}
@@ -741,12 +741,12 @@ function test() {
 		maxShrinks: 10000
 	});
 	testFindGap.check({
-		maxTests: 1000,
+		maxTests: 100000,
 		maxSize: 1000,
 		maxShrinks: 10000
 	});
 	testFindCover.check({
-		maxTests: 1000,
+		maxTests: 100000,
 		maxSize: 1000,
 		maxShrinks: 10000
 	});
