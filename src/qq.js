@@ -710,6 +710,27 @@ var testFindGap =
 			}
 		});
 
+var testFindCover =
+	bigcheck.foralls("findCover returns a cover",
+		bigcheck.array(bigcheck.volume(testDims)),
+		bigcheck.point(testDims),
+		function(volumes, point) {
+			var qq = makeQQTree(testDims).inserts(volumes);
+			var cover = qq.findCover(point);
+			if (cover === NO_COVER) {
+				// no volumes cover the point
+				return !volumes.some(function(other) {
+					return contains(other, point);
+				});
+			} else {
+				// cover covers the point and is from the volumes list
+				// TODO test that cover is maximal ie no other cover has a shorter path
+				return contains(cover, point) && volumes.some(function(other) {
+					return sameValue(other, cover);
+				});
+			}
+		});
+
 function test() {
 	testInserts.check({
 		maxTests: 1000,
@@ -717,6 +738,11 @@ function test() {
 		maxShrinks: 10000
 	});
 	testFindGap.check({
+		maxTests: 1000,
+		maxSize: 1000,
+		maxShrinks: 10000
+	});
+	testFindCover.check({
 		maxTests: 1000,
 		maxSize: 1000,
 		maxShrinks: 10000
