@@ -12,6 +12,8 @@ var NO_GAP = ["No gap"];
 
 var NO_COVER = ["No cover"];
 
+var NO_UNCOVERED = ["No uncovered"];
+
 function getTag(node) {
 	return node[0];
 }
@@ -65,9 +67,17 @@ function makePathIter(dim, chunkStart) {
 	return (dim * pathMult) + chunkStart;
 }
 
+function getDim(pathIter) {
+	return (pathIter / pathMult) | 0;
+}
+
+function getChunkStart(pathIter) {
+	return pathIter | 0;
+}
+
 function getPath(pathIter, volume, numDims) {
-	var dim = (pathIter / pathMult) | 0;
-	var chunkStart = pathIter | 0;
+	var dim = getDim(pathIter);
+	var chunkStart = getChunkStart(pathIter);
 	var numBits = getNumBits(volume, numDims, dim);
 	var chunkEnd = Math.min(chunkStart + 4, numBits);
 	var chunkBits = chunkEnd - chunkStart;
@@ -78,7 +88,7 @@ function getPath(pathIter, volume, numDims) {
 }
 
 function nextDim(pathIter, volume, numDims) {
-	var dim = (pathIter / pathMult) | 0;
+	var dim = getDim(pathIter);
 	if (dim < numDims) {
 		return makePathIter(dim + 1, 0);
 	} else {
@@ -87,8 +97,8 @@ function nextDim(pathIter, volume, numDims) {
 }
 
 function nextChunk(pathIter, volume, numDims) {
-	var dim = (pathIter / pathMult) | 0;
-	var chunkStart = pathIter | 0;
+	var dim = getDim(pathIter);
+	var chunkStart = getChunkStart(pathIter);
 	var numBits = getNumBits(volume, numDims, dim);
 	chunkStart += 4;
 	if (chunkStart <= numBits) {
@@ -107,8 +117,8 @@ function isPartial(pathBit) {
 }
 
 function getEnclosingVolume(pathIter, volume, numDims) {
-	var dim = (pathIter / pathMult) | 0;
-	var chunkStart = pathIter | 0;
+	var dim = getDim(pathIter);
+	var chunkStart = getChunkStart(pathIter);
 	var enclosingVolume = volume.slice();
 	var numBits = getNumBits(enclosingVolume, numDims, dim);
 	setNumBits(enclosingVolume, numDims, dim, Math.min(chunkStart + 4, numBits));
@@ -308,13 +318,14 @@ function findCover(node, numDims, volume) {
 					matches = matches & ~pathBit; // pop path
 					var child = getChild(node, pathBit);
 					var childPathIter = isPartial(pathBit) ? nextDim(pathIter, volume, numDims) : nextChunk(pathIter, volume, numDims);
-					queue[endIx++] = child;
-					queue[endIx++] = childPathIter;
+					queue[endIx] = child;
+					queue[endIx + 1] = childPathIter;
+					endIx += 2;
 				}
 				break;
 
 			case VOLUME:
-				for (var dim = (pathIter / pathMult) | 0; dim < numDims; dim++) {
+				for (var dim = getDim(pathIter); dim < numDims; dim++) {
 					if (containsDim(numDims, dim, node, volume) === false) continue nextNode;
 				}
 				return node;
@@ -326,20 +337,69 @@ QQTree.prototype.findCover = function(volume) {
 	return findCover(this.root, this.numDims, volume);
 };
 
-// find empty vs find full?
-
-// gap
-// convert query point to local volume
-// make a pathIter for the query
-// walk path until something is missing
-// extract current volume from the pathIter
-
-// cover
-// query volume should not need converting
-// at each node, want to check all 0-4, starting at 0
-// need to be able to backtrack...
-
 // SOLVING
+
+function QQConstraint(variables) {
+	this.variables = variables;
+}
+
+function findUncovered(provenance, volume, numDims) {
+	var stack = [];
+	var dim = 0;
+	var numBits = 0;
+	var value = getValue(volume, dim);
+	while (true) {
+		var cover = provenance.findCover(volume);
+		if (cover === NO_COVER) {
+			numBits += 1;
+			setNumBits(volume, numDims, dim, numBits);
+			if (numBits === 32) {
+				dim += 1;
+				if (dim === numDims) {
+					return volume; // found an uncovered point
+				}
+				numBits = 0;
+				value = getValue(volume, dim);
+			}
+		} else {
+			backtrack: while (true) {
+				var lastBit = (value >> (32 - numBits)) & 1; // ???
+
+				if (lastBit === 0) {
+					// try 1 instead
+					stack.push(cover);
+					value = value | (1 << (32 - numBits));
+					setValue(volume, dim, value);
+					// console.log("Trying 1", JSON.stringify(volume));
+					break backtrack;
+				} else {
+					// continue to backtrack
+					value = value & ~(1 << (32 - numBits));
+					setValue(volume, dim, value);
+					var prevCover = stack.pop();
+					// TODO resolve prevCover with cover and readd
+					if (numBits === 0) {
+						if (dim === 0) {
+							return NO_UNCOVERED; // found a cover for the whole space
+						}
+						dim -= 1;
+						numBits = 32;
+						value = getValue(volume, dim);
+					}
+					numBits -= 1;
+					setNumBits(volume, numDims, dim, numBits);
+				}
+			}
+		}
+	}
+}
+
+function solve(numDims, constraints, provenance) {
+	var volume = makeVolume(numDims);
+	// look for cover
+	// if cover, return cover
+	// if not cover,
+}
 
 // if cover in provenance, return
 // if point, return
@@ -411,43 +471,43 @@ function numNodes(tree) {
 }
 
 function benchQQ(users, logins, bans) {
-	console.time("insert");
-	//console.profile();
+	// console.time("insert");
+	//// console.profile();
 	var usersTree = makeQQTree(2).inserts(users);
 	var loginsTree = makeQQTree(2).inserts(logins);
 	var bansTree = makeQQTree(1).inserts(bans);
-	//console.profileEnd();
-	console.timeEnd("insert");
-	//console.log(numNodes(usersTree), numNodes(loginsTree), numNodes(bansTree));
-	//console.log(usersTree, loginsTree, bansTree);
-	console.time("solve");
-	//console.profile();
+	//// console.profileEnd();
+	// console.timeEnd("insert");
+	//// console.log(numNodes(usersTree), numNodes(loginsTree), numNodes(bansTree));
+	//// console.log(usersTree, loginsTree, bansTree);
+	// console.time("solve");
+	//// console.profile();
 	var results = [];
-	//console.profileEnd();
-	console.timeEnd("solve");
+	//// console.profileEnd();
+	// console.timeEnd("solve");
 	return results.length;
 }
 
 function benchForward(users, logins, bans) {
-	console.time("insert forward");
+	// console.time("insert forward");
 	var loginsIndex = index(logins, 0);
 	var bansIndex = index(bans, 0);
-	console.timeEnd("insert forward");
-	console.time("solve forward");
+	// console.timeEnd("insert forward");
+	// console.time("solve forward");
 	var results = lookup(lookup(users, 1, loginsIndex), 3, bansIndex);
-	console.timeEnd("solve forward");
+	// console.timeEnd("solve forward");
 
 	return results.length;
 }
 
 function benchBackward(users, logins, bans) {
-	console.time("insert backward");
+	// console.time("insert backward");
 	var usersIndex = index(users, 1);
 	var loginsIndex = index(logins, 1);
-	console.timeEnd("insert backward");
-	console.time("solve backward");
+	// console.timeEnd("insert backward");
+	// console.time("solve backward");
 	var results = lookup(lookup(bans, 0, loginsIndex), 1, usersIndex);
-	console.timeEnd("solve backward");
+	// console.timeEnd("solve backward");
 
 	return results.length;
 }
@@ -734,6 +794,29 @@ var testFindCover =
 			}
 		});
 
+var testFindUncovered =
+	bigcheck.foralls("findCover returns a cover",
+		bigcheck.array(bigcheck.volume(testDims)),
+		bigcheck.point(testDims),
+		function(volumes, point) {
+			localStorage.setItem("uncovered", JSON.stringify(volumes));
+			console.log('test');
+			var qq = makeQQTree(testDims).inserts(volumes);
+			var uncovered = findUncovered(qq, makeVolume(testDims), testDims, 0);
+			if (uncovered === NO_UNCOVERED) {
+				// there are no uncovered points, so the test point must be covered
+				// TODO test resolution is whole space
+				return volumes.some(function(other) {
+					return contains(testDims, other, point);
+				});
+			} else {
+				// no volumes cover the point
+				return !volumes.some(function(other) {
+					return contains(testDims, other, uncovered);
+				});
+			}
+		});
+
 function test() {
 	testInserts.check({
 		maxTests: 1000,
@@ -750,6 +833,16 @@ function test() {
 		maxSize: 1000,
 		maxShrinks: 10000
 	});
+	testFindUncovered.check({
+		maxTests: 100000,
+		maxSize: 1000,
+		maxShrinks: 10000
+	});
 }
 
 // test();
+
+testFindUncovered.recheck([
+	[0, 0, 0, 0, 0, 1, 0],
+	[0, 0, -2147483648, 0, 0, 1, 0]
+]);
