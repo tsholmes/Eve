@@ -179,6 +179,7 @@ var bigcheck = (function() {
       var shrunkOutput;
 
       while (true) {
+        console.log('Shrinking');
         var tryInput = this.gen.shrink(shrunkInput, bias);
         var tryOutput;
         try {
