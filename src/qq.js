@@ -346,12 +346,6 @@ QQTree.prototype.findCover = function(volume) {
 	return findCover(this.root, this.numDims, volume);
 };
 
-// SOLVING
-
-function QQConstraint(variables) {
-	this.variables = variables;
-}
-
 // requires that volumeA and volumeB have a common suffix
 function resolve(volumeA, volumeB, numDims, mergeDim) {
 	var volume = makeVolume(numDims);
@@ -428,23 +422,50 @@ function findUncovered(provenance, numDims) {
 	}
 }
 
-function solve(numDims, constraints, provenance) {
-	var volume = makeVolume(numDims);
-	// look for cover
-	// if cover, return cover
-	// if not cover,
+// SOLVING
+
+
+function QQConstraint(index, variables) {
+	this.index = index;
+	this.variables = variables;
+	this.point = makePoint(variables.length);
 }
 
-// if cover in provenance, return
-// if point, return
-// split and recurse
-// take first point or resolve and readd both gaps
+QQConstraint.prototype.findGap = function(solverDims, solverPoint) {
+	var variables = this.variables;
+	var point = this.point;
+	for (var dim = 0, numDims = variables.length; dim < numDims; dim++) {
+		setValue(point, dim, getValue(solverPoint, variables[dim]));
+	}
+	var gap = this.index.findGap(point, numDims);
+	if (gap === NO_GAP) return NO_GAP;
+	var solverGap = makeVolume(solverDims);
+	for (var dim = 0; dim < numDims; dim++) {
+		setValue(solverGap, variables[dim], getValue(gap, dim));
+		setNumBits(solverGap, solverDims, variables[dim], getNumBits(gap, numDims, dim));
+	}
+	return solverGap;
+};
 
-// with point, lookup all gaps and add to cover
-// if no gaps, add to solutions
-
-// findGap => =
-// findCover => <=
+function solve(numDims, constraints, provenance) {
+	var results = [];
+	while (true) {
+		var point = findUncovered(provenance, numDims);
+		if (point === NO_UNCOVERED) return results;
+		var isResult = true;
+		for (var constraint = 0, numConstraints = constraints.length; constraint < numConstraints; constraint++) {
+			var gap = constraints[constraint].findGap(numDims, point);
+			if (gap !== NO_GAP) {
+				isResult = false;
+				provenance.insert(gap);
+			}
+		}
+		if (isResult === true) {
+			results.push(point);
+			provenance.insert(point);
+		}
+	}
+}
 
 // BENCHMARKS
 
@@ -505,21 +526,25 @@ function numNodes(tree) {
 }
 
 function benchQQ(users, logins, bans) {
-	// console.time("insert");
-	//// console.profile();
+	console.time("insert");
+	// console.profile();
 	var usersTree = makeQQTree(2).inserts(users);
 	var loginsTree = makeQQTree(2).inserts(logins);
 	var bansTree = makeQQTree(1).inserts(bans);
-	//// console.profileEnd();
-	// console.timeEnd("insert");
-	//// console.log(numNodes(usersTree), numNodes(loginsTree), numNodes(bansTree));
-	//// console.log(usersTree, loginsTree, bansTree);
-	// console.time("solve");
-	//// console.profile();
-	var results = [];
-	//// console.profileEnd();
-	// console.timeEnd("solve");
-	return results.length;
+	// console.profileEnd();
+	console.timeEnd("insert");
+	// console.log(numNodes(usersTree), numNodes(loginsTree), numNodes(bansTree));
+	// console.log(usersTree, loginsTree, bansTree);
+	console.time("solve");
+	// console.profile();
+	var results = solve(3, [
+		new QQConstraint(usersTree, [0, 1]),
+		new QQConstraint(loginsTree, [1, 2]),
+		new QQConstraint(bansTree, [1])
+	], makeQQTree(3));
+	// console.profileEnd();
+	console.timeEnd("solve");
+	return results;
 }
 
 function benchForward(users, logins, bans) {
@@ -859,7 +884,7 @@ function test() {
 		maxShrinks: 10000
 	});
 	testFindUncovered.check({
-		maxTests: 100000,
+		maxTests: 10000,
 		maxSize: 1000,
 		maxShrinks: 10000
 	});
