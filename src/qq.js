@@ -128,9 +128,11 @@ function getEnclosingVolume(pathIter, volume, numDims) {
 	var dim = getDim(pathIter);
 	var chunkStart = getChunkStart(pathIter);
 	var enclosingVolume = volume.slice();
-	var numBits = getNumBits(enclosingVolume, numDims, dim);
-	setNumBits(enclosingVolume, numDims, dim, Math.min(chunkStart + 4, numBits));
+	var numBits = Math.min(chunkStart + 4, getNumBits(enclosingVolume, numDims, dim));
+	setValue(enclosingVolume, dim, getValue(enclosingVolume, dim) & -Math.pow(2, 32 - numBits));
+	setNumBits(enclosingVolume, numDims, dim, numBits);
 	for (var unusedDim = dim + 1; unusedDim < numDims; unusedDim++) {
+		setValue(enclosingVolume, unusedDim, 0);
 		setNumBits(enclosingVolume, numDims, unusedDim, 0);
 	}
 	return enclosingVolume;
