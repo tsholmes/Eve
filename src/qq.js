@@ -92,7 +92,7 @@ function getPath(pathIter, volume, numDims) {
 	var chunkMask = ((1 << chunkBits) - 1);
 	var chunk = (getValue(volume, dim) >> (32 - chunkEnd)) & chunkMask;
 	// stagger path so that there is space for all combinations of 0-4 bit chunks
-	return chunk + (1 << chunkBits) - 1;
+	return 32 - chunk - (1 << chunkBits);
 }
 
 function nextDim(pathIter, volume, numDims) {
@@ -311,14 +311,11 @@ QQTree.prototype.findGap = function(volume, numDims) {
 // TODO which cover should we prefer?
 function findCover(node, numDims, volume) {
 	var pathIter = makePathIter(0, 0);
-	var queue = [node, pathIter];
-	var startIx = -2;
-	var endIx = 2;
+	var stack = [node, pathIter];
 	nextNode: while (true) {
-		startIx += 2;
-		if (startIx === endIx) return NO_COVER;
-		node = queue[startIx];
-		pathIter = queue[startIx + 1];
+		if (stack.length === 0) return NO_COVER;
+		pathIter = stack.pop();
+		node = stack.pop();
 		handleNode: switch (getTag(node)) {
 			case BRANCH:
 				if (pathIter === END_OF_PATH) continue nextNode;
@@ -329,9 +326,7 @@ function findCover(node, numDims, volume) {
 					matches = matches & ~pathBit; // pop path
 					var child = getChild(node, pathBit);
 					var childPathIter = isPartial(pathBit) ? nextDim(pathIter, volume, numDims) : nextChunk(pathIter, volume, numDims);
-					queue[endIx] = child;
-					queue[endIx + 1] = childPathIter;
-					endIx += 2;
+					stack.push(child, childPathIter);
 				}
 				break;
 
@@ -541,7 +536,7 @@ function benchQQ(users, logins, bans) {
 	var results = solve(3, [
 		new QQConstraint(usersTree, [0, 1]),
 		new QQConstraint(loginsTree, [1, 2]),
-		new QQConstraint(bansTree, [1])
+		new QQConstraint(bansTree, [2])
 	], makeQQTree(3));
 	// console.profileEnd();
 	console.timeEnd("solve");
@@ -826,7 +821,7 @@ var testFindGap =
 		});
 
 var testFindCover =
-	bigcheck.foralls("findCover returns a cover",
+	bigcheck.foralls("findCover returns a maximal cover",
 		bigcheck.array(bigcheck.volume(testDims)),
 		bigcheck.point(testDims),
 		function(volumes, point) {
@@ -838,10 +833,11 @@ var testFindCover =
 					return contains(testDims, other, point);
 				});
 			} else {
-				// cover covers the point and is from the volumes list
-				// TODO test that cover is maximal ie no other cover has a shorter path
+				// cover covers the point, is from the volumes list and is maximal
 				return contains(testDims, cover, point) && volumes.some(function(other) {
 					return sameValue(other, cover);
+				}) && !volumes.some(function(other) {
+					return !sameValue(other, cover) && contains(other, cover);
 				});
 			}
 		});
