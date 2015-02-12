@@ -360,11 +360,12 @@ function resolve(volumeA, volumeB, numDims, mergeDim) {
 	var numBits = getNumBits(volumeA, numDims, mergeDim) - 1;
 	setValue(volume, mergeDim, getValue(volumeA, mergeDim) & -Math.pow(2, 32 - numBits));
 	setNumBits(volume, numDims, mergeDim, numBits);
+	// console.log("Resolved", JSON.stringify(volumeA), JSON.stringify(volumeB), JSON.stringify(volume));
 	return volume;
 }
 
 function escape(volume, numDims) {
-	for (var dim = numDims - 1; dim >= 0; dim--) {
+	for (var dim = 0; dim < numDims; dim++) {
 		var numBits = getNumBits(volume, numDims, dim);
 		if (numBits > 0) {
 			return makePathIter(dim, numBits);
@@ -387,7 +388,7 @@ function setBit(pathIter, volume, numDims) {
 	value = value & -Math.pow(2, 32 - numBits); // clear lower bits
 	value = value | (1 << (32 - numBits)); // set the escaping bit
 	setValue(volume, dim, value);
-	for (dim = dim + 1; dim < numDims; dim++) {
+	for (dim = dim - 1; dim >= 0; dim--) {
 		setValue(volume, dim, 0);
 	}
 }
@@ -867,22 +868,18 @@ function test() {
 	testInserts.check({
 		maxTests: 1000,
 		maxSize: 1000,
-		maxShrinks: 10000
 	});
 	testFindGap.check({
 		maxTests: 100000,
 		maxSize: 1000,
-		maxShrinks: 10000
 	});
 	testFindCover.check({
 		maxTests: 100000,
 		maxSize: 1000,
-		maxShrinks: 10000
 	});
 	testFindUncovered.check({
 		maxTests: 10000,
 		maxSize: 1000,
-		maxShrinks: 10000
 	});
 }
 
