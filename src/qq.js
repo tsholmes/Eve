@@ -309,7 +309,9 @@ QQTree.prototype.findGap = function(volume, numDims) {
 };
 
 // TODO which cover should we prefer?
-function findCover(node, numDims, volume) {
+function findCover(tree, volume) {
+	var numDims = tree.numDims;
+	var node = tree.root;
 	var pathIter = makePathIter(0, 0);
 	var stack = [node, pathIter];
 	nextNode: while (true) {
@@ -338,10 +340,6 @@ function findCover(node, numDims, volume) {
 		}
 	}
 }
-
-QQTree.prototype.findCover = function(volume) {
-	return findCover(this.root, this.numDims, volume);
-};
 
 // requires that volumeA and volumeB have a common suffix
 function resolve(volumeA, volumeB, numDims, mergeDim) {
@@ -395,7 +393,7 @@ function setBit(pathIter, volume, numDims) {
 
 function findUncovered(provenance, numDims) {
 	var point = makePoint(numDims);
-	var cover = provenance.findCover(point);
+	var cover = findCover(provenance, point);
 	if (cover === NO_COVER) return point;
 	var stack = [];
 	while (true) {
@@ -405,7 +403,7 @@ function findUncovered(provenance, numDims) {
 		if (lastBit === 0) {
 			stack.push(cover);
 			setBit(pathIter, point, numDims);
-			var cover = provenance.findCover(point);
+			var cover = findCover(provenance, point);
 			if (cover === NO_COVER) return point;
 		} else {
 			var dim = getDim(pathIter);
@@ -827,7 +825,7 @@ var testFindCover =
 		bigcheck.point(testDims),
 		function(volumes, point) {
 			var qq = makeQQTree(testDims).inserts(volumes);
-			var cover = qq.findCover(point);
+			var cover = findCover(qq, point);
 			if (cover === NO_COVER) {
 				// no volumes cover the point
 				return !volumes.some(function(other) {
