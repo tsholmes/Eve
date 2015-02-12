@@ -83,11 +83,12 @@ function getChunkStart(pathIter) {
 	return pathIter | 0;
 }
 
-function getPath(pathIter, volume, numDims) {
+function getPath(pathIter, volume, numDims, decrement) {
+	if (decrement === undefined) decrement = 0;
 	var dim = getDim(pathIter);
 	var chunkStart = getChunkStart(pathIter);
 	var numBits = getNumBits(volume, numDims, dim);
-	var chunkEnd = Math.min(chunkStart + 4, numBits);
+	var chunkEnd = Math.min(chunkStart + 4 - decrement, numBits);
 	var chunkBits = chunkEnd - chunkStart;
 	var chunkMask = ((1 << chunkBits) - 1);
 	var chunk = (getValue(volume, dim) >> (32 - chunkEnd)) & chunkMask;
@@ -124,11 +125,11 @@ function isPartial(pathBit) {
 	return (pathBit >> 17) !== 0; // ie chunk was < 4 bits
 }
 
-function getEnclosingVolume(pathIter, volume, numDims) {
+function getEnclosingVolume(pathIter, volume, numDims, decrement) {
 	var dim = getDim(pathIter);
 	var chunkStart = getChunkStart(pathIter);
 	var enclosingVolume = volume.slice();
-	var numBits = Math.min(chunkStart + 4, getNumBits(enclosingVolume, numDims, dim));
+	var numBits = Math.min(chunkStart + 5 - decrement, getNumBits(enclosingVolume, numDims, dim));
 	setValue(enclosingVolume, dim, getValue(enclosingVolume, dim) & -Math.pow(2, 32 - numBits));
 	setNumBits(enclosingVolume, numDims, dim, numBits);
 	for (var unusedDim = dim + 1; unusedDim < numDims; unusedDim++) {
@@ -164,6 +165,27 @@ for (var chunkBits = 0; chunkBits < 5; chunkBits++) {
 		}
 
 		PREFIXES[path] = matches;
+	}
+}
+
+// all paths which are a suffix of this path
+var SUFFIXES = [];
+for (var chunkBits = 0; chunkBits < 5; chunkBits++) {
+	for (var chunk = 0; chunk < Math.pow(2, chunkBits); chunk++) {
+		var path = 32 - chunk - (1 << chunkBits);
+		var matches = 0;
+
+		for (var matchingChunkBits = 0; matchingChunkBits < 5; matchingChunkBits++) {
+			for (var matchingChunk = 0; matchingChunk < Math.pow(2, matchingChunkBits); matchingChunk++) {
+				var matchingPath = 32 - matchingChunk - (1 << matchingChunkBits);
+				if ((chunkBits <= matchingChunkBits) &&
+					(chunk === (matchingChunk >> (matchingChunkBits - chunkBits)))) {
+					matches = matches | (1 << matchingPath);
+				}
+			}
+		}
+
+		SUFFIXES[path] = matches;
 	}
 }
 
@@ -286,14 +308,28 @@ function findGap(node, volume, numDims) {
 					pathIter = nextChunk(pathIter, volume, numDims);
 					if (pathIter === END_OF_PATH) return NO_GAP;
 				} else {
-					return getEnclosingVolume(pathIter, volume, numDims);
+					for (var decrement = 1; decrement < 4; decrement++) {
+						path = getPath(pathIter, volume, numDims, decrement);
+						if ((entries & SUFFIXES[path]) !== 0) {
+							return getEnclosingVolume(pathIter, volume, numDims, decrement);
+						}
+					}
+					// we know that the last chunk matched
+					return getEnclosingVolume(pathIter, volume, numDims, 4);
 				}
 				break;
 
 			case VOLUME:
 				while (true) {
 					if (getPath(pathIter, volume, numDims) !== getPath(pathIter, node, numDims)) {
-						return getEnclosingVolume(pathIter, volume, numDims);
+						for (var decrement = 1; decrement < 4; decrement++) {
+							path = getPath(pathIter, volume, numDims, decrement);
+							if (((1 << getPath(pathIter, node, numDims, decrement)) & SUFFIXES[path]) !== 0) {
+								return getEnclosingVolume(pathIter, volume, numDims, decrement);
+							}
+						}
+						// we know that the last chunk matched
+						return getEnclosingVolume(pathIter, volume, numDims, 4);
 					}
 					pathIter = nextChunk(pathIter, volume, numDims);
 					if (pathIter === END_OF_PATH) return NO_GAP;
