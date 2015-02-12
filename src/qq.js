@@ -391,11 +391,16 @@ function setBit(pathIter, volume, numDims) {
 	}
 }
 
-function findUncovered(provenance, numDims) {
-	var point = makePoint(numDims);
+function FindState(numDims) {
+	this.stack = [];
+	this.point = makePoint(numDims);
+}
+
+function findUncovered(provenance, numDims, state) {
+	var stack = state.stack;
+	var point = state.point;
 	var cover = findCover(provenance, point);
-	if (cover === NO_COVER) return point;
-	var stack = [];
+	if (cover === NO_COVER) return;
 	while (true) {
 		var pathIter = escape(cover, numDims);
 		if (pathIter === 0) return NO_UNCOVERED;
@@ -404,7 +409,7 @@ function findUncovered(provenance, numDims) {
 			stack.push(cover);
 			setBit(pathIter, point, numDims);
 			var cover = findCover(provenance, point);
-			if (cover === NO_COVER) return point;
+			if (cover === NO_COVER) return;
 		} else {
 			var dim = getDim(pathIter);
 			var numBits = getChunkStart(pathIter);
@@ -444,9 +449,11 @@ QQConstraint.prototype.findGap = function(solverDims, solverPoint) {
 
 function solve(numDims, constraints, provenance) {
 	var results = [];
+	var state = new FindState(numDims);
+	var point = state.point;
 	while (true) {
-		var point = findUncovered(provenance, numDims);
-		if (point === NO_UNCOVERED) return results;
+		var uncovered = findUncovered(provenance, numDims, state);
+		if (uncovered === NO_UNCOVERED) return results;
 		var isResult = true;
 		for (var constraint = 0, numConstraints = constraints.length; constraint < numConstraints; constraint++) {
 			var gap = constraints[constraint].findGap(numDims, point);
@@ -456,8 +463,9 @@ function solve(numDims, constraints, provenance) {
 			}
 		}
 		if (isResult === true) {
-			results.push(point);
-			provenance.insert(point);
+			var result = point.slice();
+			results.push(result);
+			provenance.insert(result);
 		}
 	}
 }
@@ -847,7 +855,8 @@ var testFindUncovered =
 		bigcheck.point(testDims),
 		function(volumes, point) {
 			var qq = makeQQTree(testDims).inserts(volumes);
-			var uncovered = findUncovered(qq, testDims);
+			var state = new FindState(testDims);
+			var uncovered = findUncovered(qq, testDims, state);
 			if (uncovered === NO_UNCOVERED) {
 				// there are no uncovered points, so the test point must be covered
 				// TODO test resolution is whole space
@@ -857,7 +866,7 @@ var testFindUncovered =
 			} else {
 				// no volumes cover the point
 				return !volumes.some(function(other) {
-					return contains(testDims, other, uncovered);
+					return contains(testDims, other, state.point);
 				});
 			}
 		});
