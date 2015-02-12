@@ -121,7 +121,7 @@ function nextChunk(pathIter, volume, numDims) {
 }
 
 function isPartial(pathBit) {
-	return pathBit <= (1 << 14); // ie chunk was < 4 bits
+	return (pathBit >> 17) !== 0; // ie chunk was < 4 bits
 }
 
 function getEnclosingVolume(pathIter, volume, numDims) {
@@ -150,12 +150,12 @@ for (var chunkBits = 0; chunkBits < 5; chunkBits++) {
 var PREFIXES = [];
 for (var chunkBits = 0; chunkBits < 5; chunkBits++) {
 	for (var chunk = 0; chunk < Math.pow(2, chunkBits); chunk++) {
-		var path = chunk + (1 << chunkBits) - 1;
+		var path = 32 - chunk - (1 << chunkBits);
 		var matches = 0;
 
 		for (var matchingChunkBits = 0; matchingChunkBits < 5; matchingChunkBits++) {
 			for (var matchingChunk = 0; matchingChunk < Math.pow(2, matchingChunkBits); matchingChunk++) {
-				var matchingPath = matchingChunk + (1 << matchingChunkBits) - 1;
+				var matchingPath = 32 - matchingChunk - (1 << matchingChunkBits);
 				if ((chunkBits >= matchingChunkBits) &&
 					((chunk >> (chunkBits - matchingChunkBits)) === matchingChunk)) {
 					matches = matches | (1 << matchingPath);
@@ -837,7 +837,7 @@ var testFindCover =
 				return contains(testDims, cover, point) && volumes.some(function(other) {
 					return sameValue(other, cover);
 				}) && !volumes.some(function(other) {
-					return !sameValue(other, cover) && contains(other, cover);
+					return !sameValue(other, cover) && contains(testDims, other, cover);
 				});
 			}
 		});
