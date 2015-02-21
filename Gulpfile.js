@@ -3,6 +3,7 @@ var browserify = require("browserify");
 var buffer = require("vinyl-buffer");
 var glob = require("glob-all");
 var gulp = require("gulp-help")(require("gulp"));
+var livereload = require("gulp-livereload");
 var plumber = require("gulp-plumber");
 var source = require("vinyl-source-stream");
 var sourcemaps = require("gulp-sourcemaps");
@@ -12,6 +13,7 @@ var sweetify = require("sweetify");
 // Styles
 
 function compileStylus() {
+  console.log("compiling stylus...");
   return gulp.src("stylus/**/*.stylus")
   .pipe(sourcemaps.init())
   .pipe(plumber())
@@ -22,8 +24,10 @@ function compileStylus() {
 gulp.task("stylus", "Compile stylus files to CSS.", compileStylus);
 
 gulp.task("watch-stylus", "Watch stylus files for changes.", ["stylus"], function() {
+  livereload.listen();
   return gulp.watch("stylus/**/*.stylus", batch(function(events) {
-    return compileStylus();
+    return compileStylus()
+    .pipe(livereload());
   }));
 });
 
