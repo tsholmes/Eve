@@ -1,0 +1,206 @@
+use('../node_modules/nib')
+//use('../node_modules/axis-css')
+
+@import 'nib'
+//@import 'axis'
+
+global-reset()
+
+$border-width = 1px;
+$border-style = solid;
+$fonts = "Avenir", "Verdana", "Helvetica", "Arial", sans-serif;
+
+
+$body-bg = #223;
+$body-fg = #DDE;
+
+$menu-active-bg = #4499CC;
+
+$tile-bg = #112;
+$tile-fg = $body-fg;
+$tile-border = $tile-bg;
+$tile-border-active = #4499CC;
+
+$base-margin = 12px;
+
+//---------------------------------------------------------
+// Utilities
+//---------------------------------------------------------
+bg-flat(color) {
+  linear-gradient(top, color, color)
+}
+
+bg-scanline(width, gap, color = alpha(black, 0.1)) {
+  linear-gradient(top,
+    transparent 0px, transparent gap,
+    color gap, color (gap + width))
+}
+
+
+//---------------------------------------------------------
+// Structure
+//---------------------------------------------------------
+body {
+  height: 100vh;
+  overflow: auto;
+}
+
+// @TODO: move program-loader into #controls.
+#controls, .program-loader {
+  float: right;
+  margin: ($base-margin / 2) $base-margin;
+}
+
+// @TODO: rename #cards -> #tiles
+#tiles, #cards {
+  height: 100%;
+  margin-top: 2em; padding: $base-margin;
+  position: relative;
+}
+
+.tile, .card {
+  clearfix();
+  margin: $base-margin;
+  overflow: auto;
+  position: absolute;
+
+  & .tile-controls {
+    float: right;
+  }
+
+  // Add tile
+  &.add-tile > div {
+    display: inline-block;
+    width: 100%; height: 100%;
+    text-align: center;
+    font-size: 5em;
+    vertical-align: middle;
+
+    &::after {
+      content: "";
+      display: inline-block;
+      height: 100%;
+      vertical-align: middle;
+    }
+  }
+}
+
+// Context Menu
+.menu-shade {
+  position: fixed; top: 0; left: 0; bottom: 0; right: 0;
+  z-index: 100;
+
+  & .menu {
+    display: inline-block;
+    position: relative;
+  }
+}
+
+// Searcher
+.searcher {
+  ul {
+    display: none;
+  }
+
+  &.active {
+    ul {
+      display: block;
+    }
+  }
+}
+
+//---------------------------------------------------------
+// Theme
+//---------------------------------------------------------
+
+body {
+  // background: bg-scanline(1px, 5px), bg-scanline(1px, 11px), bg-flat($body-bg);
+  // background-size: 1px 6px, 1px, 12px, 1px 1px; background-repeat: repeat, repeat, repeat;
+  background: $body-bg;
+  color: $body-fg;
+  font-family: $fonts;
+}
+
+.tile, .card {
+  background: $tile-bg;
+  border: $border-width $border-size $tile-border;
+  border-radius: 2px;
+
+  // Controls
+  & .tile-controls {
+    background: $tile-border-active;
+    border-top-right-radius: 2px;
+    border-bottom-left-radius: 2px;
+    opacity: 0;
+
+    & .close-btn {
+      border: none;
+      background: alpha(red, 0.5);
+    }
+  }
+  &:hover .tile-controls {
+    opacity: 1;
+  }
+
+  // Add tile
+  &.add-tile {
+    background: alpha($tile-bg, 0);
+    border: $border-width $border-style alpha($tile-border-active, 0);
+    color: alpha($tile-fg, 0);
+    transition: 0.3s ease-in-out;
+
+    &:hover {
+      background: alpha($tile-bg, 0.5);
+      border-color: $tile-border-active;
+      color: alpha($tile-fg, 0.6);
+    }
+    &:active {
+      background: alpha($tile-bg, 0.5);
+      border-color: $tile-border-active;
+      color: alpha($tile-fg, 0.6);
+    }
+  }
+}
+
+// Context Menu
+.menu-shade {
+  //background: bg-scanline(1px, 5px), bg-flat(alpha(black, 0.1));
+  //background-size: 1px 6px, 1px 1px; background-repeat: repeat, repeat;
+  background: alpha(black, 0.1);
+
+
+  .menu {
+    border-left: 3px solid $tile-border-active;
+    border-radius: 2px;
+    background: bg-scanline(1px, 4px), bg-scanline(1px, 6px), bg-scanline(1px, 10px), bg-flat(alpha(black, 0.25));
+    background-size: 256px 5px, 256px 7px, 256px 11px, 256px 256px; background-repeat: repeat, repeat;
+  }
+  .menu-item {
+    padding: 0.25em;
+
+    &:hover, &.focused {
+      background: alpha($menu-active-bg, 0.2);
+    }
+    &:active {
+      background: alpha($menu-active-bg, 0.4);
+    }
+
+  }
+}
+
+// Searcher
+.searcher {
+  ul {
+  }
+
+  &.active {
+    background: alpha(black, 0.5);
+
+    li:hover, li.focused {
+      background: alpha($menu-active-bg, 0.2);
+    }
+    li:active {
+      background: alpha($menu-active-bg, 0.4);
+    }
+  }
+}
