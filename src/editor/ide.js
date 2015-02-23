@@ -103,7 +103,7 @@ var headerMixin = {
   },
   doubleClick: function(e) {
     e.stopPropagation();
-    this.click();
+    this.click(e);
   },
   wrapHeader: function(attrs, content) {
     attrs.draggable = true;
@@ -125,9 +125,13 @@ var editableFieldMixin = {
     e.currentTarget.focus();
     e.stopPropagation();
   },
+  stop: function(e) {
+    e.stopPropagation();
+  },
   keyDown: function(e) {
     //handle pressing enter
     if(e.keyCode === KEYCODES.ENTER) {
+      this.state.force = true;
       e.currentTarget.blur();
       e.preventDefault();
     }
@@ -137,7 +141,8 @@ var editableFieldMixin = {
   },
   blur: function() {
     this.setState({editing: false});
-    var commitSuccessful = this.commit();
+    var commitSuccessful = this.commit(this.state.force);
+    this.state.force = false;
     if(commitSuccessful) {
       this.setState({edit: ""});
     }
@@ -146,6 +151,7 @@ var editableFieldMixin = {
     attrs.contentEditable = this.state.editing;
     attrs.className += (this.state.editing) ? " selected" : "";
     attrs.onClick = this.click;
+    attrs.onDoubleClick = this.stop;
     attrs.onKeyDown = this.keyDown;
     attrs.onInput = this.input;
     attrs.onBlur = this.blur;
@@ -203,7 +209,6 @@ var uiEditorElementMixin = {
     if(dragged) {
       unpack[table, field] = dragged;
       if(this.dropMenu) {
-        console.log("drop menu!");
         dispatch(["dropField", {table: table, field: field}]);
         dispatch(["setActiveUIEditorElement", this.props.elem[0]]);
         dispatch(["contextMenu", {e: {clientX: e.clientX, clientY: e.clientY},
@@ -231,9 +236,11 @@ var uiEditorElementMixin = {
     dispatch(["uiEditorElementMove", {neue: [id, type, this.state.x, this.state.y, this.state.width, this.state.height],
                                       old: this.props.elem}]);
   },
-  click: function(e) {
+  setActive: function(e) {
     dispatch(["setActiveUIEditorElement", this.props.elem[0]]);
+    e.stopPropagation();
   },
+  stopPropagation: function(e) { e.stopPropagation(); },
   contextMenu: function(e) {
     e.preventDefault();
     e.stopPropagation();
@@ -248,7 +255,7 @@ var uiEditorElementMixin = {
   },
   render: function() {
     var state = this.state;
-    return JSML.react(["div", {key: this.props.elem[0], onContextMenu: this.contextMenu, onClick: this.click, onDragOver: this.dragOver, onDrop: this.drop},
+    return JSML.react(["div", {key: this.props.elem[0], onContextMenu: this.contextMenu, onClick: this.setActive, onDoubleClick: this.stopPropagation, onDragOver: this.dragOver, onDrop: this.drop},
                        this.isActive() ? Resizer({x: state.x, y: state.y, width: state.width, height: state.height, resize: this.resize, resizeEnd: this.moved}) : null,
                        this.element()
                       ]);
@@ -272,7 +279,6 @@ var Resizer = reactFactory({
     var dx = opts["data-x"];
     var dy = opts["data-y"];
     unpack [handleWidth, handleHeight] = this.handleSize;
-    opts.className = "resize-handle";
 
     //init to left
     var x = handleWidth / -2;
@@ -289,6 +295,8 @@ var Resizer = reactFactory({
     } else if(dy === "middle") {
       y = (handleHeight / -2) + (this.state.height / 2);
     }
+
+    opts.className += " resize-handle";
     opts.style = {width: handleWidth, height: handleHeight, top: y - 1, left: x - 1};
     return opts;
   },
@@ -366,14 +374,14 @@ var Resizer = reactFactory({
   },
   render: function() {
     return JSML.react(["div", this.wrapStyle({className: "resizer"}),
-                       ["div", this.wrapHandle({"data-x": "left", "data-y": "top"})],
-                       ["div", this.wrapHandle({"data-x": "center", "data-y": "top"})],
-                       ["div", this.wrapHandle({"data-x": "right", "data-y": "top"})],
-                       ["div", this.wrapHandle({"data-x": "right", "data-y": "middle"})],
-                       ["div", this.wrapHandle({"data-x": "right", "data-y": "bottom"})],
-                       ["div", this.wrapHandle({"data-x": "center", "data-y": "bottom"})],
-                       ["div", this.wrapHandle({"data-x": "left", "data-y": "bottom"})],
-                       ["div", this.wrapHandle({"data-x": "left", "data-y": "middle"})]
+                       ["div", this.wrapHandle({"data-x": "left", "data-y": "top", className: "nwse-handle"})],
+                       ["div", this.wrapHandle({"data-x": "center", "data-y": "top", className: "ns-handle"})],
+                       ["div", this.wrapHandle({"data-x": "right", "data-y": "top", className: "nesw-handle"})],
+                       ["div", this.wrapHandle({"data-x": "right", "data-y": "middle", className: "ew-handle"})],
+                       ["div", this.wrapHandle({"data-x": "right", "data-y": "bottom", className: "nwse-handle"})],
+                       ["div", this.wrapHandle({"data-x": "center", "data-y": "bottom", className: "ns-handle"})],
+                       ["div", this.wrapHandle({"data-x": "left", "data-y": "bottom", className: "nesw-handle"})],
+                       ["div", this.wrapHandle({"data-x": "left", "data-y": "middle", className: "ew-handle"})]
                       ])
   }
 });
@@ -394,8 +402,8 @@ var Root = React.createFactory(React.createClass({
     return [rowEdge, colEdge];
   },
   expand: function() {
-    return {size: [tileGrid.cols - 2, tileGrid.rows],
-            pos: [0, 1]};
+    return {size: [tileGrid.cols - 0, tileGrid.rows],
+            pos: [0, 0]};
   },
   render: function() {
     var activeTile;
@@ -435,26 +443,27 @@ var Root = React.createFactory(React.createClass({
       }
     });
 
+    var menu = indexer.first("contextMenu");
     var gridContainer = ["div", {"id": "cards", "onClick": this.click}, tables];
 
     // if there isn't an active tile, add placeholder tiles for areas that can hold them.
     if(!activeTile) {
       var gridItems = index.getTileFootprints();
+      var activePosition = indexer.first("activePosition") || [];
       while(true) {
         var slot = grid.firstGap(tileGrid, gridItems, defaultSize);
         if(!slot) { break; }
-        var gridItem = {size: defaultSize, pos: slot};
+        var gridItem = {size: defaultSize, pos: slot, active: (menu && activePosition[2] === slot[0] && activePosition[3] === slot[1])};
         gridItems.push(gridItem);
         gridContainer.push(tiles.addTile(gridItem));
       }
     }
 
-    var menu = indexer.first("contextMenu");
     return JSML.react(["div",
                        ["canvas", {id: "clear-pixel", width: 1, height: 1}],
-                       menu ? ContextMenu({x: menu[0], y: menu[1]}) : null,
                        ProgramLoader(),
-                       gridContainer]);
+                       gridContainer,
+                       menu ? ContextMenu({x: menu[0], y: menu[1]}) : null]);
   }
 }));
 
@@ -494,6 +503,8 @@ var tiles = {
       }
       return JSML.react(["div", {"className": "card " + (this.props.class || ""),
                                  "key": this.props.tile,
+                                 "onDrop": this.props.drop,
+                                 "onDragOver": this.props.dragOver,
                                  "onContextMenu": this.props.contextMenu || this.contextMenu,
                                  "onDoubleClick": (selectable) ? this.doubleClick : undefined,
                                  "style": grid.getSizeAndPosition(tileGrid, this.props.size, this.props.pos)},
@@ -515,8 +526,9 @@ var tiles = {
                                 ]}]);
     },
     render: function() {
+      var className = "add-tile" + (this.props.active ? " selected" : "");
       var content = JSML.react(["div", {onClick: this.click, onContextMenu: this.click}, "+"]);
-      return tiles.wrapper({pos: this.props.pos, size: this.props.size, id: "addTile", class: "add-tile", content: content, controls: false, selectable: false});
+      return tiles.wrapper({pos: this.props.pos, size: this.props.size, id: "addTile", class: className, content: content, controls: false, selectable: false});
     }
   }),
   table: reactFactory({
@@ -671,6 +683,22 @@ var tiles = {
                                   ]}]);
       }
     },
+    dragOver: function(e) {
+      if(indexer.first("dragField")) {
+        //class?
+        e.preventDefault();
+      }
+    },
+    drop: function(e) {
+      e.stopPropagation();
+      var dragged = indexer.first("dragField");
+      if(dragged) {
+        unpack[table, field] = dragged;
+        if(this.props.table !== table) {
+          dispatch(["addFieldToView", {table: table, field: field, current: this.props.table}]);
+        }
+      }
+    },
     render: function() {
       var self = this;
       var table = this.props.table;
@@ -726,7 +754,8 @@ var tiles = {
                        ["div", {className: "grid-rows"},
                         rows,
                         isConstant ? this.adderRow({len: headers.length, table: table}) : null]]];
-      return tiles.wrapper({pos: this.props.pos, size: this.props.size, tile: this.props.tile, class: className, content: content, contextMenu: this.contextMenu});
+      return tiles.wrapper({pos: this.props.pos, size: this.props.size, tile: this.props.tile, class: className, content: content, contextMenu: this.contextMenu,
+                           drop: this.drop, dragOver: this.dragOver});
     }
   }),
   ui: reactFactory({
@@ -752,8 +781,8 @@ var tiles = {
     box: reactFactory({
       mixins: [uiEditorElementMixin],
       element: function() {
-        var opts = this.wrapStyle(this.wrapDragEvents({}));
-        return ["div", opts, "box"];
+        var opts = this.wrapStyle(this.wrapDragEvents({className: "uiElement box"}));
+        return ["div", opts];
       }
     }),
     text: reactFactory({
@@ -769,22 +798,22 @@ var tiles = {
         ];
       },
       element: function() {
-        var opts = this.wrapStyle(this.wrapDragEvents({}));
+        var opts = this.wrapStyle(this.wrapDragEvents({className: "text uiElement"}));
         var attrs = indexer.index("uiElementToElementAttr")[this.props.elem[0]];
-        var text = "text";
+        var text = "";
         if(attrs && attrs["text"]) {
           unpack [_, attr, field, isBinding] = attrs["text"][0];
           if(isBinding) {
             text = "Bound to " + indexer.index("displayName")[field];
           } else {
-            text = table;
+            text = field;
           }
         }
         return ["span", opts, text];
       }
     }),
     button: reactFactory({
-      mixins: [uiEditorElementMixin],
+      mixins: [uiEditorElementMixin, editableFieldMixin],
       dropMenu: function(table, field) {
         return [
           [0, "text", "text", "bindUIElementText", "text"]
@@ -793,21 +822,26 @@ var tiles = {
       contextMenuItems: function(e) {
         return [
           [0, "text", "Live view", "liveUIMode", this.props.tile],
-          [1, "input", "click", "setUIElementEvent", "click"]
+          [1, "input", "Button name", "bindUIElementName", this.props.elem[0]],
+          [2, "input", "Text", "setUIElementText", this.props.elem[0]],
+          [3, "text", "Get clicks", "setUIElementEvent", "click"]
         ];
       },
+      commit: function() {
+        dispatch(["setUIElementText", this.state.edit]);
+      },
       element: function() {
-        var opts = this.wrapStyle(this.wrapDragEvents({}));
         var attrs = indexer.index("uiElementToElementAttr")[this.props.elem[0]];
-        var text = "button";
+        var text = "";
         if(attrs && attrs["text"]) {
           unpack [_, attr, field, isBinding] = attrs["text"][0];
           if(isBinding) {
             text = "Bound to " + indexer.index("displayName")[field];
           } else {
-            text = table;
+            text = field;
           }
         }
+        var opts = this.wrapStyle(this.wrapDragEvents({className: "uiElement button"}));
         return ["button", opts, text];
       }
     }),
@@ -820,13 +854,13 @@ var tiles = {
         ];
       },
       element: function() {
-        var opts = this.wrapStyle(this.wrapDragEvents({placeholder: "input"}));
-        return ["div", opts, "input"];
+        var opts = this.wrapStyle(this.wrapDragEvents({placeholder: "input", className: "uiElement input"}));
+        return ["div", opts];
       }
     }),
     contextMenu: function(e) {
       e.preventDefault();
-      var mode = indexer.index("uiEditorTileToMode")[this.props.tile] || "live";
+      var mode = indexer.index("uiEditorTileToMode")[this.props.tile] || "designer";
       if(mode === "designer") {
         dispatch(["contextMenu", {e: {clientX: e.clientX, clientY: e.clientY},
                                   items: [
@@ -844,12 +878,12 @@ var tiles = {
       }
     },
     render: function() {
-      var mode = indexer.index("uiEditorTileToMode")[this.props.tile] || "live";
+      var mode = indexer.index("uiEditorTileToMode")[this.props.tile] || "designer";
       if(mode === "designer") {
         var self = this;
         var editorElems = indexer.facts("uiEditorElement").map(function(cur) {
           unpack [id, type] = cur;
-          return self[type]({elem: cur, tile: self.props.tile});
+          return self[type]({elem: cur, tile: self.props.tile, key: id});
         });
         var content = JSML.react(["div", {className: "ui-design-surface"},
                                   editorElems]);
@@ -893,7 +927,7 @@ var searchMethod = {
     var name;
     foreach(view of indexer.facts("view")) {
       unpack [id] = view;
-      name = names[id].toString();
+      name = names[id] ? names[id].toString() : false;
       if(name && name.toLowerCase().indexOf(needle.toLowerCase()) > -1) {
         results.push([id, name]);
       }
@@ -1036,8 +1070,8 @@ ContextMenuItems = {
   }),
   input: reactFactory({
     mixins: [editableInputMixin],
-    commit: function() {
-      dispatch([this.props.event, {id: this.props.id, text: this.state.edit}]);
+    commit: function(force) {
+      dispatch([this.props.event, {id: this.props.id, text: this.state.edit, force: force}]);
       return true;
     },
     render: function() {
@@ -1167,7 +1201,9 @@ function dispatch(eventInfo) {
   switch(event) {
     case "diffsHandled":
       //TODO: Should we push this off to a requestAnimationFrame?
+      console.time("render");
       React.render(Root(), document.body);
+      console.timeEnd("render");
       break;
 
 
@@ -1223,6 +1259,7 @@ function dispatch(eventInfo) {
       var diff = {
         tableTile: {adds: [[tileId, id]], removes: []},
         gridTile: {adds: [[tileId, info.type, w, h, x, y]], removes: []},
+        activePosition: {adds: [], removes: indexer.facts("activePosition")}
       };
       indexer.handleDiffs(diff);
       return tileId;
@@ -1386,6 +1423,36 @@ function dispatch(eventInfo) {
       indexer.handleDiffs(diff);
       break;
 
+    case "addFieldToView":
+      var diff = {};
+      var addedTable = info.table;
+      var addedField = info.field;
+      var currentTable = info.current;
+      var query = indexer.index("viewToQuery")[currentTable];
+      if(!query || !query.length) return;
+      var queryId = query[0][0];
+      var viewConstraints = indexer.index("queryToViewConstraint")[queryId];
+      var viewConstraintId;
+      foreach(vc of viewConstraints) {
+        unpack [vcId, _, sourceView, isNegated] = vc;
+        if(sourceView === addedTable) {
+          viewConstraintId = vcId;
+        }
+      }
+      if(!viewConstraintId) {
+        viewConstraintId = global.uuid();
+        diff.viewConstraint = {adds: [[viewConstraintId, queryId, addedTable, false]], removes: []};
+      }
+
+      var fieldIx = indexer.index("viewToFields")[currentTable] ? indexer.index("viewToFields")[currentTable].length : 0;
+      var fieldId = global.uuid();
+      var name = indexer.index("displayName")[addedField] || "";
+      diff.field = {adds: [[fieldId, currentTable, fieldIx]], removes: []};
+      diff.displayName = {adds: [[fieldId, name]], removes: []};
+      diff.viewConstraintBinding = {adds: [[viewConstraintId, fieldId, addedField]], removes: []};
+      indexer.handleDiffs(diff);
+      break;
+
     case "dragField":
       var table = info.table;
       var field = info.field;
@@ -1396,7 +1463,6 @@ function dispatch(eventInfo) {
       break;
 
     case "clearDragField":
-      console.log("Clearing drag field");
       var diff = {
         "dragField": {adds: [], removes: indexer.facts("dragField")}
       };
@@ -1683,12 +1749,61 @@ function dispatch(eventInfo) {
       indexer.handleDiffs(diff);
       break;
 
+    case "bindUIElementName":
+      var elementId = info.id;
+      var name = info.text;
+      var force = info.force;
+      if(!name) return;
+      var eventFact = [elementId, "name", name, false];
+      var diff = {
+        uiEditorElementAttr: {adds: [eventFact], removes: []}
+      };
+      var prevEvents = indexer.index("uiElementToElementEvent")[elementId];
+      var oldViews;
+      var neueViews;
+      //@TODO for now this will only affect events, but once we allow repetition
+      //changing the name will affect every view created for this element.
+      if(prevEvents) {
+        forattr(type, events of prevEvents) {
+          if(events && events[0]) {
+            diff.uiEditorElementAttr.removes.push(events[0]);
+            oldViews = elementEventToViews(events[0], oldViews);
+            var updated = events[0].slice();
+            updated[3] = name;
+            diff.uiEditorElementAttr.adds.push(updated);
+            neueViews = elementEventToViews(updated, neueViews);
+          }
+        }
+      } else {
+        neueViews = {};
+        oldViews = {};
+      }
+
+      //remove the old name
+      var prevName = indexer.index("uiElementToElementAttr")[elementId];
+      if(prevName && prevName["name"] && prevName["name"][0]) {
+        diff.uiEditorElementAttr.removes.push(prevName["name"][0]);
+      }
+      forattr(table, values of neueViews) {
+        diff[table] = {adds: values, removes: oldViews[table] || []};
+      }
+      indexer.handleDiffs(diff);
+      if(force) {
+        dispatch(["clearContextMenu"]);
+      }
+      break;
+
     case "setUIElementEvent":
-      var type = info.id;
-      var label = info.text;
-      if(!label) return;
+      var type = info;
+      if(!type) return;
       var elementId = indexer.first("activeUIEditorElement")[0];
-      var eventFact = [elementId, type, label, ""];
+      var name = elementId;
+      var attrs = indexer.index("uiElementToElementAttr")[elementId];
+      if(attrs && attrs["name"] && attrs["name"][0]) {
+        name = attrs["name"][0][2];
+      }
+      console.log("Have name: ", name);
+      var eventFact = [elementId, type, type, name];
       var diff = {
         uiEditorElementEvent: {adds: [eventFact], removes: []}
       };
@@ -1769,6 +1884,30 @@ function dispatch(eventInfo) {
       indexer.handleDiffs(diff);
       break;
 
+    case "setUIElementText":
+      var text = info.text;
+      var elementId = indexer.first("activeUIEditorElement")[0];
+      var eventFact = [elementId, "text", text, false];
+      var diff = {
+        uiEditorElementAttr: {adds: [eventFact], removes: []}
+      };
+      var prevEvents = indexer.index("uiElementToElementAttr")[elementId];
+      var oldViews = {};
+      var prev;
+      if(prevEvents) {
+        prev = prevEvents[attr];
+        if(prev && prev[0]) {
+          diff.uiEditorElementAttr.removes.push(prev[0]);
+          oldViews = elementTextToViews(prev[0]);
+        }
+      }
+      var neueViews = elementTextToViews(eventFact);
+      forattr(table, values of neueViews) {
+        diff[table] = {adds: values, removes: oldViews[table] || []};
+      }
+      indexer.handleDiffs(diff);
+      break;
+
     case "liveUIMode":
     case "designerUIMode":
       var tile = info;
@@ -1825,8 +1964,8 @@ module.exports.dispatch = dispatch;
 // UI Helpers
 //---------------------------------------------------------
 
-function elementEventToViews(event) {
-  var results = {view: [], field: [], query: [], viewConstraint: [], viewConstraintBinding: [], constantConstraint: [], displayName: []};
+function elementEventToViews(event, results) {
+  var results = results || {view: [], field: [], query: [], viewConstraint: [], viewConstraintBinding: [], constantConstraint: [], displayName: []};
   unpack [id, type, label, key] = event;
   //uiEvent view
   var uiEventFeederId = id + "|uiEventFeeder";
@@ -1854,21 +1993,27 @@ function elementEventToViews(event) {
   //filtered view of Events for this event
   var filterViewId = id + "|uiEvent|" + type;
   results.view.push([filterViewId]);
-  results.displayName.push([filterViewId, label + " events"]);
+  //if we haven't given this element a name, don't make a crazy view name
+  if(id === key) {
+    results.displayName.push([filterViewId, label + "events"]);
+  } else {
+    results.displayName.push([filterViewId, key + " " + label + "s"]);
+  }
   results.field.push([filterViewId + "|id", filterViewId, 0],
-                     [filterViewId + "|label", filterViewId, 1],
-                     [filterViewId + "|key", filterViewId, 2]);
-  results.displayName.push([filterViewId + "|id", "id"]);
-  results.displayName.push([filterViewId + "|label", "label"]);
-  results.displayName.push([filterViewId + "|key", "key"]);
+                     [filterViewId + "|label", filterViewId, 2],
+                     [filterViewId + "|key", filterViewId, 1]);
+  results.displayName.push([filterViewId + "|id", "eventNumber"]);
+  results.displayName.push([filterViewId + "|label", "event"]);
+  results.displayName.push([filterViewId + "|key", "element"]);
   var filterViewQueryId = filterViewId + "|query";
   results.query.push([filterViewQueryId, filterViewId, 0]);
   var eventsViewConstraintId = filterViewQueryId + "|viewConstraint";
   results.viewConstraint.push([eventsViewConstraintId, filterViewQueryId, "event", false]);
-  results.viewConstraintBinding.push([eventsViewConstraintId, "event|field=eid", filterViewId + "|id"]);
-  results.viewConstraintBinding.push([eventsViewConstraintId, "event|field=label", filterViewId + "|label"]);
-  results.viewConstraintBinding.push([eventsViewConstraintId, "event|field=key", filterViewId + "|key"]);
+  results.viewConstraintBinding.push([eventsViewConstraintId, filterViewId + "|id", "event|field=eid"]);
+  results.viewConstraintBinding.push([eventsViewConstraintId, filterViewId + "|label", "event|field=label"]);
+  results.viewConstraintBinding.push([eventsViewConstraintId, filterViewId + "|key", "event|field=key"]);
   results.constantConstraint.push([filterViewQueryId, filterViewId + "|label", label]);
+  results.constantConstraint.push([filterViewQueryId, filterViewId + "|key", key]);
 
   if(type === "input") {
     results.field.push([filterViewId + "|value", filterViewId, 3]);
@@ -1891,7 +2036,6 @@ function elementTextToViews(text) {
   var results = {view: [], field: [], query: [], viewConstraint: [], viewConstraintBinding: [], constantConstraint: [], displayName: []};
   unpack [id, _, field, isBinding] = text;
   var view = indexer.index("fieldToView")[field];
-  console.log(view, field);
   //uiText view
   var uiTextFeederId = id + "|uiTextFeeder";
   var uiTextId = id + "|uiText";
@@ -2060,12 +2204,12 @@ function viewToDSL(view) {
 
   foreach(vc of viewConstraints) {
     unpack [id, _, sourceView] = vc;
-    final += "<- " + displayNames[sourceView] + "\n";
+    final += "with " + displayNames[sourceView] + "\n";
   }
 
   foreach(agg of aggregateConstraints) {
     unpack [id, query, field, sourceView, code] = agg;
-    final += "<= " + displayNames[sourceView] + "\n";
+    final += "with { " + displayNames[sourceView] + " }\n";
   }
 
   var constantFields = {};
