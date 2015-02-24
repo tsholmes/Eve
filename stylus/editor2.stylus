@@ -1,8 +1,8 @@
 use('../node_modules/nib')
-//use('../node_modules/axis-css')
+use('../node_modules/axis-css')
 
 @import 'nib'
-//@import 'axis'
+@import 'axis'
 
 global-reset()
 
@@ -10,30 +10,33 @@ $border-width = 1px;
 $border-style = solid;
 $fonts = "Avenir", "Verdana", "Helvetica", "Arial", sans-serif;
 
+$focus-bg = #CC9944;
+$focus-fg = #FDE;
 
-$body-bg = #223;
-$body-fg = #DDE;
+$body-bg = #202329;
+$body-fg = #DDD;
 
-$menu-active-bg = #4499CC;
+$menu-focus-bg = #CC9944;
 
-$tile-bg = #112;
+$tile-bg = #111;
 $tile-fg = $body-fg;
 $tile-border = $tile-bg;
-$tile-border-active = #4499CC;
+$tile-focus-fg = lighten(#CC9944, 10%);
+$tile-focus-border = #CC9944;
 
 $base-margin = 12px;
 
 //---------------------------------------------------------
 // Utilities
 //---------------------------------------------------------
-bg-flat(color) {
-  linear-gradient(top, color, color)
+bg-flat($color) {
+  linear-gradient(top, $color, $color)
 }
 
-bg-scanline(width, gap, color = alpha(black, 0.1)) {
+bg-scanline($width, $gap, $color = alpha(black, 0.1)) {
   linear-gradient(top,
-    transparent 0px, transparent gap,
-    color gap, color (gap + width))
+    transparent 0px, transparent $gap,
+    $color $gap, $color ($gap + $width))
 }
 
 
@@ -45,11 +48,50 @@ body {
   overflow: auto;
 }
 
+// UI Elements
+
+
+// Context Menu
+.menu-shade {
+  position: fixed; top: 0; left: 0; bottom: 0; right: 0;
+  z-index: 100;
+}
+
+.menu {
+  display: inline-block;
+  position: relative;
+
+  & .menu-item {
+    padding: 0;
+    position: relative;
+
+    & > span {
+      display: inline-block;
+      padding: 0.25em;
+    }
+  }
+}
+
+// Searcher
+.searcher {
+  ul {
+    display: none;
+  }
+
+  &.active {
+    ul {
+      display: block;
+    }
+  }
+}
+
 // @TODO: move program-loader into #controls.
 #controls, .program-loader {
   float: right;
   margin: ($base-margin / 2) $base-margin;
 }
+
+// Tiles
 
 // @TODO: rename #cards -> #tiles
 #tiles, #cards {
@@ -85,29 +127,36 @@ body {
   }
 }
 
-// Context Menu
-.menu-shade {
-  position: fixed; top: 0; left: 0; bottom: 0; right: 0;
-  z-index: 100;
+// Grid
+.grid {
+  display: table;
 
-  & .menu {
-    display: inline-block;
-    position: relative;
-  }
-}
+  .grid-header {
+    display: table-header-group;
 
-// Searcher
-.searcher {
-  ul {
-    display: none;
+    .header {
+      display: table-cell;
+      padding: 0.2em 1em;
+    }
   }
 
-  &.active {
-    ul {
-      display: block;
+  .grid-rows, .grid-group {
+    display: table-row-group;
+  }
+  .grid-group {
+    display: block;
+  }
+
+  .grid-row {
+    display: table-row;
+
+    & > div:not(.grid-group) {
+      display: table-cell;
+      padding: 0.2em 1em;
     }
   }
 }
+
 
 //---------------------------------------------------------
 // Theme
@@ -121,6 +170,55 @@ body {
   font-family: $fonts;
 }
 
+// UI Elements
+
+input[type="text"] {
+  input($menu-focus-bg);
+  background: alpha(white, 0.8);
+}
+.full-input {
+  min-width: 100%;
+}
+
+// Context Menu
+.menu-shade {
+  background: alpha(black, 0.1);
+}
+
+.menu {
+  border-left: $border-width solid $menu-focus-bg;
+  box-shadow: -3px 0 3px -3px $menu-focus-bg, inset 3px 0 3px -3px $menu-focus-bg;
+  border-radius: 2px;
+  background: alpha(mix($menu-focus-bg, $body-bg, 50%), 0.25);
+
+  .menu-item {
+    &:hover, &.focused {
+      background: alpha($menu-focus-bg, 0.2);
+      box-shadow: inset 0 3px 3px -3px $menu-focus-bg, inset 0 -3px 3px -3px $menu-focus-bg;
+    }
+    &:active {
+      background: alpha($menu-focus-bg, 0.4);
+    }
+  }
+}
+
+// Searcher
+.searcher {
+  padding: 0;
+  &.active {
+    background: alpha($body-bg, 0.5);
+
+    li:hover, li.focused {
+      background: alpha($menu-focus-bg, 0.2);
+    }
+    li:active {
+      background: alpha($menu-focus-bg, 0.4);
+    }
+  }
+}
+
+// Tiles
+
 .tile, .card {
   background: $tile-bg;
   border: $border-width $border-size $tile-border;
@@ -128,7 +226,7 @@ body {
 
   // Controls
   & .tile-controls {
-    background: $tile-border-active;
+    background: $tile-focus-border;
     border-top-right-radius: 2px;
     border-bottom-left-radius: 2px;
     opacity: 0;
@@ -138,69 +236,37 @@ body {
       background: alpha(red, 0.5);
     }
   }
-  &:hover .tile-controls {
+  &:hover .tile-controls, &.focused .tile-controls {
     opacity: 1;
   }
 
   // Add tile
   &.add-tile {
     background: alpha($tile-bg, 0);
-    border: $border-width $border-style alpha($tile-border-active, 0);
-    color: alpha($tile-fg, 0);
+    border: $border-width $border-style alpha($tile-focus-border, 0);
+    color: $body-bg;
     transition: 0.3s ease-in-out;
 
     &:hover {
-      background: alpha($tile-bg, 0.5);
-      border-color: $tile-border-active;
-      color: alpha($tile-fg, 0.6);
+      background: alpha($tile-bg, 0.25);
+      border-color: alpha($tile-focus-border, 0.8);
+      box-shadow: 0 0 3px $tile-focus-border, inset 0 0 3px $tile-focus-border;
+      shadow-stroke(alpha($tile-focus-fg, 0.7));
     }
     &:active {
       background: alpha($tile-bg, 0.5);
-      border-color: $tile-border-active;
-      color: alpha($tile-fg, 0.6);
+      border-color: $tile-focus-border;
+      box-shadow: 0 0 5px $tile-focus-border, inset 0 0 5px $tile-focus-border;
+      shadow-stroke($tile-focus-fg);
     }
   }
 }
 
-// Context Menu
-.menu-shade {
-  //background: bg-scanline(1px, 5px), bg-flat(alpha(black, 0.1));
-  //background-size: 1px 6px, 1px 1px; background-repeat: repeat, repeat;
-  background: alpha(black, 0.1);
+// Grid
 
-
-  .menu {
-    border-left: 3px solid $tile-border-active;
-    border-radius: 2px;
-    background: bg-scanline(1px, 4px), bg-scanline(1px, 6px), bg-scanline(1px, 10px), bg-flat(alpha(black, 0.25));
-    background-size: 256px 5px, 256px 7px, 256px 11px, 256px 256px; background-repeat: repeat, repeat;
-  }
-  .menu-item {
-    padding: 0.25em;
-
-    &:hover, &.focused {
-      background: alpha($menu-active-bg, 0.2);
-    }
-    &:active {
-      background: alpha($menu-active-bg, 0.4);
-    }
-
-  }
-}
-
-// Searcher
-.searcher {
-  ul {
-  }
-
-  &.active {
-    background: alpha(black, 0.5);
-
-    li:hover, li.focused {
-      background: alpha($menu-active-bg, 0.2);
-    }
-    li:active {
-      background: alpha($menu-active-bg, 0.4);
-    }
+.grid {
+  .grid-header .header {
+    border-bottom: 1px solid $tile-focus-border;
+    margin-bottom: 0.5em;
   }
 }
