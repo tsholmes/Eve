@@ -15,7 +15,7 @@ $base-margin = 12px;
 
 body {
   height: 100vh;
-  overflow: auto;
+  overflow: hidden;
 }
 
 // UI Elements
@@ -30,7 +30,6 @@ body {
 }
 
 .menu {
-  display: inline-block;
   position: relative;
   min-width: 80px;
   display: flex;
@@ -162,6 +161,53 @@ body {
 
 // Grid
 .grid {
+  display: flex; flex: 1; flex-shrink: 0; flex-direction: column;
+  overflow: hidden;
+  min-height: 4em;
+
+  .grid-rows { overflow: auto; }
+  .grid-header {
+    display: flex; flex: none; margin-bottom: ($base-margin * 3 / 4);
+  }
+  .grid-header > div {
+    flex: none;
+    overflow: hidden;
+    padding: 5px 15px;
+    width: 200px;
+    height: 1.5em;
+  }
+
+  .header.add-header {
+    width: 50px;
+    &.selected {
+      width: 200px;
+      &::before { content: ""; }
+    }
+    &::before { content: "+"; }
+  }
+
+  .grid-row { display: flex; }
+  .grid-row.add-row { height: 1.5em; }
+  .grid-row > div:not(.grid-group) {
+    flex: none;
+    padding: 5px 15px;
+    width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  & > div.selected {
+    text-overflow: clip;
+    z-index: 1;
+  }
+  & > .grid-group {
+    flex-direction: column; flex-grow: 1;
+    padding: 0;
+  }
+}
+
+// CSS tables break when fields need to be grouped.
+/* .grid {
   display: table;
 
   .grid-header {
@@ -190,3 +236,4 @@ body {
     }
   }
 }
+ */
