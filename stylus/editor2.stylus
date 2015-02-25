@@ -6,39 +6,7 @@ use('../node_modules/axis-css')
 
 global-reset()
 
-$border-width = 1px;
-$border-style = solid;
-$fonts = "Avenir", "Verdana", "Helvetica", "Arial", sans-serif;
-
-$focus-bg = #CC9944;
-$focus-fg = #FDE;
-
-$body-bg = #202329;
-$body-fg = #DDD;
-
-$menu-focus-bg = #CC9944;
-
-$tile-bg = #111;
-$tile-fg = $body-fg;
-$tile-border = $tile-bg;
-$tile-focus-fg = lighten(#CC9944, 10%);
-$tile-focus-border = #CC9944;
-
 $base-margin = 12px;
-
-//---------------------------------------------------------
-// Utilities
-//---------------------------------------------------------
-bg-flat($color) {
-  linear-gradient(top, $color, $color)
-}
-
-bg-scanline($width, $gap, $color = alpha(black, 0.1)) {
-  linear-gradient(top,
-    transparent 0px, transparent $gap,
-    $color $gap, $color ($gap + $width))
-}
-
 
 //---------------------------------------------------------
 // Structure
@@ -101,10 +69,14 @@ body {
 }
 
 .tile, .card {
-  clearfix();
   margin: $base-margin;
   overflow: auto;
   position: absolute;
+
+  & h2 {
+    display: inline-block;
+    padding: 0.25em 1em;
+  }
 
   & .tile-controls {
     float: right;
@@ -137,6 +109,7 @@ body {
     .header {
       display: table-cell;
       padding: 0.2em 1em;
+      height: 1.5em;
     }
   }
 
@@ -149,124 +122,10 @@ body {
 
   .grid-row {
     display: table-row;
-
     & > div:not(.grid-group) {
       display: table-cell;
       padding: 0.2em 1em;
+      height: 1.5em;
     }
-  }
-}
-
-
-//---------------------------------------------------------
-// Theme
-//---------------------------------------------------------
-
-body {
-  // background: bg-scanline(1px, 5px), bg-scanline(1px, 11px), bg-flat($body-bg);
-  // background-size: 1px 6px, 1px, 12px, 1px 1px; background-repeat: repeat, repeat, repeat;
-  background: $body-bg;
-  color: $body-fg;
-  font-family: $fonts;
-}
-
-// UI Elements
-
-input[type="text"] {
-  input($menu-focus-bg);
-  background: alpha(white, 0.8);
-}
-.full-input {
-  min-width: 100%;
-}
-
-// Context Menu
-.menu-shade {
-  background: alpha(black, 0.1);
-}
-
-.menu {
-  border-left: $border-width solid $menu-focus-bg;
-  box-shadow: -3px 0 3px -3px $menu-focus-bg, inset 3px 0 3px -3px $menu-focus-bg;
-  border-radius: 2px;
-  background: alpha(mix($menu-focus-bg, $body-bg, 50%), 0.25);
-
-  .menu-item {
-    &:hover, &.focused {
-      background: alpha($menu-focus-bg, 0.2);
-      box-shadow: inset 0 3px 3px -3px $menu-focus-bg, inset 0 -3px 3px -3px $menu-focus-bg;
-    }
-    &:active {
-      background: alpha($menu-focus-bg, 0.4);
-    }
-  }
-}
-
-// Searcher
-.searcher {
-  padding: 0;
-  &.active {
-    background: alpha($body-bg, 0.5);
-
-    li:hover, li.focused {
-      background: alpha($menu-focus-bg, 0.2);
-    }
-    li:active {
-      background: alpha($menu-focus-bg, 0.4);
-    }
-  }
-}
-
-// Tiles
-
-.tile, .card {
-  background: $tile-bg;
-  border: $border-width $border-size $tile-border;
-  border-radius: 2px;
-
-  // Controls
-  & .tile-controls {
-    background: $tile-focus-border;
-    border-top-right-radius: 2px;
-    border-bottom-left-radius: 2px;
-    opacity: 0;
-
-    & .close-btn {
-      border: none;
-      background: alpha(red, 0.5);
-    }
-  }
-  &:hover .tile-controls, &.focused .tile-controls {
-    opacity: 1;
-  }
-
-  // Add tile
-  &.add-tile {
-    background: alpha($tile-bg, 0);
-    border: $border-width $border-style alpha($tile-focus-border, 0);
-    color: $body-bg;
-    transition: 0.3s ease-in-out;
-
-    &:hover {
-      background: alpha($tile-bg, 0.25);
-      border-color: alpha($tile-focus-border, 0.8);
-      box-shadow: 0 0 3px $tile-focus-border, inset 0 0 3px $tile-focus-border;
-      shadow-stroke(alpha($tile-focus-fg, 0.7));
-    }
-    &:active {
-      background: alpha($tile-bg, 0.5);
-      border-color: $tile-focus-border;
-      box-shadow: 0 0 5px $tile-focus-border, inset 0 0 5px $tile-focus-border;
-      shadow-stroke($tile-focus-fg);
-    }
-  }
-}
-
-// Grid
-
-.grid {
-  .grid-header .header {
-    border-bottom: 1px solid $tile-focus-border;
-    margin-bottom: 0.5em;
   }
 }
