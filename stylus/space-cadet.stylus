@@ -43,9 +43,7 @@ input[type="text"] {
   input($menu-focus-bg);
   background: alpha(white, 0.8);
 }
-.full-input {
-  min-width: 100%;
-}
+
 
 // Context Menu
 .menu-shade {
