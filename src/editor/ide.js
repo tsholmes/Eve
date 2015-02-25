@@ -4,7 +4,6 @@ var React = require("react/addons");
 var bootstrap = require("./bootstrap");
 var JSML = require("./jsml");
 var helpers = require("./helpers");
-var Card = require("./card");
 var grid = require("./grid");
 var incrementalUI = require("./incrementalUI");
 var index = require("./indexer");
@@ -878,17 +877,27 @@ var tiles = {
       }
     },
     render: function() {
+      var self = this;
       var mode = indexer.index("uiEditorTileToMode")[this.props.tile] || "designer";
+      var switcherClick = function(mode) {
+        return function(e) {
+          dispatch([mode, self.props.tile]);
+        }
+      }
+      var switcher = JSML.react(["div", {className: "switcher"},
+                                 ["span", {className: mode === "designer" ? "active" : "", onClick: switcherClick("designerUIMode")}, "designer"],
+                                 ["span", {className: mode === "live" ? "active" : "", onClick: switcherClick("liveUIMode")},"live"]])
       if(mode === "designer") {
         var self = this;
         var editorElems = indexer.facts("uiEditorElement").map(function(cur) {
           unpack [id, type] = cur;
           return self[type]({elem: cur, tile: self.props.tile, key: id});
         });
-        var content = JSML.react(["div", {className: "ui-design-surface"},
-                                  editorElems]);
+        var content = [switcher,
+          JSML.react(["div", {className: "ui-design-surface"},
+                                  editorElems])];
       } else {
-        var content = [this.container({})];
+        var content = [switcher, this.container({})];
       }
 
       return tiles.wrapper({class: "ui-tile", controls: false, content: content, contextMenu: this.contextMenu,
