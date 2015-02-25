@@ -11,13 +11,17 @@ $base-margin = 12px;
 //---------------------------------------------------------
 // Structure
 //---------------------------------------------------------
+* { box-sizing: border-box; }
+
 body {
   height: 100vh;
   overflow: auto;
 }
 
 // UI Elements
-
+.full-input {
+  min-width: 100%;
+}
 
 // Context Menu
 .menu-shade {
@@ -28,6 +32,10 @@ body {
 .menu {
   display: inline-block;
   position: relative;
+  min-width: 80px;
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
 
   & .menu-item {
     padding: 0;
@@ -55,8 +63,9 @@ body {
 
 // @TODO: move program-loader into #controls.
 #controls, .program-loader {
-  float: right;
+  position: fixed; top: 10px; right: 40px;
   margin: ($base-margin / 2) $base-margin;
+  z-index: 10;
 }
 
 // Tiles
@@ -68,10 +77,15 @@ body {
   position: relative;
 }
 
+
 .tile, .card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   margin: $base-margin;
   overflow: auto;
   position: absolute;
+  padding: 10px 20px;
 
   & h2 {
     display: inline-block;
@@ -79,7 +93,8 @@ body {
   }
 
   & .tile-controls {
-    float: right;
+    position: absolute; top: 0; right: 0;
+    overflow: hidden;
   }
 
   // Add tile
@@ -98,6 +113,52 @@ body {
     }
   }
 }
+
+// Ui Editor
+
+.ui-tile {
+  user-select: none;
+  overflow: auto;
+
+  .switcher {
+    position: absolute; top: 10px; left: 10px;
+    span {
+      cursor: default;
+      margin-right: 5px;
+    }
+  }
+  .uiCard { overflow: auto; }
+  .ui-design-surface {
+    overflow: auto;
+    width: 100%; height: 100%;
+  }
+  .ui-tools {
+    position: absolute; top: 10px; right: 10px;
+    div { padding: 5px 10px; }
+  }
+}
+
+.uiElement {
+  &::after { position: absolute; top: -20px; left: 0; }
+  &.button::after { content: "button"; }
+  &.text::after { content: "text"; }
+  &.box::after { content: "box"; }
+  &.input::after { content: "input"; }
+}
+
+.resizer {
+  pointer-events: none;
+  z-index: 10;
+  .resize-handle {
+    position: absolute;
+    pointer-events: auto;
+  }
+  .ns-handle { cursor: ns-resize; }
+  .ew-handle { cursor: ew-resize; }
+  .nesw-handle { cursor: nesw-resize; }
+  .nwse-handle { cursor: nwse-resize; }
+}
+
 
 // Grid
 .grid {
