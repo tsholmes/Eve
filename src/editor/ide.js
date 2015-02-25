@@ -1059,7 +1059,7 @@ var SearcherItem = reactFactory({
   render: function() {
     var focus = this.props.focus ? "focused" : "";
     var name = this.props.item ? this.props.item[1] : "";
-    return JSML.react(["li", {"onClick": this.click, className: focus}, name]);
+    return JSML.react(["li", {"onClick": this.click, className: "menu-item " + focus}, name]);
   }
 });
 
