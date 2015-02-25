@@ -94,10 +94,16 @@ input[type="text"] {
   border: $border-width $border-size $tile-border;
   border-radius: 3px;
 
-  // Title
   & > h2 {
     background: $body-bg;
     border-bottom-right-radius: 3px;
+    margin-left: -20px;
+    margin-top: -10px;
+  }
+
+  & > pre {
+    font-size: 11pt;
+    color: darken($tile-fg, 10%);
   }
 
   // Controls
@@ -149,13 +155,18 @@ input[type="text"] {
     transition: 0.1s ease-in;
   }
   .grid-row > div {
-    border: 1px solid $tile-bg;
+    border: 1px solid transparent;
     transition: 0.1s ease-in;
   }
 
   div.selected {
     border-color: $tile-focus-border;
     box-shadow: 0 0 3px $tile-focus-border, inset 0 0 3px $tile-focus-border;
+  }
+
+  .grouped-row {
+    border-bottom: 1px solid mix($tile-bg, $tile-focus-border, 50%);
+    margin-bottom: -2px;
   }
 }
 .tile:hover, .card:hover {
@@ -168,3 +179,15 @@ input[type="text"] {
     }
   }
 }
+
+// UI Editor
+.ui-tile .switcher .active { color: $focus-bg; }
+
+.uiElement {
+  border: 1px solid $focus-bg;
+  background: #33302F;
+  &::after { color: $focus-bg; }
+}
+
+.resizer { border: 1px solid alpha($focus-bg, 0.5); }
+.resizer .resize-handle { border: 1px solid $focus-bg; }
