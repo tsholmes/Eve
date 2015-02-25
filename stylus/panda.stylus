@@ -1,4 +1,4 @@
- use('../node_modules/nib')
+use('../node_modules/nib')
 use('../node_modules/axis-css')
 
 @import 'nib'
@@ -33,13 +33,14 @@ body {
   background: $body-bg;
   color: $body-fg;
   font-family: $fonts;
-  height: 100vh;
-  overflow: hidden;
 }
+
+input { font-size: 0.9em; }
 
 #cards, #tiles {
   overflow: visible;
-  position: absolute; top: 60px; bottom: 50px; left: 50px; right: 50px;
+  position: absolute; top: 50px; bottom: 50px; left: 50px; right: 50px;
+  margin: 0px;
 }
 
 .program-loader { font-size: 14px; }
@@ -65,16 +66,18 @@ body {
 .menu .menu-item input {
   background: none;
   border: none;
+  outline: none;
+  padding: 3px; padding-bottom: 5px;
 }
 .searcher ul { font-size: 11pt; }
 
 .searcher .menu-item {
-  margin-bottom: 0; margin-top: 5px;
+  margin-bottom: 0;// margin-top: 5px;
   padding: 3px;
+  background: transparent;
   box-shadow: none;
-  border: 1px solid $active;
   &:hover, &.focused {
-    background: #e5e5e5
+    background: alpha(black, 0.1);
   }
 }
 .searcher.active .menu-item:first-child {
@@ -143,15 +146,23 @@ body {
 
 // Grid
 .grid {
+  .grid-header {
+    background: alpha(black, 0.05);
+    border-radius: 2px;
+  }
+  .header { font-weight: 500; }
+  .header.selected { background: alpha(black, 0.08); }
   .header.add-header {
-    width: 50px;
     transition: 0.2s ease-in-out;
-    &.selected {
-      width: 200px;
-      background: rgba(0,0,0,0.08);
-      &::before { content: ""; }
-    }
-    &::before { content: "+"; }
+    &.selected { background: rgba(0,0,0,0.08); }
+  }
+  .grouped-row {
+    border-bottom: 1px solid alpha(black, 0.08);
+    margin-bottom: -1px;
+  }
+  .grid-row div.selected {
+    background: #cdf;
+    border-radius: 2px;
   }
 }
 
