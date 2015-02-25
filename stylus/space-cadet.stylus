@@ -59,6 +59,11 @@ input[type="text"] {
   background: alpha(mix($menu-focus-bg, $body-bg, 50%), 0.25);
 
   .menu-item {
+    input[type="text"] {
+      background: alpha(black, 0.1);
+      border: alpha(black, 0.1);
+    }
+
     &:hover, &.focused {
       background: alpha($menu-focus-bg, 0.2);
       box-shadow: inset 0 3px 3px -3px $menu-focus-bg, inset 0 -3px 3px -3px $menu-focus-bg;
