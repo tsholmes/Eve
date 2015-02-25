@@ -1,0 +1,170 @@
+ use('../node_modules/nib')
+use('../node_modules/axis-css')
+
+@import 'nib'
+@import 'axis'
+
+$fonts = "Avenir", "Verdana", "Helvetica", "Arial", sans-serif;
+$border-radius = 2px;
+
+$active = #9af;
+
+$body-bg = #505059;
+$body-fg = alpha(black, 0.87);
+
+$tile-bg = #f7f7f7;
+$tile-fg = $body-fg;
+
+$menu-bg = #eee;
+$menu-border = #555;
+$menu-focus-bg = #cdf;
+
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 300;
+  src: local('Nunito-Light'), url(../resources/fonts/Nunito-Light.ttf) format('woff');
+}
+
+//---------------------------------------------------------
+// Theme
+//---------------------------------------------------------
+body {
+  background: $body-bg;
+  color: $body-fg;
+  font-family: $fonts;
+  height: 100vh;
+  overflow: hidden;
+}
+
+#cards, #tiles {
+  overflow: visible;
+  position: absolute; top: 60px; bottom: 50px; left: 50px; right: 50px;
+}
+
+.program-loader { font-size: 14px; }
+
+// Menus
+.menu-shade { background: alpha(black, 0.3); }
+.menu {
+  min-width: 80px;
+  border-radius: $border-radius;
+}
+.menu .menu-item {
+  margin-bottom: 5px;
+  padding: 10px;
+  box-shadow: 0 2px 4px $menu-border;
+  background: $menu-bg;
+  border-radius: $border-radius;
+  cursor: default;
+  transition: box-shadow 0.2s ease-in-out;
+  &:hover {
+    background: $menu-focus-bg;
+  }
+}
+.menu .menu-item input {
+  background: none;
+  border: none;
+}
+.searcher ul { font-size: 11pt; }
+
+.searcher .menu-item {
+  margin-bottom: 0; margin-top: 5px;
+  padding: 3px;
+  box-shadow: none;
+  border: 1px solid $active;
+  &:hover, &.focused {
+    background: #e5e5e5
+  }
+}
+.searcher.active .menu-item:first-child {
+  padding-top: 8px;
+  border-top: 1px solid #ccc;
+}
+
+// Tiles
+
+.card, .tile {
+  padding: 10px 20px;
+  padding-bottom: 13px;
+  border-radius: $border-radius * 1.5;
+  overflow-y: hidden;
+  overflow-x: auto;
+
+  background: $tile-bg;
+  color: $tile-fg;
+  transition: 0.4s ease-in-out;
+
+  &.add-tile {
+    background: alpha($tile-bg, 0);
+    color: alpha($tile-fg, 0);
+    transition: 0.3s ease-in-out;
+
+    &:hover, &.selected {
+      background: alpha($tile-bg, 0.2);
+      color: alpha(white, 0.36);
+    }
+  }
+
+  & h2 {
+    flex: none;
+    cursor: default;
+    font-size: 14pt;
+    color: alpha(black, 0.56);
+    margin-bottom: 8px;
+    margin-top: 5px;
+  }
+
+  & pre {
+    margin: 10px; margin-bottom: 25px;
+    font-size: 10pt;
+    color: #259;
+    line-height: 1.25em;
+  }
+
+  & > .tile-controls {
+    position: absolute; top: 0; right: 0;
+    border-radius: 4px; border-top-left-radius: 0; border-bottom-right-radius: 0;
+    opacity: 0;
+    transition: 0.2s ease-out;
+
+    & > .tile-control { opacity: 0.6; }
+    & > .tile-control:hover { opacity: 0.8; }
+    & > .tile-control:active { opacity: 1; }
+
+    & > .tile-control.close-btn {
+      background: #aaa;
+      border-width: 0px; border-radius: 0;
+      color: white;
+    }
+  }
+  &:hover .tile-controls { opacity: 1; }
+}
+
+// Grid
+.grid {
+  .header.add-header {
+    width: 50px;
+    transition: 0.2s ease-in-out;
+    &.selected {
+      width: 200px;
+      background: rgba(0,0,0,0.08);
+      &::before { content: ""; }
+    }
+    &::before { content: "+"; }
+  }
+}
+
+
+// UI Editor
+.ui-tile .switcher { color: #999; }
+.ui-tile .switcher .active { color: $active; }
+
+.uiElement {
+  border: 1px solid $active;
+  background: #f0f0f0;
+  &::after { color: $active; }
+}
+
+.resizer { border: 1px solid #ddd; }
+.resizer .resize-handle { border: 1px solid #bbb; }
