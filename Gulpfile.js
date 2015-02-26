@@ -67,7 +67,7 @@ gulp.task("build-editor", "Build the editor bundle.", function() {
 });
 
 gulp.task("build-worker", "Build the worker bundle.", function() {
-  bundle("worker.js", ["./src/editor/worker.js"]);
+  bundle("worker.js", ["./src/worker.js"]);
 });
 
 gulp.task("build", "Build all the things.", ["stylus", "build-editor", "build-worker"]);
@@ -84,7 +84,7 @@ gulp.task("watch-editor", "Watch editor related files for changes.", ["build-edi
 gulp.task("watch-worker", "Watch worker related files for changes.", ["build-worker"], function() {
   return gulp.watch(editorSources.concat(macroSources), function(events) {
     console.log("Recompiling worker");
-    return bundle("worker.js", ["./src/editor/worker.js"]);
+    return bundle("worker.js", ["./src/worker.js"]);
   });
 });
 

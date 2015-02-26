@@ -1,4 +1,4 @@
-import macros from "../macros.sjs";
+import macros from "./macros.sjs";
 
 importScripts("../src/eve.js", "../src/helpers.js", "../src/tokenizer.js");
 
