@@ -34,6 +34,7 @@ gulp.task("watch-stylus", "Watch stylus files for changes.", ["stylus"], functio
 // JS Bundles
 
 var editorSources = ["src/editor/**/*.js"];
+var editorDeps = ["react/addons", "lodash", "lodash-deep"];
 var macroSources = ["src/**/*.sjs"];
 
 function bundle(name, files, opts) {
@@ -71,7 +72,7 @@ function bundle(name, files, opts) {
 }
 gulp.task("build-editor", "Build the editor bundle.", function() {
   bundle("editor.js", ["./src/editor/bootstrap.js"], {external: ["react/addons"]});
-  bundle("editor-deps.js", [], {require: ["react/addons"]});
+  bundle("editor-deps.js", [], {require: editorDeps});
 });
 
 gulp.task("build-worker", "Build the worker bundle.", function() {
@@ -85,7 +86,7 @@ gulp.task("build", "Build all the things.", ["stylus", "build-editor", "build-wo
 gulp.task("watch-editor", "Watch editor related files for changes.", ["build-editor"], function() {
   return gulp.watch(editorSources.concat(macroSources), function(events) {
     console.log("Recompiling editor");
-    return bundle("editor.js", ["./src/editor/bootstrap.js"], {external: ["react/addons"]});
+    return bundle("editor.js", ["./src/editor/bootstrap.js"], {external: editorDeps});
   });
 });
 
