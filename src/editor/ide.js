@@ -2324,7 +2324,7 @@ function init(program) {
   indexer.addIndex("field", "fieldToView", indexers.makeLookup(0, 1));
   indexer.addIndex("field", "field", indexers.makeLookup(0, false));
   indexer.addIndex("tag", "idToTags", indexers.makeCollector(0));
-  indexer.addIndex("editId", "editRowToId", indexers.makeLookup2D(0, 1, 2));
+  indexer.addIndex("editId", "editRowToId", indexers.makeLookup(0, 1, 2));
   indexer.addIndex("editId", "editViewToIds", indexers.makeCollector(0));
   indexer.addIndex("join", "fieldToJoins", indexers.makeCollector(0));
   indexer.addIndex("query", "viewToQuery", indexers.makeCollector(1));

@@ -1,4 +1,8 @@
 import macros from "../macros.sjs";
+
+var _ = require("lodash");
+_.mixin(require("lodash-deep"));
+
 var helpers = require("./helpers");
 
 //---------------------------------------------------------
@@ -153,55 +157,57 @@ Indexer.prototype = {
 //---------------------------------------------------------
 
 var indexers = {
-  // Builds a lookup table from index 1 to index 2. [Fact] -> {[Ix1]: Ix2}
+  // Builds a lookup table from `keyIx`(es) to `valueIx`. [Fact] -> {[Fact[keyIx1],...,Fact[keyIxN]]: Fact[valueIx]}
+  // If valueIx is false, value will be the entire matching fact.
   makeLookup: function(keyIx, valueIx) {
-    if(valueIx !== false) {
-      return function(cur, diffs) {
+    var fn;
+    if(arguments.length < 3) {
+      // Optimized N=1 case.
+      fn =  function(cur, diffs) {
         var final = cur || {};
         foreach(remove of diffs.removes) {
           delete final[remove[keyIx]];
         }
-        foreach(add of diffs.adds) {
-          final[add[keyIx]] = add[valueIx];
+        if(valueIx) {
+          foreach(add of diffs.adds) {
+            final[add[keyIx]] = add[valueIx];
+          }
+        } else {
+          foreach(add of diffs.adds) {
+            final[add[keyIx]] = add;
+          }
         }
         return final;
       }
     } else {
-      return function(cur, diffs) {
+      // Generic multi-arity case.
+      var keyIxes = [].slice.call(arguments);
+      var valueIx = keyIxes.pop();
+      fn = function(cur, diffs) {
         var final = cur || {};
         foreach(remove of diffs.removes) {
-          delete final[remove[keyIx]];
+          var pathKeys = new Array(keyIxes.length);
+          foreach(ix, keyIx of keyIxes) {
+            pathKeys[ix] = remove[keyIx];
+          }
+          var baseKey = pathKeys.pop();
+          var path = _.deepGet(final, pathKeys);
+          if(path) {
+            delete path[baseKey];
+          }
         }
         foreach(add of diffs.adds) {
-          final[add[keyIx]] = add;
+          var keys = new Array(keyIxes.length);
+          foreach(ix, keyIx of keyIxes) {
+            keys[ix] = add[keyIx];
+          }
+          _.deepSet(final, keys, add[valueIx]);
         }
-        return final;
       }
     }
-  },
-  // Builds a lookup table from indexes 1 and 2 to index3. [Fact] -> {[Ix1]: {[Ix2]: Ix3}}
-  makeLookup2D: function(key1Ix, key2Ix, valueIx) {
-    return function(cur, diffs) {
-      var final = cur || {};
-      foreach(add of diffs.adds) {
-        var key1 = add[key1Ix];
-        if(!final[key1]) {
-          final[key1] = {};
-        }
-        var key2 = add[key2Ix];
-        final[key1][key2] = add[valueIx];
-      }
-      foreach(remove of diffs.removes) {
-        var key1 = remove[key1Ix];
-        if(!final[key1]) {
-          continue;
-        }
-        var key2 = remove[key2Ix];
-        delete final[key1][key2];
-      }
 
-      return final;
-    };
+    fn.type = "lookup<" + [].join.call(arguments, ",") + ">"
+    return fn;
   },
   // Groups facts by specified indexes, in order of hierarchy. [Fact] -> {[Any]: [Fact]|Group}
   makeCollector: function(keyIx) {
