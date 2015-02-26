@@ -36,7 +36,7 @@ gulp.task("watch-stylus", "Watch stylus files for changes.", ["stylus"], functio
 var editorSources = ["src/editor/**/*.js"];
 var macroSources = ["src/**/*.sjs"];
 
-function bundle(name, files) {
+function bundle(name, files, opts) {
   var bundler = browserify({
     debug: true
   })
@@ -47,6 +47,16 @@ function bundle(name, files) {
     readableNames: true
   });
 
+  if(opts) {
+    for(var key in opts) {
+      if(opts[key]) {
+        for(var i = 0; i < opts[key].length; i++) {
+          bundler[key](opts[key]);
+        }
+      }
+    }
+  }
+
   return bundler.bundle()
   .on('error', function(err){
     console.log("[bundle] Error:", err.message);
@@ -54,16 +64,14 @@ function bundle(name, files) {
   })
 
   .pipe(source(name))
-  //.pipe(buffer())
-  //.pipe(sourcemaps.init({loadMaps: true}))
-  //.pipe(sourcemaps.write("."))
   .pipe(gulp.dest("build"))
   .on("end", function() {
     bundler.reset();
   });
 }
 gulp.task("build-editor", "Build the editor bundle.", function() {
-  bundle("editor.js", ["./src/editor/bootstrap.js"]);
+  bundle("editor.js", ["./src/editor/bootstrap.js"], {external: ["react/addons"]});
+  bundle("editor-deps.js", [], {require: ["react/addons"]});
 });
 
 gulp.task("build-worker", "Build the worker bundle.", function() {
@@ -77,7 +85,7 @@ gulp.task("build", "Build all the things.", ["stylus", "build-editor", "build-wo
 gulp.task("watch-editor", "Watch editor related files for changes.", ["build-editor"], function() {
   return gulp.watch(editorSources.concat(macroSources), function(events) {
     console.log("Recompiling editor");
-    return bundle("editor.js", ["./src/editor/bootstrap.js"]);
+    return bundle("editor.js", ["./src/editor/bootstrap.js"], {external: ["react/addons"]});
   });
 });
 
