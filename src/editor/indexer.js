@@ -190,10 +190,10 @@ var indexers = {
           foreach(ix, keyIx of keyIxes) {
             pathKeys[ix] = remove[keyIx];
           }
-          var baseKey = pathKeys.pop();
+          var lastKey = pathKeys.pop();
           var path = _.deepGet(final, pathKeys);
           if(path) {
-            delete path[baseKey];
+            delete path[lastKey];
           }
         }
         foreach(add of diffs.adds) {
@@ -201,7 +201,11 @@ var indexers = {
           foreach(ix, keyIx of keyIxes) {
             keys[ix] = add[keyIx];
           }
-          _.deepSet(final, keys, add[valueIx]);
+          if(valueIx) {
+            _.deepSet(final, keys, add[valueIx]);
+          } else {
+            _.deepSet(final, keys, add);
+          }
         }
       }
     }
@@ -211,16 +215,17 @@ var indexers = {
   },
   // Groups facts by specified indexes, in order of hierarchy. [Fact] -> {[Any]: [Fact]|Group}
   makeCollector: function(keyIx) {
+    var fn;
+    // Optimized N=1 case.
     if(arguments.length === 1) {
-      return function(cur, diffs) {
+      fn = function(cur, diffs) {
         var final = cur || {};
         foreach(remove of diffs.removes) {
           if(!final[remove[keyIx]]) continue;
-          final[remove[keyIx]] = final[remove[keyIx]].filter(function(cur) {
-            return !arrayEqual(cur, remove)
+          _.remove(final[remove[keyIx]], function(cur) {
+            return _.isEqual(cur, remove);
           });
         }
-
         foreach(add of diffs.adds) {
           if(!final[add[keyIx]]) {
             final[add[keyIx]] = [];
@@ -233,29 +238,28 @@ var indexers = {
       }
     } else {
       var keyIxes = [].slice.apply(arguments);
-      var lastKeyIx = keyIxes.pop();
-      return function(cur, diffs) {
+      fn = function(cur, diffs) {
         var final = cur || {};
+        var keys = new Array(keyIxes).length;
         foreach(add of diffs.adds) {
-          var keys = [];
           foreach(ix, keyIx of keyIxes) {
             keys[ix] = add[keyIx];
           }
-          var cur = helpers.aget(final, keys, true);
-          if(!cur[add[lastKeyIx]]) {
-            cur[add[lastKeyIx]] = [];
+          var cur = _.deepGet(final, keys);
+          if(!cur) {
+            cur = [];
+            _.deepSet(final, keys, cur);
           }
-          cur[add[lastKeyIx]].push(add);
+          cur.push(add);
         }
         foreach(remove of diffs.removes) {
-          var keys = [];
           foreach(ix, keyIx of keyIxes) {
             keys[ix] = remove[keyIx];
           }
-          var cur = helpers.aget(final, keys, false);
-          if(!cur || !cur[remove[lastKeyIx]]) { continue; }
-          cur[remove[lastKeyIx]] = cur[remove[lastKeyIx]].filter(function(c) {
-            return !arrayEqual(c, remove);
+          var cur = _.deepGet(final, keys);
+          if(!cur) { continue; }
+          _.remove(cur, keys, function(c) {
+            return _.isEqual(c, remove);
           });
 
         }
@@ -263,6 +267,9 @@ var indexers = {
         return final;
       }
     }
+
+    fn.type = "collector<" + [].join.call(arguments, ",") + ">";
+    return fn;
   },
   // Sorts facts by specified indexes, in order of priority. [Fact] -> [Fact]
   makeSorter: function() {
