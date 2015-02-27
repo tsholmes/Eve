@@ -12,7 +12,6 @@ var helpers = require("./helpers");
 function Indexer(program, handlers) {
   this.worker = program.worker
   this.system = program.system;
-  this.tableToIndexes = {};
   this.indexes = {};
   this.tablesToForward = [];
   this.handlers = handlers || {};
@@ -23,7 +22,6 @@ module.exports.Indexer = Indexer;
 Indexer.prototype = {
   handleDiffs: function(diffs, fromProgram) {
     this.latestDiffs = diffs;
-    var tableToIndexes = this.tableToIndexes;
     var indexes = this.indexes;
     var system = this.system;
     var cur;
@@ -40,12 +38,11 @@ Indexer.prototype = {
 
       // Nuke indexes before the system nukes facts.
       foreach(table of viewsToClear) {
-        if(!tableToIndexes[table]) { continue; }
+        if(!this.indexes[table]) { continue; }
         var diff = {adds: [], removes: this.facts(table)};
-        foreach(index of tableToIndexes[table]) {
-          if(!index || !this.indexes[index]) { continue; }
-          var cur = this.indexes[index];
-          cur.indexer(cur.index, diff);
+        forattr(type, index of this.indexes[table]) {
+          if(!index) { continue; }
+          index.index = index.indexer(index.index, diff);
         }
       }
 
@@ -56,10 +53,9 @@ Indexer.prototype = {
     }
 
     forattr(table, diff of diffs) {
-      if(tableToIndexes[table]) {
-        foreach(index of tableToIndexes[table]) {
-          cur = this.indexes[index];
-          cur.index = cur.indexer(cur.index, diff);
+      if(this.indexes[table]) {
+        forattr(type, index of this.indexes[table]) {
+          index.index = index.indexer(index.index, diff);
         }
       }
       if(specialDiffs.indexOf(table) !== -1) { continue; }
@@ -88,33 +84,37 @@ Indexer.prototype = {
   facts: function(table) {
     return this.system.getStore(table).getFacts();
   },
-  index: function(index) {
-    var cur = this.indexes[index];
-    if(!cur) throw new Error("No index named: " + index);
+  index: function(table, kind, keys) {
+    var type = toIndexType(kind, keys);
+    var cur = _.deepGet(this.indexes, [table, type]);
+    if(!cur) {
+      console.info("Generating index for view: '" + table + "' of type: '" + type + "'.");
+      cur = this.addIndex(table, kind, keys);
+    }
     return cur.index;
   },
-  hasIndex: function(index) {
-    return !!this.indexes[index];
+  hasIndex: function(table, kind, keys) {
+    var type = toIndexType(kind, keys);
+    return !!_.deepGet(this.indexes, [table, type]);
   },
-  addIndex: function(table, name, indexer) {
-    if(!this.tableToIndexes[table]) {
-      this.tableToIndexes[table] = [];
+  addIndex: function(table, kind, keys) {
+    var makeIndexer = IndexMakers[kind];
+    if(!makeIndexer) {
+      throw new Error("Unknown indexer of kind: '" + kind + "'.");
     }
-    this.tableToIndexes[table].push(name);
-    //initialize the index by sending an add of all the facts we have now.
-    this.indexes[name] = {index: indexer(null, {adds: this.facts(table), removes: []}),
-                          indexer: indexer};
+    var indexer = makeIndexer.call(null, keys);
+    _.deepSet(this.indexes, [table, indexer.type], {
+      //initialize the index by sending an add of all the facts we have now.
+      index: indexer(null, {adds: this.facts(table), removes: []}),
+      indexer: indexer
+    });
+    return this.indexes[table][indexer.type];
   },
-  removeIndex: function(table, name) {
-    var tableIndexes = this.tableToIndexes[table];
-    var ix = tableIndexes.indexOf(name);
-    if(ix !== -1) {
-      tableIndexes.splice(ix, 1);
-    }
-    if(!tableIndexes.length) {
-      delete this.tableToIndexes[table];
-    }
-    delete this.indexes[name];
+  removeIndex: function(table, kind, keys) {
+    var type = toIndexType(kind, keys);
+    var tableIndexes = this.indexes[table];
+    if(!tableIndexes) { return; }
+    delete tableIndexes[type];
   },
   forward: function(table) {
     if(!table) { return; }
@@ -156,19 +156,20 @@ Indexer.prototype = {
 // Fact Indexers
 //---------------------------------------------------------
 
-var indexers = {
+var IndexMakers = {
   // Builds a lookup table from `keyIx`(es) to `valueIx`. [Fact] -> {[Fact[keyIx1],...,Fact[keyIxN]]: Fact[valueIx]}
   // If valueIx is false, value will be the entire matching fact.
-  makeLookup: function(keyIx, valueIx) {
+  lookup: function(keyIxes) {
     var fn;
     if(arguments.length < 3) {
       // Optimized N=1 case.
+      unpack [keyIx, valueIx] = keyIxes;
       fn =  function(cur, diffs) {
         var final = cur || {};
         foreach(remove of diffs.removes) {
           delete final[remove[keyIx]];
         }
-        if(valueIx) {
+        if(valueIx !== false) {
           foreach(add of diffs.adds) {
             final[add[keyIx]] = add[valueIx];
           }
@@ -181,7 +182,6 @@ var indexers = {
       }
     } else {
       // Generic multi-arity case.
-      var keyIxes = [].slice.call(arguments);
       var valueIx = keyIxes.pop();
       fn = function(cur, diffs) {
         var final = cur || {};
@@ -201,7 +201,7 @@ var indexers = {
           foreach(ix, keyIx of keyIxes) {
             keys[ix] = add[keyIx];
           }
-          if(valueIx) {
+          if(valueIx !== false) {
             _.deepSet(final, keys, add[valueIx]);
           } else {
             _.deepSet(final, keys, add);
@@ -210,14 +210,15 @@ var indexers = {
       }
     }
 
-    fn.type = "lookup<" + [].join.call(arguments, ",") + ">"
+    fn.type = toIndexType("lookup", [].slice.call(arguments));
     return fn;
   },
   // Groups facts by specified indexes, in order of hierarchy. [Fact] -> {[Any]: [Fact]|Group}
-  makeCollector: function(keyIx) {
+  collector: function(keyIxes) {
     var fn;
     // Optimized N=1 case.
     if(arguments.length === 1) {
+      var keyIx = keyIxes[0];
       fn = function(cur, diffs) {
         var final = cur || {};
         foreach(remove of diffs.removes) {
@@ -237,7 +238,6 @@ var indexers = {
         return final;
       }
     } else {
-      var keyIxes = [].slice.apply(arguments);
       fn = function(cur, diffs) {
         var final = cur || {};
         var keys = new Array(keyIxes).length;
@@ -268,13 +268,13 @@ var indexers = {
       }
     }
 
-    fn.type = "collector<" + [].join.call(arguments, ",") + ">";
+    fn.type = toIndexType("collector", [].slice.call(arguments));
     return fn;
   },
   // Sorts facts by specified indexes, in order of priority. [Fact] -> [Fact]
-  makeSorter: function() {
-    var sortIxes = [].slice.apply(arguments);
-    return function(cur, diffs) {
+  sorter: function(sortIxes) {
+    var fn;
+    fn =  function(cur, diffs) {
       var final = cur || [];
       foreach(remove of diffs.removes) {
         foreach(ix, item of final) {
@@ -305,13 +305,20 @@ var indexers = {
 
       return final;
     }
+
+    fn.type = toIndexType("sorter", [].slice.call(arguments));
+    return fn;
   }
 };
-module.exports.indexers = indexers;
+module.exports.IndexMakers = IndexMakers;
 
 //---------------------------------------------------------
 // Index helpers
 //---------------------------------------------------------
+
+function toIndexType(kind, keys) {
+  return kind + "<" + keys.join(",") + ">";
+}
 
 // Delete any keys or descendant keys which are empty.
 function garbageCollectIndex(index) {
@@ -331,7 +338,7 @@ function garbageCollectIndex(index) {
 module.exports.garbageCollectIndex = garbageCollectIndex;
 
 function hasTag(id, needle) {
-  var tags = indexer.index("idToTags")[id];
+  var tags = indexer.index("tag", "collector", [0])[id];
   foreach(tagEntry of tags) {
     unpack [_, tag] = tagEntry;
     if(tag === needle) return true;

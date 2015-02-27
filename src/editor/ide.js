@@ -409,9 +409,9 @@ var Root = React.createFactory(React.createClass({
     var activeTileTable;
     var activeTileEntry = indexer.first("activeTile");
     if(activeTileEntry) {
-       activeTile = indexer.index("gridTile")[activeTileEntry[0]];
+       activeTile = indexer.index("gridTile", "lookup", [0, false])[activeTileEntry[0]];
       if(activeTile[1] === "table") {
-        activeTileTable = indexer.index("tileToTable")[activeTile[0]];
+        activeTileTable = indexer.index("tableTile", "lookup", [0, 1])[activeTile[0]];
       }
     }
     var self = this;
@@ -432,7 +432,7 @@ var Root = React.createFactory(React.createClass({
       gridItem.pos = [row, col];
 
       if(type === "table") {
-        var table = indexer.index("tileToTable")[tile];
+        var table = indexer.index("tableTile", "lookup", [0, 1])[tile];
         gridItem.table = table;
         gridItem.tile = tile;
         return tiles.table(gridItem);
@@ -540,7 +540,7 @@ var tiles = {
       },
       render: function() {
         var id = this.props.id;
-        var name = this.state.edit || indexer.index("displayName")[id];
+        var name = this.state.edit || indexer.index("displayName", "lookup", [0, 1])[id];
         var label = "";
         if(index.hasTag(id, "constant")) { label = " - constant"; }
         else if(index.hasTag(id, "input")) { label = "- input"; }
@@ -557,7 +557,7 @@ var tiles = {
         e.preventDefault();
         e.stopPropagation();
         var id = this.props.field[0];
-        var joins = indexer.index("fieldToJoins")[id];
+        var joins = indexer.index("join", "collector", [0])[id];
         var isJoined = joins && joins.length;
 
         var items = [
@@ -580,7 +580,7 @@ var tiles = {
       },
       render: function() {
         unpack [id] = this.props.field;
-        var name = this.state.edit || indexer.index("displayName")[id];
+        var name = this.state.edit || indexer.index("displayName", "lookup", [0, 1])[id];
         var className = "header";
         if(index.hasTag(id, "grouped")) {
           className += " grouped";
@@ -701,11 +701,15 @@ var tiles = {
     render: function() {
       var self = this;
       var table = this.props.table;
-      var viewFields = indexer.index("viewToFields")[table] || [];
+      var viewFields = indexer.index("field", "collector", [1])[table] || [];
       index.sortByIx(viewFields, 2);
       var hidden = [];
+      var grouped = [];
       var headers = viewFields.map(function(cur, ix) {
         hidden[ix] = index.hasTag(cur[0], "hidden");
+        if(index.hasTag(cur[0], "grouped")) {
+          grouped.push(ix);
+        }
         if(!hidden[ix]) {
           return self.header({field: cur, table: table});
         }
@@ -735,8 +739,9 @@ var tiles = {
       }
 
       var rowIndex;
-      if(indexer.hasIndex(table + "|rows")) {
-        rowIndex = indexer.index(table + "|rows");
+      // @TODO: Reimplement grouping.
+      if(grouped.length) {
+        rowIndex = indexer.index(table, "collector", grouped);
       } else {
         rowIndex = indexer.facts(table) || [];
       }
@@ -798,12 +803,12 @@ var tiles = {
       },
       element: function() {
         var opts = this.wrapStyle(this.wrapDragEvents({className: "text uiElement"}));
-        var attrs = indexer.index("uiElementToElementAttr")[this.props.elem[0]];
+        var attrs = indexer.index("uiEditorElementAttr", "collector", [0, 1])[this.props.elem[0]];
         var text = "";
         if(attrs && attrs["text"]) {
           unpack [_, attr, field, isBinding] = attrs["text"][0];
           if(isBinding) {
-            text = "Bound to " + indexer.index("displayName")[field];
+            text = "Bound to " + indexer.index("displayName", "lookup", [0, 1])[field];
           } else {
             text = field;
           }
@@ -830,12 +835,12 @@ var tiles = {
         dispatch(["setUIElementText", this.state.edit]);
       },
       element: function() {
-        var attrs = indexer.index("uiElementToElementAttr")[this.props.elem[0]];
+        var attrs = indexer.index("uiEditorElementAttr", "collector", [0, 1])[this.props.elem[0]];
         var text = "";
         if(attrs && attrs["text"]) {
           unpack [_, attr, field, isBinding] = attrs["text"][0];
           if(isBinding) {
-            text = "Bound to " + indexer.index("displayName")[field];
+            text = "Bound to " + indexer.index("displayName", "lookup", [0, 1])[field];
           } else {
             text = field;
           }
@@ -859,7 +864,7 @@ var tiles = {
     }),
     contextMenu: function(e) {
       e.preventDefault();
-      var mode = indexer.index("uiEditorTileToMode")[this.props.tile] || "designer";
+      var mode = indexer.index("uiEditorMode", "lookup", [0, 1])[this.props.tile] || "designer";
       if(mode === "designer") {
         dispatch(["contextMenu", {e: {clientX: e.clientX, clientY: e.clientY},
                                   items: [
@@ -878,7 +883,7 @@ var tiles = {
     },
     render: function() {
       var self = this;
-      var mode = indexer.index("uiEditorTileToMode")[this.props.tile] || "designer";
+      var mode = indexer.index("uiEditorMode", "lookup", [0, 1])[this.props.tile] || "designer";
       var switcherClick = function(mode) {
         return function(e) {
           dispatch([mode, self.props.tile]);
@@ -932,7 +937,7 @@ var ProgramLoader = reactFactory({
 var searchMethod = {
   view: function searchForView(needle) {
     var results = [];
-    var names = indexer.index("displayName");
+    var names = indexer.index("displayName", "lookup", [0, 1]);
     var name;
     foreach(view of indexer.facts("view")) {
       unpack [id] = view;
@@ -947,9 +952,9 @@ var searchMethod = {
   field: function searchForField(needle, searchOpts) {
     searchOpts = searchOpts || {};
     var results = [];
-    var names = indexer.index("displayName");
+    var names = indexer.index("displayName", "lookup", [0, 1]);
     var name;
-    var fields = indexer.index("viewToFields")[searchOpts.view];
+    var fields = indexer.index("field", "collector", [1])[searchOpts.view];
     if(!fields) {
       fields = indexer.facts("field");
     }
@@ -1106,7 +1111,7 @@ ContextMenuItems = {
       return JSML.react(["div", {className: "menu-item", onClick: this.click},
                          ReactSearcher({event: this.props.event, placeholder: this.props.text,
                                         id: this.props.id, type: "field",
-                                        searchOpts: {view: indexer.index("fieldToView")[this.props.id]}})]);
+                                        searchOpts: {view: indexer.index("field", "lookup", [0, 1])[this.props.id]}})]);
     }
   })
 };
@@ -1131,7 +1136,7 @@ var ContextMenu = reactFactory({
 //---------------------------------------------------------
 
 function maxRowId(view) {
-  var ids = indexer.index("editViewToIds")[view];
+  var ids = indexer.index("editId", "collector", [0])[view];
   if(ids && ids.length) {
     return ids[ids.length - 1][2];
   } else {
@@ -1140,7 +1145,7 @@ function maxRowId(view) {
 }
 
 function sortView(view) {
-  var oldFields = indexer.index("viewToFields")[view].slice();
+  var oldFields = indexer.index("field", "collector", [1])[view].slice();
   var fields = helpers.cloneArray(oldFields);
   var oldFacts = indexer.facts(view).slice();
   var facts = helpers.cloneArray(oldFacts);
@@ -1176,17 +1181,12 @@ function sortView(view) {
     diff[view] = {adds: facts, removes: oldFacts};
     indexer.handleDiffs(diff);
   }
-
-  if(groups.length) {
-    indexer.addIndex(view, view + "|rows",
-                     indexers.makeCollector.apply(null, helpers.pluck(groups, 2)));
-  }
 }
 
 function _clearFilter(field) {
   var diff = {};
-  var view = indexer.index("fieldToView")[field];
-  var queries = indexer.index("viewToQuery")[view];
+  var view = indexer.index("field", "lookup", [0, 1])[field];
+  var queries = indexer.index("query", "collector", [1])[view];
   var functionConstraints = [];
   foreach(queryFact of queries) {
     functionConstraints.push.apply(functionConstraints, indexer.index("queryToFunctionConstraint")[queryFact[0]]);
@@ -1194,7 +1194,7 @@ function _clearFilter(field) {
   foreach(constraint of functionConstraints) {
     if(!index.hasTag(constraint[0], "filter") || !index.hasTag(constraint[0], field)) { continue; }
     var field = constraint[2];
-    var fieldFact = indexer.index("field")[field];
+    var fieldFact = indexer.index("field", "lookup", [0, false])[field];
     helpers.merge(diff, index.diff.remove("field", fieldFact));
   }
   var constantConstraints = indexer.index("fieldToConstantConstraint")[field];
@@ -1276,10 +1276,10 @@ function dispatch(eventInfo) {
 
     case "closeTile":
       var tileId = info;
-      var tableId = indexer.index("tileToTable")[tileId];
+      var tableId = indexer.index("tableTile", "lookup", [0, 1])[tileId];
       var diff = {
-        gridTile: {adds: [], removes: [indexer.index("gridTile")[tileId]]},
-        tableTile: {adds: [], removes: [indexer.index("tableTile")[tileId]]},
+        gridTile: {adds: [], removes: [indexer.index("gridTile", "lookup", [0, false])[tileId]]},
+        tableTile: {adds: [], removes: [indexer.index("tableTile", "lookup", [0, false])[tileId]]},
         workspaceView: {adds: [], removes: [tableId]}
       };
       indexer.handleDiffs(diff);
@@ -1339,15 +1339,15 @@ function dispatch(eventInfo) {
 
     case "addTableToView":
       unpack [tableId, tableName] = info.selected;
-      unpack [queryId, view, ix] = indexer.index("viewToQuery")[info.id][0];
-      var currentFields = indexer.index("viewToFields")[info.id];
+      unpack [queryId, view, ix] = indexer.index("query", "collector", [1])[info.id][0];
+      var currentFields = indexer.index("field", "collector", [1])[info.id];
       var currentFieldCount = 0;
       if(currentFields) {
         currentFieldCount = currentFields.length;
       }
       var constraintId = global.uuid();
-      var tableFields = indexer.index("viewToFields")[tableId];
-      var displayNameLookup = indexer.index("displayName");
+      var tableFields = indexer.index("field", "collector", [1])[tableId];
+      var displayNameLookup = indexer.index("displayName", "lookup", [0, 1]);
       var newFields = [];
       var bindings = [];
       var displayNames = [];
@@ -1386,7 +1386,7 @@ function dispatch(eventInfo) {
       var diff = {};
       var oldFact = JSON.stringify(info.oldRow);
       var newFact = JSON.stringify(info.newRow);
-      var edits = indexer.index("editRowToId")[info.table];
+      var edits = indexer.index("editId", "lookup", [0, 1, 2])[info.table];
       var editId;
       if(edits && edits[oldFact] !== undefined && edits[oldFact] !== null) {
         editId = edits[oldFact];
@@ -1404,7 +1404,7 @@ function dispatch(eventInfo) {
       var diff = {};
       var id = global.uuid();
       var isConstant = index.hasTag(info.view, "constant");
-      var fields = indexer.index("viewToFields")[info.view] || [];
+      var fields = indexer.index("field", "collector", [1])[info.view] || [];
 
       //if this is a constant view, patch up the facts that already
       //exist for the view
@@ -1422,7 +1422,7 @@ function dispatch(eventInfo) {
         //something. @TODO: should this be a constant? should we do this some
         //other way?
         //@TODO: we can't assume there's only ever one query...
-        unpack [queryId] = indexer.index("viewToQuery")[info.view][0];
+        unpack [queryId] = indexer.index("query", "collector", [1])[info.view][0];
         diff.constantConstraint = {adds: [[queryId, id, ""]], removes: []};
         diff.tag = {adds: [[id, "calculated"]], removes: []};
       }
@@ -1437,10 +1437,10 @@ function dispatch(eventInfo) {
       var addedTable = info.table;
       var addedField = info.field;
       var currentTable = info.current;
-      var query = indexer.index("viewToQuery")[currentTable];
+      var query = indexer.index("query", "collector", [1])[currentTable];
       if(!query || !query.length) return;
       var queryId = query[0][0];
-      var viewConstraints = indexer.index("queryToViewConstraint")[queryId];
+      var viewConstraints = indexer.index("viewConstraint", "collector", [1])[queryId];
       var viewConstraintId;
       foreach(vc of viewConstraints) {
         unpack [vcId, _, sourceView, isNegated] = vc;
@@ -1453,9 +1453,9 @@ function dispatch(eventInfo) {
         diff.viewConstraint = {adds: [[viewConstraintId, queryId, addedTable, false]], removes: []};
       }
 
-      var fieldIx = indexer.index("viewToFields")[currentTable] ? indexer.index("viewToFields")[currentTable].length : 0;
+      var fieldIx = indexer.index("field", "collector", [1])[currentTable] ? indexer.index("field", "collector", [1])[currentTable].length : 0;
       var fieldId = global.uuid();
-      var name = indexer.index("displayName")[addedField] || "";
+      var name = indexer.index("displayName", "lookup", [0, 1])[addedField] || "";
       diff.field = {adds: [[fieldId, currentTable, fieldIx]], removes: []};
       diff.displayName = {adds: [[fieldId, name]], removes: []};
       diff.viewConstraintBinding = {adds: [[viewConstraintId, fieldId, addedField]], removes: []};
@@ -1489,7 +1489,7 @@ function dispatch(eventInfo) {
       break;
 
     case "groupField":
-      var view = indexer.index("fieldToView")[info];
+      var view = indexer.index("field", "lookup", [0, 1])[info];
       var diff = {
         tag: {adds: [[info, "grouped"]], removes: []}
       };
@@ -1498,11 +1498,10 @@ function dispatch(eventInfo) {
       break;
 
     case "ungroupField":
-      var view = indexer.index("fieldToView")[info];
+      var view = indexer.index("field", "lookup", [0, 1])[info];
       var diff = {
         tag: {adds: [], removes: [[info, "grouped"]]}
       }
-      indexer.removeIndex(view, view + "|rows");
       indexer.handleDiffs(diff);
       sortView(view);
       break;
@@ -1513,12 +1512,12 @@ function dispatch(eventInfo) {
 
       var bindings = indexer.index("fieldToBindings")[field2];
       if(!bindings || !bindings.length) {
-        throw new Error("Cannot join with unbound (local?) field: '" + indexer.index("displayName")[field2] + "'.");
+        throw new Error("Cannot join with unbound (local?) field: '" + indexer.index("displayName", "lookup", [0, 1])[field2] + "'.");
       }
       var binding = bindings[0];
       unpack [constraint, __, sourceField] = binding;
       // @TODO: check for flipped duplicates?
-      // var bindings = indexer.index("viewConstraintToBinding")[constraint] || [];
+      // var bindings = indexer.index("viewConstraintBinding", "collector", [0])[constraint] || [];
 
       indexer.handleDiffs({
         "viewConstraintBinding": {adds: [[constraint, field1, sourceField]], removes: []},
@@ -1529,7 +1528,7 @@ function dispatch(eventInfo) {
       break;
 
     case "unjoinField":
-      var joins = indexer.index("fieldToJoins")[info];
+      var joins = indexer.index("join", "collector", [0])[info];
       var bindings = indexer.index("fieldToBindings")[info];
       var diff = {
         join: {adds: [], removes: joins},
@@ -1545,7 +1544,7 @@ function dispatch(eventInfo) {
             diff.viewConstraintBinding.removes.push(binding);
 
             // Reveal any fields which were collapsed into this one by the join.
-            var relatedBindings = indexer.index("viewConstraintToBinding")[constraint];
+            var relatedBindings = indexer.index("viewConstraintBinding", "collector", [0])[constraint];
             foreach(related of relatedBindings) {
               unpack [__, relatedField, __] = related;
               diff.tag.removes.push([relatedField, "hidden"]);
@@ -1560,9 +1559,9 @@ function dispatch(eventInfo) {
       var clearDiff = _clearFilter(info.id);
       var diff = {};
       if(!info.text) { return; }
-      var view = indexer.index("fieldToView")[info.id];
-      var viewFields = indexer.index("viewToFields")[view];
-      var queries = indexer.index("viewToQuery")[view];
+      var view = indexer.index("field", "lookup", [0, 1])[info.id];
+      var viewFields = indexer.index("field", "collector", [1])[view];
+      var queries = indexer.index("query", "collector", [1])[view];
       if(!queries || !queries.length) {
         throw new Error("cannot filter malformed view: '" + view + "' containing field: '" + info.id + "'.");
       }
@@ -1573,7 +1572,7 @@ function dispatch(eventInfo) {
         var code = info.text.substring(1);
         var id = global.uuid();
         var filterField = global.uuid();
-        var displayNames = indexer.index("displayName");
+        var displayNames = indexer.index("displayName", "lookup", [0, 1]);
         var namedFields = viewFields.map(function(cur) {
           return [cur[0], displayNames[cur[0]]];
         });
@@ -1612,7 +1611,7 @@ function dispatch(eventInfo) {
       var diff = {};
 
       //@TODO: we can't assume there's only ever one query...
-      unpack [queryId] = indexer.index("viewToQuery")[table][0];
+      unpack [queryId] = indexer.index("query", "collector", [1])[table][0];
 
       //it is either an aggregateConstraint, a functionConstraint, or a constantConstraint
       //@TODO: this is super frail. Filters are function + constant and you can filter a
@@ -1656,8 +1655,8 @@ function dispatch(eventInfo) {
       if(value[0] === "=") {
         //it's a function
         var id = global.uuid();
-        var viewFields = indexer.index("viewToFields")[table];
-        var displayNames = indexer.index("displayName");
+        var viewFields = indexer.index("field", "collector", [1])[table];
+        var displayNames = indexer.index("displayName", "lookup", [0, 1]);
         var namedFields = viewFields.map(function(cur) {
           return [cur[0], displayNames[cur[0]]];
         });
@@ -1767,7 +1766,7 @@ function dispatch(eventInfo) {
       var diff = {
         uiEditorElementAttr: {adds: [eventFact], removes: []}
       };
-      var prevEvents = indexer.index("uiElementToElementEvent")[elementId];
+      var prevEvents = indexer.index("uiEditorElementEvent", "collector", [0, 1])[elementId];
       var oldViews;
       var neueViews;
       //@TODO for now this will only affect events, but once we allow repetition
@@ -1789,7 +1788,7 @@ function dispatch(eventInfo) {
       }
 
       //remove the old name
-      var prevName = indexer.index("uiElementToElementAttr")[elementId];
+      var prevName = indexer.index("uiEditorElementAttr", "collector", [0, 1])[elementId];
       if(prevName && prevName["name"] && prevName["name"][0]) {
         diff.uiEditorElementAttr.removes.push(prevName["name"][0]);
       }
@@ -1807,7 +1806,7 @@ function dispatch(eventInfo) {
       if(!type) return;
       var elementId = indexer.first("activeUIEditorElement")[0];
       var name = elementId;
-      var attrs = indexer.index("uiElementToElementAttr")[elementId];
+      var attrs = indexer.index("uiEditorElementAttr", "collector", [0, 1])[elementId];
       if(attrs && attrs["name"] && attrs["name"][0]) {
         name = attrs["name"][0][2];
       }
@@ -1816,7 +1815,7 @@ function dispatch(eventInfo) {
       var diff = {
         uiEditorElementEvent: {adds: [eventFact], removes: []}
       };
-      var prevEvents = indexer.index("uiElementToElementEvent")[elementId];
+      var prevEvents = indexer.index("uiEditorElementEvent", "collector", [0, 1])[elementId];
       var oldViews = {};
       var prev;
       if(prevEvents) {
@@ -1832,7 +1831,7 @@ function dispatch(eventInfo) {
       }
       indexer.handleDiffs(diff);
       var eventViewId = elementId + "|uiEvent|" + type;
-      if(!indexer.index("tableToTile")[eventViewId]) {
+      if(!indexer.index("tableTile", "lookup", [1, 0])[eventViewId]) {
         dispatch(["openView", {selected: [eventViewId]}]);
       } else {
         dispatch(["clearContextMenu"]);
@@ -1849,7 +1848,7 @@ function dispatch(eventInfo) {
       var diff = {
         uiEditorElementAttr: {adds: [eventFact], removes: []}
       };
-      var prevEvents = indexer.index("uiElementToElementAttr")[elementId];
+      var prevEvents = indexer.index("uiEditorElementAttr", "collector", [0, 1])[elementId];
       var oldViews = {};
       var prev;
       if(prevEvents) {
@@ -1876,7 +1875,7 @@ function dispatch(eventInfo) {
       var diff = {
         uiEditorElementAttr: {adds: [eventFact], removes: []}
       };
-      var prevEvents = indexer.index("uiElementToElementAttr")[elementId];
+      var prevEvents = indexer.index("uiEditorElementAttr", "collector", [0, 1])[elementId];
       var oldViews = {};
       var prev;
       if(prevEvents) {
@@ -1900,7 +1899,7 @@ function dispatch(eventInfo) {
       var diff = {
         uiEditorElementAttr: {adds: [eventFact], removes: []}
       };
-      var prevEvents = indexer.index("uiElementToElementAttr")[elementId];
+      var prevEvents = indexer.index("uiEditorElementAttr", "collector", [0, 1])[elementId];
       var oldViews = {};
       var prev;
       if(prevEvents) {
@@ -1925,7 +1924,7 @@ function dispatch(eventInfo) {
         mode = "designer";
       }
       var removes = [];
-      var prev = indexer.index("uiEditorTileToMode")[tile];
+      var prev = indexer.index("uiEditorMode", "lookup", [0, 1])[tile];
       if(prev) {
         removes = [[tile, prev]];
       }
@@ -1939,7 +1938,7 @@ function dispatch(eventInfo) {
     // Misc.
     //---------------------------------------------------------
     case "rename":
-      var oldFact = indexer.index("displayName")[info.id];
+      var oldFact = indexer.index("displayName", "lookup", [0, 1])[info.id];
       var diff = {
         displayName: {adds: [[info.id, info.name]], removes: [oldFact]}
       };
@@ -2044,7 +2043,7 @@ function elementAttrToViews(attr) {
 function elementTextToViews(text) {
   var results = {view: [], field: [], query: [], viewConstraint: [], viewConstraintBinding: [], constantConstraint: [], displayName: []};
   unpack [id, _, field, isBinding] = text;
-  var view = indexer.index("fieldToView")[field];
+  var view = indexer.index("field", "lookup", [0, 1])[field];
   //uiText view
   var uiTextFeederId = id + "|uiTextFeeder";
   var uiTextId = id + "|uiText";
@@ -2168,17 +2167,17 @@ function namespacedField(displayNames, tableAndField) {
 }
 
 function viewToDSL(view) {
-  var displayNames = indexer.index("displayName");
-  var queries = indexer.index("viewToQuery")[view];
+  var displayNames = indexer.index("displayName", "lookup", [0, 1]);
+  var queries = indexer.index("query", "collector", [1])[view];
   if(!queries) return;
   var query = queries[0];
   var final = "";
   var queryId = query[0];
 
   var constants = indexer.index("queryToConstantConstraint")[queryId];
-  var viewConstraints = indexer.index("queryToViewConstraint")[queryId];
+  var viewConstraints = indexer.index("viewConstraint", "collector", [1])[queryId];
   var viewConstraintBindings = {};
-  var VCBIndex = indexer.index("viewConstraintToBinding");
+  var VCBIndex = indexer.index("viewConstraintBinding", "collector", [0]);
   foreach(vc of viewConstraints) {
     unpack [id, _, sourceView] = vc;
     var bindings = VCBIndex[id];
@@ -2319,34 +2318,34 @@ function init(program) {
       dispatch(["diffsHandled", diffs]);
     }
   });
-  indexer.addIndex("displayName", "displayName", indexers.makeLookup(0, 1));
-  indexer.addIndex("field", "viewToFields", indexers.makeCollector(1));
-  indexer.addIndex("field", "fieldToView", indexers.makeLookup(0, 1));
-  indexer.addIndex("field", "field", indexers.makeLookup(0, false));
-  indexer.addIndex("tag", "idToTags", indexers.makeCollector(0));
-  indexer.addIndex("editId", "editRowToId", indexers.makeLookup(0, 1, 2));
-  indexer.addIndex("editId", "editViewToIds", indexers.makeCollector(0));
-  indexer.addIndex("join", "fieldToJoins", indexers.makeCollector(0));
-  indexer.addIndex("query", "viewToQuery", indexers.makeCollector(1));
-  indexer.addIndex("viewConstraint", "queryToViewConstraint", indexers.makeCollector(1));
-  indexer.addIndex("viewConstraint", "viewConstraint", indexers.makeLookup(0, false));
-  indexer.addIndex("viewConstraintBinding", "viewConstraintToBinding", indexers.makeCollector(0));
-  indexer.addIndex("viewConstraintBinding", "fieldToBindings", indexers.makeCollector(1));
-  indexer.addIndex("aggregateConstraint", "queryToAggregateConstraint", indexers.makeCollector(1));
-  indexer.addIndex("aggregateConstraintBinding", "aggregateConstraintToBinding", indexers.makeCollector(0));
-  indexer.addIndex("aggregateConstraintAggregateInput", "aggregateConstraintToInput", indexers.makeCollector(0));
-  indexer.addIndex("functionConstraint", "queryToFunctionConstraint", indexers.makeCollector(1));
-  indexer.addIndex("functionConstraint", "fieldToFunctionConstraint", indexers.makeCollector(2));
-  indexer.addIndex("functionConstraintInput", "functionConstraintToInput", indexers.makeCollector(0));
-  indexer.addIndex("constantConstraint", "queryToConstantConstraint", indexers.makeCollector(0));
-  indexer.addIndex("constantConstraint", "fieldToConstantConstraint", indexers.makeCollector(1));
-  indexer.addIndex("tableTile", "tileToTable", indexers.makeLookup(0, 1));
-  indexer.addIndex("tableTile", "tableToTile", indexers.makeLookup(1, 0));
-  indexer.addIndex("tableTile", "tableTile", indexers.makeLookup(0, false));
-  indexer.addIndex("gridTile", "gridTile", indexers.makeLookup(0, false));
-  indexer.addIndex("uiEditorMode", "uiEditorTileToMode", indexers.makeLookup(0, 1));
-  indexer.addIndex("uiEditorElementEvent", "uiElementToElementEvent", indexers.makeCollector(0, 1));
-  indexer.addIndex("uiEditorElementAttr", "uiElementToElementAttr", indexers.makeCollector(0, 1));
+  indexer.addIndex("displayName", "lookup", [0, 1]);
+  indexer.addIndex("field", "collector", [1]);
+  indexer.addIndex("field", "lookup", [0, 1]);
+  indexer.addIndex("field", "lookup", [0, false]);
+  indexer.addIndex("editId", "lookup", [0, 1, 2]);
+  indexer.addIndex("editId", "collector", [0]);
+  indexer.addIndex("join", "collector", [0]);
+  indexer.addIndex("query", "collector", [1]);
+  indexer.addIndex("viewConstraint", "collector", [1]);
+  indexer.addIndex("viewConstraintBinding", "collector", [0]);
+
+//   indexer.addIndex("viewConstraintBinding", "fieldToBindings", indexers.makeCollector(1));
+//   indexer.addIndex("aggregateConstraint", "queryToAggregateConstraint", indexers.makeCollector(1));
+//   indexer.addIndex("aggregateConstraintBinding", "aggregateConstraintToBinding", indexers.makeCollector(0));
+//   indexer.addIndex("aggregateConstraintAggregateInput", "aggregateConstraintToInput", indexers.makeCollector(0));
+//   indexer.addIndex("functionConstraint", "queryToFunctionConstraint", indexers.makeCollector(1));
+//   indexer.addIndex("functionConstraint", "fieldToFunctionConstraint", indexers.makeCollector(2));
+//   indexer.addIndex("functionConstraintInput", "functionConstraintToInput", indexers.makeCollector(0));
+//   indexer.addIndex("constantConstraint", "queryToConstantConstraint", indexers.makeCollector(0));
+//   indexer.addIndex("constantConstraint", "fieldToConstantConstraint", indexers.makeCollector(1));
+
+  indexer.addIndex("tableTile", "lookup", [0, 1]);
+  indexer.addIndex("tableTile", "lookup", [1, 0]);
+  indexer.addIndex("tableTile", "lookup", [0, false]);
+  indexer.addIndex("gridTile", "lookup", [0, false]);
+  indexer.addIndex("uiEditorMode", "lookup", [0, 1]);
+  indexer.addIndex("uiEditorElementEvent", "collector", [0, 1]);
+  indexer.addIndex("uiEditorElementAttr", "collector", [0, 1]);
   indexer.forward("workspaceView");
 
   indexer.forward(global.compilerTables);
