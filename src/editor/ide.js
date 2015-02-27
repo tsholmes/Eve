@@ -446,7 +446,7 @@ var Root = React.createFactory(React.createClass({
 
     // if there isn't an active tile, add placeholder tiles for areas that can hold them.
     if(!activeTile) {
-      var gridItems = index.getTileFootprints();
+      var gridItems = indexer.getTileFootprints();
       var activePosition = indexer.first("activePosition") || [];
       while(true) {
         var slot = grid.firstGap(tileGrid, gridItems, defaultSize);
@@ -541,8 +541,8 @@ var tiles = {
         var id = this.props.id;
         var name = this.state.edit || indexer.index("displayName", "lookup", [0, 1])[id];
         var label = "";
-        if(index.hasTag(id, "constant")) { label = " - constant"; }
-        else if(index.hasTag(id, "input")) { label = "- input"; }
+        if(indexer.hasTag(id, "constant")) { label = " - constant"; }
+        else if(indexer.hasTag(id, "input")) { label = "- input"; }
 
         return JSML.react(
           ["h2",
@@ -561,7 +561,7 @@ var tiles = {
 
         var items = [
           [0, "input", "filter", "filterField", id],
-          (index.hasTag(id, "grouped") ? [1, "text", "ungroup", "ungroupField", id] : [1, "text", "group", "groupField", id])
+          (indexer.hasTag(id, "grouped") ? [1, "text", "ungroup", "ungroupField", id] : [1, "text", "group", "groupField", id])
         ];
         if(isJoined) {
           items.push([items.length, "text", "unjoin", "unjoinField", id]);
@@ -581,7 +581,7 @@ var tiles = {
         unpack [id] = this.props.field;
         var name = this.state.edit || indexer.index("displayName", "lookup", [0, 1])[id];
         var className = "header";
-        if(index.hasTag(id, "grouped")) {
+        if(indexer.hasTag(id, "grouped")) {
           className += " grouped";
         }
         var opts = this.wrapEditable({
@@ -616,7 +616,7 @@ var tiles = {
         var table = this.props.table;
 
         //if this is a constant view, then we just modify the row
-        if(index.hasTag(table, "constant")) {
+        if(indexer.hasTag(table, "constant")) {
           var oldRow = this.props.row;
           var newRow = oldRow.slice();
           var edits = this.state.edits;
@@ -672,7 +672,7 @@ var tiles = {
       }
     }),
     contextMenu: function(e) {
-      var isInput = index.hasTag(this.props.table, "input");
+      var isInput = indexer.hasTag(this.props.table, "input");
       if(!isInput) {
         e.preventDefault();
         dispatch(["contextMenu", {e: {clientX: e.clientX, clientY: e.clientY},
@@ -705,8 +705,8 @@ var tiles = {
       var hidden = [];
       var grouped = [];
       var headers = viewFields.map(function(cur, ix) {
-        hidden[ix] = index.hasTag(cur[0], "hidden");
-        if(index.hasTag(cur[0], "grouped")) {
+        hidden[ix] = indexer.hasTag(cur[0], "hidden");
+        if(indexer.hasTag(cur[0], "grouped")) {
           grouped.push(ix);
         }
         if(!hidden[ix]) {
@@ -745,8 +745,8 @@ var tiles = {
         rowIndex = indexer.facts(table) || [];
       }
       var rows = indexToRows(rowIndex, hidden);
-      var isConstant = index.hasTag(table, "constant");
-      var isInput = index.hasTag(table, "input");
+      var isConstant = indexer.hasTag(table, "constant");
+      var isInput = indexer.hasTag(table, "input");
       var className = (isConstant || isInput) ? "input-card" : "view-card";
       var content =  [self.title({id: table}),
                       (this.props.active ? ["pre", viewToDSL(table)] : null),
@@ -1154,7 +1154,7 @@ function sortView(view) {
   var rest = [];
   index.sortByIx(fields, 2);
   foreach(field of fields) {
-    if(index.hasTag(field[0], "grouped")) {
+    if(indexer.hasTag(field[0], "grouped")) {
       groups.push(field);
     } else {
       rest.push(field);
@@ -1191,14 +1191,14 @@ function _clearFilter(field) {
     functionConstraints.push.apply(functionConstraints, indexer.index("functionConstraint", "collector", [1])[queryFact[0]]);
   }
   foreach(constraint of functionConstraints) {
-    if(!index.hasTag(constraint[0], "filter") || !index.hasTag(constraint[0], field)) { continue; }
+    if(!indexer.hasTag(constraint[0], "filter") || !indexer.hasTag(constraint[0], field)) { continue; }
     var field = constraint[2];
     var fieldFact = indexer.index("field", "lookup", [0, false])[field];
-    helpers.merge(diff, index.diff.remove("field", fieldFact));
+    helpers.merge(diff, indexer.removeDiff("field", fieldFact));
   }
   var constantConstraints = indexer.index("constantConstraint", "collector", [1])[field];
   foreach(constraint of constantConstraints) {
-    helpers.merge(diff, index.diff.remove("constantConstraint", constraint));
+    helpers.merge(diff, indexer.removeDiff("constantConstraint", constraint));
   }
 
   return diff;
@@ -1256,7 +1256,7 @@ function dispatch(eventInfo) {
       var id = info.id;
       var tileId = global.uuid();
       if(!info.pos) {
-        info.pos = grid.firstGap(tileGrid, index.getTileFootprints(), defaultSize);
+        info.pos = grid.firstGap(tileGrid, indexer.getTileFootprints(), defaultSize);
         if(!info.pos) {
           console.warn("Grid is full, aborting.");
           break;
@@ -1323,7 +1323,7 @@ function dispatch(eventInfo) {
       unpack [tableId, name] = info.selected;
       var diff = {"workspaceView": {adds: [[tableId]], removes: []}};
       indexer.handleDiffs(diff);
-      if(index.hasTag(tableId, "constant")) {
+      if(indexer.hasTag(tableId, "constant")) {
         indexer.forward(tableId);
       }
       var activePosition = indexer.first("activePosition");
@@ -1402,7 +1402,7 @@ function dispatch(eventInfo) {
     case "addField":
       var diff = {};
       var id = global.uuid();
-      var isConstant = index.hasTag(info.view, "constant");
+      var isConstant = indexer.hasTag(info.view, "constant");
       var fields = indexer.index("field", "collector", [1])[info.view] || [];
 
       //if this is a constant view, patch up the facts that already
@@ -1683,7 +1683,7 @@ function dispatch(eventInfo) {
             diff.aggregateConstraintAggregateInput = {adds: [], removes: []};
           }
           var groups = viewFields.filter(function(cur) {
-            return index.hasTag(cur[0], "grouped");
+            return indexer.hasTag(cur[0], "grouped");
           }).map(function(cur) {
             return [id, cur[0], cur[0]];
           });
@@ -2255,7 +2255,7 @@ function viewToDSL(view) {
   var filters = [];
   foreach(func of functionConstraints) {
     unpack [id, query, field, code] = func;
-    if(!index.hasTag(id, "filter")) {
+    if(!indexer.hasTag(id, "filter")) {
       final += displayNames[field] + " = " + code.trim() + "\n";
     } else {
       filters.push(code.trim());

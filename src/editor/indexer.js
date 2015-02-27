@@ -6,6 +6,74 @@ _.mixin(require("lodash-deep"));
 var helpers = require("./helpers");
 
 //---------------------------------------------------------
+// utils and constants
+//---------------------------------------------------------
+var _dependencies = {
+  view: {
+    field: [0, 1],
+    query: [0, 1],
+    tag: [0, 0]
+  },
+  field: {
+    aggregateConstraint: [0, 2],
+    constantConstraint: [0, 1],
+    displayName: [0, 0],
+    functionConstraint: [0, 2],
+    tag: [0, 0],
+    viewConstraint: [0, 2]
+  },
+  query: {
+    aggregateConstraint: [0, 1],
+    constantConstraint: [0, 0],
+    functionConstraint: [0, 1],
+    tag: [0, 0],
+    viewConstraint: [0, 1]
+  },
+  aggregateConstraint: {
+    aggregateConstraintAggregateInput: [0, 0],
+    aggregateConstraintBinding: [0, 0],
+    aggregateConstraintSolverInput: [0, 0],
+    tag: [0, 0]
+  },
+  functionConstraint: {
+    functionConstraintInput: [0, 0],
+    tag: [0, 0]
+  },
+  viewConstraint: {
+    viewConstraintBinding: [0, 0],
+    tag: [0, 0]
+  }
+};
+
+function toIndexType(kind, keys) {
+  return kind + "<" + keys.join(",") + ">";
+}
+
+// Delete any keys or descendant keys which are empty.
+function garbageCollectIndex(index) {
+  forattr(key, group of index) {
+    if(group instanceof Array) {
+      if(!group || !group.length) {
+        delete index[key];
+      }
+    } else if(typeof group === "object") {
+      garbageCollectIndex(group);
+      if(!Object.keys(group).length) {
+        delete index[key];
+      }
+    }
+  }
+}
+
+function sortByIx(facts, ix) {
+  return facts.sort(function(a, b) {
+    return a[ix] - b[ix];
+  });
+};
+module.exports.sortByIx = sortByIx;
+
+
+//---------------------------------------------------------
 // Indexer
 //---------------------------------------------------------
 
@@ -21,7 +89,10 @@ function Indexer(program, handlers) {
 module.exports.Indexer = Indexer;
 
 Indexer.prototype = {
-  // Diff handling
+  //---------------------------------------------------------
+  // Diffs
+  //---------------------------------------------------------
+
   handleDiffs: function(diffs, fromProgram) {
     this.latestDiffs = diffs;
     var indexes = this.indexes;
@@ -36,7 +107,7 @@ Indexer.prototype = {
     }
 
     if(isSpecial) {
-      var viewsToClear = getNonInputWorkspaceViews();
+      var viewsToClear = this.getNonInputWorkspaceViews();
 
       // Nuke indexes before the system nukes facts.
       foreach(table of viewsToClear) {
@@ -111,7 +182,39 @@ Indexer.prototype = {
     return false;
   },
 
-  // Fact retrieval
+  // Remove `fact` from `view`, including all known dependencies.
+  removeDiff: function removeDiff(view, fact) {
+    return this.removeEach(view, [fact]);
+  },
+  removeEachDiff: function removeEachDiff(view, facts, indent) {
+    indent = indent || 0;
+    var diff = {};
+    if(!facts) { return diff; }
+    foreach(fact of facts) {
+      if(!fact) { continue; }
+      if(!diff[view]) {
+        diff[view] = {adds: [], removes: []};
+      }
+      diff[view].removes.push(fact);
+      var deps = _dependencies[view];
+      // console.log(new Array(indent + 1).join("> "), "Removing '" + view + "':", fact, "---");
+      // console.log(new Array(indent + 2).join("  "), "X", view, diff[view]);
+      if(!deps) { continue; }
+
+      forattr(dep, keys of deps) {
+        unpack [fromIx, toIx] = keys;
+        var depFacts = this.index(dep, "collector", [toIx])[fact[fromIx]] || []; //_collect(dep, toIx, fact[fromIx]);
+        // console.log(new Array(indent + 2).join("  "), view, "<--", dep, "@", keys, ":", depFacts);
+        helpers.merge(diff, this.removeEachDiff(dep, depFacts, indent + 1));
+      }
+    }
+    return diff;
+  },
+
+  //---------------------------------------------------------
+  // Facts
+  //---------------------------------------------------------
+
   facts: function(table) {
     return this.system.getStore(table).getFacts();
   },
@@ -123,7 +226,10 @@ Indexer.prototype = {
     return facts[facts.length - 1];
   },
 
-  // Indexing
+  //---------------------------------------------------------
+  // Indexes
+  //---------------------------------------------------------
+
   addIndex: function(table, kind, keys) {
     var makeIndexer = IndexMakers[kind];
     if(!makeIndexer) {
@@ -182,7 +288,78 @@ Indexer.prototype = {
     var type = toIndexType(kind, keys);
     return !!_.deepGet(this.indexes, [table, type]);
   },
+
+  //---------------------------------------------------------
+  // Domain specific helper methods
+  // @TODO: Convert these into custom (transforming) indexers?
+  //---------------------------------------------------------
+
+  hasTag: function hasTag(id, needle) {
+    var tags = this.index("tag", "collector", [0])[id];
+    foreach(tagEntry of tags) {
+      unpack [_, tag] = tagEntry;
+      if(tag === needle) return true;
+    }
+    return false;
+  },
+
+  // Return all derived workspace views.
+  getNonInputWorkspaceViews: function getNonInputWorkspaceViews() {
+    var final = [];
+    var views = this.facts("workspaceView");
+    foreach(view of views) {
+      if(!this.hasTag(view[0], "input")) {
+        final.push(view[0]);
+      }
+    }
+    return final;
+  },
+
+  // Return all views that `curTable` relies upon.
+  incomingTables: function incomingTables(curTable) {
+    var incoming = {};
+    var queries = this.index("viewToQuery")[curTable];
+    var queryToConstraint = this.index("queryToViewConstraint");
+    var queryToAggregate = this.index("queryToAggregateConstraint");
+    var constraints;
+    foreach(query of queries) {
+      constraints = queryToConstraint[query[0]];
+      foreach(constraint of constraints) {
+        incoming[constraint[2]] = true;
+      }
+      aggregates = queryToAggregate[query[0]];
+      foreach(agg of aggregates) {
+        incoming[agg[3]] = true;
+      }
+    }
+    return Object.keys(incoming);
+  },
+
+  // Return all views depending on `curTable.
+  outgoingTables: function outgoingTables(curTable) {
+    //@TODO
+  },
+
+  // List the positions and sizes of each tile currently in the grid.
+  getTileFootprints: function getTileFootprints() {
+    return this.facts("gridTile").map(function(cur, ix) {
+      unpack [tile, type, w, h, x, y] = cur;
+      return {pos: [x, y], size: [w, h]};
+    });
+  }
 };
+
+
+
+//---------------------------------------------------------
+// Index helpers
+//---------------------------------------------------------
+
+
+var diff = {
+
+}
+module.exports.diff = diff;
 
 //---------------------------------------------------------
 // Fact Indexers
@@ -346,166 +523,3 @@ var IndexMakers = {
   }
 };
 module.exports.IndexMakers = IndexMakers;
-
-//---------------------------------------------------------
-// Index helpers
-//---------------------------------------------------------
-
-function toIndexType(kind, keys) {
-  return kind + "<" + keys.join(",") + ">";
-}
-
-// Delete any keys or descendant keys which are empty.
-function garbageCollectIndex(index) {
-  forattr(key, group of index) {
-    if(group instanceof Array) {
-      if(!group || !group.length) {
-        delete index[key];
-      }
-    } else if(typeof group === "object") {
-      garbageCollectIndex(group);
-      if(!Object.keys(group).length) {
-        delete index[key];
-      }
-    }
-  }
-}
-module.exports.garbageCollectIndex = garbageCollectIndex;
-
-function hasTag(id, needle) {
-  var tags = indexer.index("tag", "collector", [0])[id];
-  foreach(tagEntry of tags) {
-    unpack [_, tag] = tagEntry;
-    if(tag === needle) return true;
-  }
-  return false;
-}
-module.exports.hasTag = hasTag;
-
-//List all the tables that the table queries on.
-function incomingTables(curTable) {
-  var incoming = {};
-  var queries = indexer.index("viewToQuery")[curTable];
-  var queryToConstraint = indexer.index("queryToViewConstraint");
-  var queryToAggregate = indexer.index("queryToAggregateConstraint");
-  var constraints;
-  foreach(query of queries) {
-    constraints = queryToConstraint[query[0]];
-    foreach(constraint of constraints) {
-      incoming[constraint[2]] = true;
-    }
-    aggregates = queryToAggregate[query[0]];
-    foreach(agg of aggregates) {
-      incoming[agg[3]] = true;
-    }
-  }
-  return Object.keys(incoming);
-}
-module.exports.incomingTables = incomingTables;
-
-// List all the tables that query on this table.
-function outgoingTables(curTable) {
-  //@TODO
-}
-module.exports.outgoingTables = outgoingTables;
-
-// List all derived workspace views.
-function getNonInputWorkspaceViews() {
-  var final = [];
-  var views = indexer.facts("workspaceView");
-  foreach(view of views) {
-    if(!hasTag(view[0], "input")) {
-      final.push(view[0]);
-    }
-  }
-  return final;
-}
-module.exports.getNonInputWorkspaceViews = getNonInputWorkspaceViews;
-
-// List the positions and sizes of each tile currently in the grid.
-function getTileFootprints() {
-  return indexer.facts("gridTile").map(function(cur, ix) {
-    unpack [tile, type, w, h, x, y] = cur;
-    return {pos: [x, y], size: [w, h]};
-  });
-}
-module.exports.getTileFootprints = getTileFootprints;
-
-function sortByIx(facts, ix) {
-  return facts.sort(function(a, b) {
-    return a[ix] - b[ix];
-  });
-};
-module.exports.sortByIx = sortByIx;
-
-//---------------------------------------------------------
-// Diff helpers
-//---------------------------------------------------------
-var _dependencies = {
-  view: {
-    field: [0, 1],
-    query: [0, 1],
-    tag: [0, 0]
-  },
-  field: {
-    aggregateConstraint: [0, 2],
-    constantConstraint: [0, 1],
-    displayName: [0, 0],
-    functionConstraint: [0, 2],
-    tag: [0, 0],
-    viewConstraint: [0, 2]
-  },
-  query: {
-    aggregateConstraint: [0, 1],
-    constantConstraint: [0, 0],
-    functionConstraint: [0, 1],
-    tag: [0, 0],
-    viewConstraint: [0, 1]
-  },
-  aggregateConstraint: {
-    aggregateConstraintAggregateInput: [0, 0],
-    aggregateConstraintBinding: [0, 0],
-    aggregateConstraintSolverInput: [0, 0],
-    tag: [0, 0]
-  },
-  functionConstraint: {
-    functionConstraintInput: [0, 0],
-    tag: [0, 0]
-  },
-  viewConstraint: {
-    viewConstraintBinding: [0, 0],
-    tag: [0, 0]
-  }
-};
-
-var diff = {
-// Remove fact from view, including all known dependencies.
-  remove: function remove(view, fact) {
-    return diff.removeAll(view, [fact]);
-  },
-  removeAll: function removeAll(view, facts, indent) {
-    indent = indent || 0;
-    var diff = {};
-    if(!facts) { return diff; }
-    foreach(fact of facts) {
-      if(!fact) { continue; }
-      if(!diff[view]) {
-        diff[view] = {adds: [], removes: []};
-      }
-      diff[view].removes.push(fact);
-      var deps = _dependencies[view];
-      // console.log(new Array(indent + 1).join("> "), "Removing '" + view + "':", fact, "---");
-      // console.log(new Array(indent + 2).join("  "), "X", view, diff[view]);
-      if(!deps) { continue; }
-
-      forattr(dep, keys of deps) {
-        unpack [fromIx, toIx] = keys;
-        var depFacts = indexer.index(dep, "collector", [toIx])[fact[fromIx]] || []; //_collect(dep, toIx, fact[fromIx]);
-        // console.log(new Array(indent + 2).join("  "), view, "<--", dep, "@", keys, ":", depFacts);
-        helpers.merge(diff, removeAll(dep, depFacts, indent + 1));
-      }
-    }
-    return diff;
-  }
-}
-module.exports.diff = diff;
