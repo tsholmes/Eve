@@ -45,9 +45,25 @@ var _dependencies = {
   }
 };
 
+// Convert index kind and keys into a stringified type.
 function toIndexType(kind, keys) {
   return kind + "<" + keys.join(",") + ">";
 }
+module.exports.toIndexType = toIndexType;
+
+// Register custom index maker for use.
+function addIndexMaker(name, indexMaker) {
+  IndexMakers[name] = indexMaker;
+};
+module.exports.addIndexMaker = addIndexMaker;
+
+// Sort fields by ix.
+function sortByIx(facts, ix) {
+  return facts.sort(function(a, b) {
+    return a[ix] - b[ix];
+  });
+};
+module.exports.sortByIx = sortByIx;
 
 // Delete any keys or descendant keys which are empty.
 function garbageCollectIndex(index) {
@@ -64,14 +80,6 @@ function garbageCollectIndex(index) {
     }
   }
 }
-
-function sortByIx(facts, ix) {
-  return facts.sort(function(a, b) {
-    return a[ix] - b[ix];
-  });
-};
-module.exports.sortByIx = sortByIx;
-
 
 //---------------------------------------------------------
 // Indexer
