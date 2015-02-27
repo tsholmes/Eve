@@ -55,3 +55,12 @@ macro unpack {
   }
 }
 export unpack
+
+macro unpackInto {
+  rule {[$name:ident (,) ...] = $expr:expr} => {
+    var e = $expr;
+    var i = 0
+    $(; $name = e[i++]) ...
+  }
+}
+export unpackInto

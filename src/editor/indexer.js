@@ -13,6 +13,7 @@ function Indexer(program, handlers) {
   this.worker = program.worker
   this.system = program.system;
   this.indexes = {};
+  this.aliases = {}
   this.tablesToForward = [];
   this.handlers = handlers || {};
   this.latestDiffs = {};
@@ -20,6 +21,7 @@ function Indexer(program, handlers) {
 module.exports.Indexer = Indexer;
 
 Indexer.prototype = {
+  // Diff handling
   handleDiffs: function(diffs, fromProgram) {
     this.latestDiffs = diffs;
     var indexes = this.indexes;
@@ -81,41 +83,6 @@ Indexer.prototype = {
       this.handlers.diffsHandled(diffs);
     }
   },
-  facts: function(table) {
-    return this.system.getStore(table).getFacts();
-  },
-  index: function(table, kind, keys) {
-    var type = toIndexType(kind, keys);
-    var cur = _.deepGet(this.indexes, [table, type]);
-    if(!cur) {
-      console.info("Generating index for view: '" + table + "' of type: '" + type + "'.");
-      cur = this.addIndex(table, kind, keys);
-    }
-    return cur.index;
-  },
-  hasIndex: function(table, kind, keys) {
-    var type = toIndexType(kind, keys);
-    return !!_.deepGet(this.indexes, [table, type]);
-  },
-  addIndex: function(table, kind, keys) {
-    var makeIndexer = IndexMakers[kind];
-    if(!makeIndexer) {
-      throw new Error("Unknown indexer of kind: '" + kind + "'.");
-    }
-    var indexer = makeIndexer.call(null, keys);
-    _.deepSet(this.indexes, [table, indexer.type], {
-      //initialize the index by sending an add of all the facts we have now.
-      index: indexer(null, {adds: this.facts(table), removes: []}),
-      indexer: indexer
-    });
-    return this.indexes[table][indexer.type];
-  },
-  removeIndex: function(table, kind, keys) {
-    var type = toIndexType(kind, keys);
-    var tableIndexes = this.indexes[table];
-    if(!tableIndexes) { return; }
-    delete tableIndexes[type];
-  },
   forward: function(table) {
     if(!table) { return; }
     else if(typeof table === "object" && table.length) {
@@ -143,13 +110,70 @@ Indexer.prototype = {
     }
     return false;
   },
+
+  // Fact retrieval
+  facts: function(table) {
+    return this.system.getStore(table).getFacts();
+  },
   first: function(table) {
     return this.facts(table)[0];
   },
   last: function(table) {
     var facts = this.facts(table);
     return facts[facts.length - 1];
-  }
+  },
+
+  // Indexing
+  addIndex: function(table, kind, keys) {
+    var makeIndexer = IndexMakers[kind];
+    if(!makeIndexer) {
+      throw new Error("Unknown indexer of kind: '" + kind + "'.");
+    }
+    var indexer = makeIndexer(keys);
+    _.deepSet(this.indexes, [table, indexer.type], {
+      //initialize the index by sending an add of all the facts we have now.
+      index: indexer(null, {adds: this.facts(table), removes: []}),
+      indexer: indexer
+    });
+    return this.indexes[table][indexer.type];
+  },
+  removeIndex: function(table, kind, keys) {
+    var type = toIndexType(kind, keys);
+    var tableIndexes = this.indexes[table];
+    if(!tableIndexes) { return; }
+    delete tableIndexes[type];
+  },
+  addAlias: function(name, table, kind, keys) {
+    this.aliases[name] = [table, kind, keys];
+  },
+  removeAlias: function(name) {
+    delete this.aliases[name];
+  },
+  index: function(table, kind, keys) {
+    if(arguments.length === 1) {
+      // We are trying to use an alias.
+      var name = table;
+      if(!this.aliases[name]) {
+        throw new Error("Alias: '" + name + "' does not exist.");
+      }
+      unpackInto [table, kind, keys] = this.aliases[name];
+    }
+    if(!table || !kind || keys === undefined) {
+      throw new Error("Cannot retrieve ambiguous index with table: '" + table + "' kind '" + kind + "' and keys '" + JSON.stringify(keys) + "'.");
+    }
+
+    var type = toIndexType(kind, keys);
+    var cur = _.deepGet(this.indexes, [table, type]);
+    if(!cur) {
+      console.info("Generating index for view: '" + table + "' of type: '" + type + "'.");
+      cur = this.addIndex(table, kind, keys);
+    }
+    return cur.index;
+  },
+  hasIndex: function(table, kind, keys) {
+    var type = toIndexType(kind, keys);
+    return !!_.deepGet(this.indexes, [table, type]);
+  },
 };
 
 //---------------------------------------------------------
@@ -161,7 +185,7 @@ var IndexMakers = {
   // If valueIx is false, value will be the entire matching fact.
   lookup: function(keyIxes) {
     var fn;
-    if(arguments.length < 3) {
+    if(keyIxes.length < 3) {
       // Optimized N=1 case.
       unpack [keyIx, valueIx] = keyIxes;
       fn =  function(cur, diffs) {
@@ -210,21 +234,21 @@ var IndexMakers = {
       }
     }
 
-    fn.type = toIndexType("lookup", [].slice.call(arguments));
+    fn.type = toIndexType("lookup", keyIxes);
     return fn;
   },
   // Groups facts by specified indexes, in order of hierarchy. [Fact] -> {[Any]: [Fact]|Group}
   collector: function(keyIxes) {
     var fn;
     // Optimized N=1 case.
-    if(arguments.length === 1) {
+    if(keyIxes.length === 1) {
       var keyIx = keyIxes[0];
       fn = function(cur, diffs) {
         var final = cur || {};
         foreach(remove of diffs.removes) {
           if(!final[remove[keyIx]]) continue;
-          _.remove(final[remove[keyIx]], function(cur) {
-            return _.isEqual(cur, remove);
+          _.remove(final[remove[keyIx]], function(group) {
+            return _.isEqual(group, remove);
           });
         }
         foreach(add of diffs.adds) {
@@ -240,25 +264,26 @@ var IndexMakers = {
     } else {
       fn = function(cur, diffs) {
         var final = cur || {};
-        var keys = new Array(keyIxes).length;
+        var keys = new Array(keyIxes.length);
+        var group;
         foreach(add of diffs.adds) {
           foreach(ix, keyIx of keyIxes) {
             keys[ix] = add[keyIx];
           }
-          var cur = _.deepGet(final, keys);
-          if(!cur) {
-            cur = [];
-            _.deepSet(final, keys, cur);
+          group = _.deepGet(final, keys);
+          if(!group) {
+            group = [];
+            _.deepSet(final, keys, group);
           }
-          cur.push(add);
+          group.push(add);
         }
         foreach(remove of diffs.removes) {
           foreach(ix, keyIx of keyIxes) {
             keys[ix] = remove[keyIx];
           }
-          var cur = _.deepGet(final, keys);
-          if(!cur) { continue; }
-          _.remove(cur, keys, function(c) {
+          group = _.deepGet(final, keys);
+          if(!group) { continue; }
+          _.remove(group, keys, function(c) {
             return _.isEqual(c, remove);
           });
 
@@ -268,7 +293,7 @@ var IndexMakers = {
       }
     }
 
-    fn.type = toIndexType("collector", [].slice.call(arguments));
+    fn.type = toIndexType("collector", keyIxes);
     return fn;
   },
   // Sorts facts by specified indexes, in order of priority. [Fact] -> [Fact]
@@ -306,7 +331,7 @@ var IndexMakers = {
       return final;
     }
 
-    fn.type = toIndexType("sorter", [].slice.call(arguments));
+    fn.type = toIndexType("sorter", sortIxes);
     return fn;
   }
 };
