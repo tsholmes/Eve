@@ -171,6 +171,14 @@ Indexer.prototype = {
     return cur.index;
   },
   hasIndex: function(table, kind, keys) {
+    if(arguments.length === 1) {
+      // We are trying to use an alias.
+      var name = table;
+      if(!this.aliases[name]) {
+        throw new Error("Alias: '" + name + "' does not exist.");
+      }
+      unpackInto [table, kind, keys] = this.aliases[name];
+    }
     var type = toIndexType(kind, keys);
     return !!_.deepGet(this.indexes, [table, type]);
   },
@@ -266,17 +274,6 @@ var IndexMakers = {
         var final = cur || {};
         var keys = new Array(keyIxes.length);
         var group;
-        foreach(add of diffs.adds) {
-          foreach(ix, keyIx of keyIxes) {
-            keys[ix] = add[keyIx];
-          }
-          group = _.deepGet(final, keys);
-          if(!group) {
-            group = [];
-            _.deepSet(final, keys, group);
-          }
-          group.push(add);
-        }
         foreach(remove of diffs.removes) {
           foreach(ix, keyIx of keyIxes) {
             keys[ix] = remove[keyIx];
@@ -287,6 +284,17 @@ var IndexMakers = {
             return _.isEqual(c, remove);
           });
 
+        }
+        foreach(add of diffs.adds) {
+          foreach(ix, keyIx of keyIxes) {
+            keys[ix] = add[keyIx];
+          }
+          group = _.deepGet(final, keys);
+          if(!group) {
+            group = [];
+            _.deepSet(final, keys, group);
+          }
+          group.push(add);
         }
         garbageCollectIndex(final);
         return final;
