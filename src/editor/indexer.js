@@ -239,6 +239,8 @@ var IndexMakers = {
             _.deepSet(final, keys, add);
           }
         }
+
+        return final;
       }
     }
 
