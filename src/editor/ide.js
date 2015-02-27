@@ -7,7 +7,6 @@ var helpers = require("./helpers");
 var grid = require("./grid");
 var incrementalUI = require("./incrementalUI");
 var index = require("./indexer");
-var indexers = index.indexers;
 
 //---------------------------------------------------------
 // Globals
@@ -1189,7 +1188,7 @@ function _clearFilter(field) {
   var queries = indexer.index("query", "collector", [1])[view];
   var functionConstraints = [];
   foreach(queryFact of queries) {
-    functionConstraints.push.apply(functionConstraints, indexer.index("queryToFunctionConstraint")[queryFact[0]]);
+    functionConstraints.push.apply(functionConstraints, indexer.index("functionConstraint", "collector", [1])[queryFact[0]]);
   }
   foreach(constraint of functionConstraints) {
     if(!index.hasTag(constraint[0], "filter") || !index.hasTag(constraint[0], field)) { continue; }
@@ -1197,7 +1196,7 @@ function _clearFilter(field) {
     var fieldFact = indexer.index("field", "lookup", [0, false])[field];
     helpers.merge(diff, index.diff.remove("field", fieldFact));
   }
-  var constantConstraints = indexer.index("fieldToConstantConstraint")[field];
+  var constantConstraints = indexer.index("constantConstraint", "collector", [1])[field];
   foreach(constraint of constantConstraints) {
     helpers.merge(diff, index.diff.remove("constantConstraint", constraint));
   }
@@ -1510,7 +1509,7 @@ function dispatch(eventInfo) {
       var field1 = info.id;
       var field2 = info.selected[0];
 
-      var bindings = indexer.index("fieldToBindings")[field2];
+      var bindings = indexer.index("viewConstraintBinding", "collector", [1])[field2];
       if(!bindings || !bindings.length) {
         throw new Error("Cannot join with unbound (local?) field: '" + indexer.index("displayName", "lookup", [0, 1])[field2] + "'.");
       }
@@ -1529,7 +1528,7 @@ function dispatch(eventInfo) {
 
     case "unjoinField":
       var joins = indexer.index("join", "collector", [0])[info];
-      var bindings = indexer.index("fieldToBindings")[info];
+      var bindings = indexer.index("viewConstraintBinding", "collector", [1])[info];
       var diff = {
         join: {adds: [], removes: joins},
         tag: {adds: [], removes: []},
@@ -1558,7 +1557,7 @@ function dispatch(eventInfo) {
     case "filterField":
       var clearDiff = _clearFilter(info.id);
       var diff = {};
-      if(!info.text) { return; }
+      if(!info.text) { return indexer.handleDiffs(clearDiff); }
       var view = indexer.index("field", "lookup", [0, 1])[info.id];
       var viewFields = indexer.index("field", "collector", [1])[view];
       var queries = indexer.index("query", "collector", [1])[view];
@@ -1617,19 +1616,19 @@ function dispatch(eventInfo) {
       //@TODO: this is super frail. Filters are function + constant and you can filter a
       //the result of a function. How would we know what to edit?
 
-      var functions = indexer.index("queryToFunctionConstraint")[queryId] || [];
+      var functions = indexer.index("functionConstraint", "collector", [1])[queryId] || [];
       var foundFunc = functions.filter(function(cur) {
         unpack [id, queryId, constraintField] = cur;
         return constraintField === field;
       });
 
-      var aggs = indexer.index("queryToAggregateConstraint")[queryId] || [];
+      var aggs = indexer.index("aggregateConstraint", "collector", [1])[queryId] || [];
       var foundAgg = functions.filter(function(cur) {
         unpack [id, queryId, constraintField] = cur;
         return constraintField === field;
       });
 
-      var constants = indexer.index("queryToConstantConstraint")[queryId] || [];
+      var constants = indexer.index("constantConstraint", "collector", [0])[queryId] || [];
       var foundConstant = constants.filter(function(cur) {
         unpack [id, constraintField] = cur;
         return constraintField === field;
@@ -1639,12 +1638,12 @@ function dispatch(eventInfo) {
         unpack [constraintId] = foundFunc[0]
         diff.functionConstraint = {adds: [], removes: [foundFunc[0]]};
         diff.functionConstraintInput = {adds: [],
-                                        removes: indexer.index("functionConstraintToInput")[constraintId] || []};
+                                        removes: indexer.index("functionConstraintInput", "collector", [0])[constraintId] || []};
       } else if(foundAgg.length) {
         unpack [constraintId] = foundAgg[0]
         diff.aggregateConstraint = {adds: [], removes: [foundAgg[0]]};
         diff.aggregateConstraintAggregateInput = {adds: [],
-                                                  removes: indexer.index("aggregateConstraintToInput")[constraintId] || []};
+                                                  removes: indexer.index("aggregateConstraintInput", "collector", [0])[constraintId] || []};
       } else if(foundConstant.length) {
         unpack [constraintId] = foundConstant[0]
         diff.constantConstraint = {adds: [], removes: [foundConstant[0]]};
@@ -2174,7 +2173,7 @@ function viewToDSL(view) {
   var final = "";
   var queryId = query[0];
 
-  var constants = indexer.index("queryToConstantConstraint")[queryId];
+  var constants = indexer.index("constantConstraint", "collector", [0])[queryId];
   var viewConstraints = indexer.index("viewConstraint", "collector", [1])[queryId];
   var viewConstraintBindings = {};
   var VCBIndex = indexer.index("viewConstraintBinding", "collector", [0]);
@@ -2192,10 +2191,10 @@ function viewToDSL(view) {
     }
   }
 
-  var functionConstraints = indexer.index("queryToFunctionConstraint")[queryId];
-  var aggregateConstraints = indexer.index("queryToAggregateConstraint")[queryId];
+  var functionConstraints = indexer.index("functionConstraint", "collector", [1])[queryId];
+  var aggregateConstraints = indexer.index("aggregateConstraint", "collector", [1])[queryId];
   var aggregateConstraintBindings = {};
-  var ACBIndex = indexer.index("aggregateConstraintToBinding");
+  var ACBIndex = indexer.index("aggregateConstraintBinding", "lookup", [0, false]);
   foreach(agg of aggregateConstraints) {
     unpack [id, _, field, sourceView, code] = agg;
     var bindings = ACBIndex[id];
