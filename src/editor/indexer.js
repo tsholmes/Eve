@@ -443,19 +443,6 @@ var _dependencies = {
   }
 };
 
-function _collect(view, ix, val) {
-  var facts = indexer.facts(view);
-  var matches = [];
-  if(!facts) { return matches; }
-
-  foreach(fact of facts) {
-    if(fact[ix] === val) {
-      matches.push(fact);
-    }
-  }
-  return matches;
-}
-
 var diff = {
 // Remove fact from view, including all known dependencies.
   remove: function remove(view, fact) {
@@ -478,8 +465,7 @@ var diff = {
 
       forattr(dep, keys of deps) {
         unpack [fromIx, toIx] = keys;
-        // @FIXME: Slow fallback until we figure out how to integrate indexes.
-        var depFacts = _collect(dep, toIx, fact[fromIx]);
+        var depFacts = indexer.index(dep, "collector", [toIx])[fact[fromIx]] || []; //_collect(dep, toIx, fact[fromIx]);
         // console.log(new Array(indent + 2).join("  "), view, "<--", dep, "@", keys, ":", depFacts);
         helpers.merge(diff, removeAll(dep, depFacts, indent + 1));
       }
