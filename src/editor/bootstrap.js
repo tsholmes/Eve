@@ -2,6 +2,7 @@ var ide = require("./ide.js");
 var diffSystems = global.diffSystems;
 var codeToSystem = global.codeToSystem;
 var incrementalUI = require("./incrementalUI");
+var indexer = require("./indexer");
 var examples = global.examples;
 var tests = global.tests || {};
 
@@ -54,6 +55,10 @@ function Program(name, code) {
   this.name = name;
   this.system = codeToSystem(code);
   this.worker = new Worker("../build/worker.js");
+  this.indexer = indexer.makeIndexer("global", this, {
+    diffsHandled: ide.diffsHandled
+  });
+  this.indexer.forward(global.compilerTables);
   this.worker.onmessage = this.onWorkerMessage.bind(this);
 
   this.worker.postMessage({type: "diffs", diffs: diffSystems(this.system, null, null)});

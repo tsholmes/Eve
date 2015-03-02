@@ -45,6 +45,25 @@ var _dependencies = {
   }
 };
 
+var indexers = {};
+
+// Creates an indexer by `name`.
+function makeIndexer(name, program, opts) {
+  if(indexers[name]) {
+    console.error("@TODO clean up old indexer properly");
+    delete indexers[name];
+  }
+  indexers[name] = new Indexer(program, opts);
+  return indexers[name];
+}
+module.exports.makeIndexer = makeIndexer;
+
+// Retrieves an indexer by `name`.
+function getIndexer(name) {
+  return indexers[name];
+}
+module.exports.getIndexer = getIndexer;
+
 // Convert index kind and keys into a stringified type.
 function toIndexType(kind, keys) {
   return kind + "<" + keys.join(",") + ">";
