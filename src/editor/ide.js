@@ -99,7 +99,6 @@ function _clearFilter(field) {
 
 function dispatch(eventInfo) {
   unpack [event, info] = eventInfo;
-  console.log("dispatch", event, JSON.stringify(info, null, 2));
   switch(event) {
     case "diffsHandled":
       //TODO: Should we push this off to a requestAnimationFrame?
@@ -1219,7 +1218,6 @@ function init(program) {
 module.exports.init = init;
 
 function handleProgramDiffs(diffs) {
-  console.log("handling", diffs);
   indexer.handleDiffs(diffs, true);
 }
 module.exports.handleProgramDiffs = handleProgramDiffs;

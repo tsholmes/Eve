@@ -47,6 +47,8 @@ var client = getLocal("client", uuid());
 global.client = client;
 setLocal("client", client);
 
+var editorTables = ["workspaceView"];
+
 //---------------------------------------------------------
 // worker
 //---------------------------------------------------------
@@ -55,9 +57,10 @@ function Program(name, code) {
   this.name = name;
   this.system = codeToSystem(code);
   this.worker = new Worker("../build/worker.js");
-  this.indexer = indexer.makeIndexer("global", this, {
+  this.indexer = new indexer.Indexer(this, {
     diffsHandled: ide.diffsHandled
   });
+  this.indexer.forward(editorTables);
   this.indexer.forward(global.compilerTables);
   this.worker.onmessage = this.onWorkerMessage.bind(this);
 
@@ -137,3 +140,5 @@ if(window["io"]) {
 
 module.exports.taskManager = taskManager;
 taskManager.run("My Stack");
+
+window._taskManager = taskManager;
