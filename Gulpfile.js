@@ -91,7 +91,7 @@ gulp.task("watch-editor", "Watch editor related files for changes.", ["build-edi
 });
 
 gulp.task("watch-worker", "Watch worker related files for changes.", ["build-worker"], function() {
-  return gulp.watch(editorSources.concat(macroSources), function(events) {
+  return gulp.watch(["src/worker.js"].concat(macroSources), function(events) {
     console.log("Recompiling worker");
     return bundle("worker.js", ["./src/worker.js"]);
   });
