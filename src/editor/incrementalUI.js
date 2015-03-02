@@ -65,17 +65,7 @@ var createUICallback = function(id, event, label, key, program) {
       value = (value === undefined) ? "" : value;
       items.push(["rawEvent", eid, label, key, value]);
       items.push(["eventTime", eid, Date.now()]);
-      console.log("posting events", items);
       program.worker.postMessage({type: "event", items: items});
-      var itemDiff = items.reduce(function(memo, item) {
-        var view = item.shift();
-        if(!memo[view]) {
-          memo[view] = {adds: [], removes: []};
-        }
-        memo[view].adds.push(item);
-        return memo;
-      }, {});
-      program.indexer.handleDiffs(itemDiff);
     }
   };
 };
