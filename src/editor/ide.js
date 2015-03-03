@@ -2,6 +2,7 @@ import macros from "../macros.sjs";
 
 var _ = require("lodash");
 var helpers = require("./helpers");
+var grid = require("./grid");
 var ui = require("./ui");
 
 //---------------------------------------------------------
@@ -148,7 +149,7 @@ function dispatch(eventInfo) {
       var id = info.id;
       var tileId = global.uuid();
       if(!info.pos) {
-        info.pos = grid.firstGap(tileGrid, indexer.getTileFootprints(), ui.defaultSize);
+        info.pos = grid.firstGap(ui.tileGrid, indexer.getTileFootprints(), ui.defaultSize);
         if(!info.pos) {
           console.warn("Grid is full, aborting.");
           break;

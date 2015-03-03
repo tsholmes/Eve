@@ -34,15 +34,15 @@ var KEYCODES = {
 //---------------------------------------------------------
 
 function init(_indexer, dispatcher) {
-  module.exports.indexer = indexer = _indexer;
-  module.exports.dispatch = dispatch = dispatcher;
   React.unmountComponentAtNode(document.body);
   var dims = document.body.getBoundingClientRect();
-  tileGrid = grid.makeGrid(document.body, {
+  module.exports.tileGrid = tileGrid = grid.makeGrid(document.body, {
     dimensions: [dims.width - 100, dims.height - 110],
     gridSize: [12, 12],
     marginSize: [10,10]
   });
+  module.exports.indexer = indexer = _indexer;
+  module.exports.dispatch = dispatch = dispatcher;
 };
 module.exports.init = init;
 
