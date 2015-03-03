@@ -9,7 +9,6 @@ var ui = require("./ui");
 //---------------------------------------------------------
 
 var ide = module.exports;
-var defaultSize = [12,3]; // @FIXME: duplicated in ui.js
 var indexer;
 
 function parseValue(value) {
@@ -149,7 +148,7 @@ function dispatch(eventInfo) {
       var id = info.id;
       var tileId = global.uuid();
       if(!info.pos) {
-        info.pos = grid.firstGap(tileGrid, indexer.getTileFootprints(), defaultSize);
+        info.pos = grid.firstGap(tileGrid, indexer.getTileFootprints(), ui.defaultSize);
         if(!info.pos) {
           console.warn("Grid is full, aborting.");
           break;
@@ -227,7 +226,7 @@ function dispatch(eventInfo) {
         unpack [width, height, x, y] = activePosition;
         dispatch(["addTile", {pos: [x, y], size: [width, height], type: "table", id: tableId}]);
       } else {
-        dispatch(["addTile", {size: defaultSize, type: "table", id: tableId}]);
+        dispatch(["addTile", {size: ui.defaultSize, type: "table", id: tableId}]);
       }
       dispatch(["clearContextMenu"]);
       break;
@@ -1201,7 +1200,7 @@ function ideTables() {
 //---------------------------------------------------------
 
 function startingDiffs() {
-  return {"gridTile": {adds: [["uiTile", "ui", defaultSize[0], defaultSize[1], 0, 0]], removes: []}}
+  return {"gridTile": {adds: [["uiTile", "ui", ui.defaultSize[0], ui.defaultSize[1], 0, 0]], removes: []}}
 }
 
 function init(program) {
