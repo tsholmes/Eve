@@ -131,7 +131,7 @@ var mixin = {
     },
     wrapEditable: function(attrs, content) {
       var wrapper = {
-        contentEditable: this.state.editin,
+        contentEditable: this.state.editing,
         className: this.state.editing ? "selected" : "",
         onClick: this.startEditing,
         onDoubleClick: this.stop,
