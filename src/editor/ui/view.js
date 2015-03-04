@@ -1,181 +1,186 @@
 import macros from "../../macros.sjs";
 
 var _ = require("lodash");
+var React = require("react/addons");
+var PropTypes = React.PropTypes;
 var JSML = require("../jsml");
 var ui = require("./");
 var reactFactory = ui.reactFactory;
 
 // Mixins
-var headerMixin = {
-  dragStart: function(e) {
-    e.currentTarget.classList.add("dragging");
-    ui.dispatch(["dragField", {table: this.props.table, field: this.props.field[0]}]);
-  },
-  dragEnd: function(e) {
-    e.currentTarget.classList.remove("dragging");
-    ui.dispatch(["clearDragField", {table: this.props.table, field: this.props.field[0]}]);
-  },
-  doubleClick: function(e) {
-    e.stopPropagation();
-    this.click(e);
-  },
-  wrapHeader: function(attrs) {
-    var wrapper = {
-      draggable: true,
-      onDoubleClick: this.doubleClick,
-      onClick: null,
-      onDragStart: this.dragStart,
-      onDragEnd: this.dragEnd
-    };
-    return ui.mergeAttrs(attrs, wrapper);
+var mixin = {
+  draggableField: {
+    dragStart: function(e) {
+      e.currentTarget.classList.add("dragging");
+      ui.dispatch(["dragField", {table: this.props.view, field: this.props.id}]);
+    },
+    dragEnd: function(e) {
+      e.currentTarget.classList.remove("dragging");
+      ui.dispatch(["clearDragField", {table: this.props.view, field: this.props.id}]);
+    },
+    doubleClick: function(e) {
+      e.stopPropagation();
+      this.click(e);
+    },
+    wrapDraggable: function(attrs) {
+      var wrapper = {
+        draggable: true,
+        onClick: null,
+        onDoubleClick: this.doubleClick,
+        onDragStart: this.dragStart,
+        onDragEnd: this.dragEnd
+      };
+      return ui.mergeAttrs(attrs, wrapper);
+    }
   }
 };
+
 
 // Components
 
 var viewComponents = {
   title: reactFactory({
     mixins: [ui.mixin.contentEditable],
+    displayName: "title",
+    propTypes: {
+      id: PropTypes.string.isRequired,
+      onEdit: PropTypes.func
+    },
     commit: function() {
-      if(!this.state.edit) { return; }
-      ui.dispatch(["rename", {id: this.props.id, name: this.state.edit}]);
-      return true;
+      if(!this.state.edit || !this.state.onEdit) { return; }
+      return this.state.onEdit(this.state.edit);
     },
     render: function() {
       var id = this.props.id;
       var name = this.state.edit || ui.indexer.index("displayName", "lookup", [0, 1])[id];
       var label = "";
       if(ui.indexer.hasTag(id, "constant")) { label = " - constant"; }
-      else if(ui.indexer.hasTag(id, "input")) { label = "- input"; }
+      else if(ui.indexer.hasTag(id, "input")) { label = " - input"; }
 
       return JSML.react(
         ["h2",
          ["span", this.wrapEditable({key: id + "-title",}, name)],
-         label]);
+         label]
+      );
     }
   }),
+
   header: reactFactory({
-    mixins: [ui.mixin.contentEditable, headerMixin],
+    mixins: [ui.mixin.contentEditable, mixin.draggableField],
+    displayName: "header",
+    propTypes: {
+      id: PropTypes.string.isRequired,
+      ix: PropTypes.number.isRequired,
+      onEdit: PropTypes.func,
+      showMenu: PropTypes.func,
+      hidden: PropTypes.bool,
+      grouped: PropTypes.bool,
+      className: PropTypes.string
+    },
+    commit: function() {
+      if(!this.state.edit || !this.props.onEdit) { return; }
+      return this.props.onEdit(this.props.id, this.state.edit);
+    },
     contextMenu: function(e) {
+      if(!this.props.showMenu || !this.props.id) { return; }
       e.preventDefault();
       e.stopPropagation();
-      var id = this.props.field[0];
+      var id = this.props.id;
       var joins = ui.indexer.index("join", "collector", [0])[id];
       var isJoined = joins && joins.length;
-
+      var isGrouped = ui.indexer.hasTag(id, "grouped");
       var items = [
-        [0, "input", "filter", "filterField", id],
-        (ui.indexer.hasTag(id, "grouped") ? [1, "text", "ungroup", "ungroupField", id] : [1, "text", "group", "groupField", id])
+        [0, "input", "filter", "filterField", id]
       ];
+      if(isGrouped) {
+        items.push([items.length, "text", "ungroup", "ungroupField", id]);
+      } else {
+        items.push([items.length, "text", "group", "groupField", id]);
+      }
       if(isJoined) {
         items.push([items.length, "text", "unjoin", "unjoinField", id]);
       }
       items.push([items.length, "fieldSearcher", "join", "joinField", id])
 
-      ui.dispatch(["contextMenu", {e: {clientX: e.clientX, clientY: e.clientY},
-                                items: items}]);
-    },
-    commit: function() {
-      unpack [id] = this.props.field;
-      if(!this.state.edit) { return; }
-      ui.dispatch(["rename", {id: id, name: this.state.edit}]);
-      return true;
+      this.props.showMenu({
+        e: {clientX: e.clientX, clientY: e.clientY},
+        items: items
+      });
     },
     render: function() {
-      unpack [id] = this.props.field;
-      var name = this.state.edit || ui.indexer.index("displayName", "lookup", [0, 1])[id];
-      var className = "header";
-      if(ui.indexer.hasTag(id, "grouped")) {
+      var name = this.state.edit || ui.indexer.index("displayName", "lookup", [0, 1])[this.props.id];
+      var className = (this.props.className || "") + " header";
+      if(this.props.grouped) {
         className += " grouped";
       }
       var opts = this.wrapEditable({
         className: className,
-        key: id,
+        key: this.props.id,
         onContextMenu: this.contextMenu
       }, name);
-      opts = this.wrapHeader(opts);
+      if(this.props.id) {
+        opts = this.wrapDraggable(opts);
+      }
       return JSML.react(["div", opts]);
     }
   }),
-  addHeader: reactFactory({
-    mixins: [ui.mixin.contentEditable],
-    commit: function() {
-      if(!this.state.edit) { return; }
-      ui.dispatch(["addField", {view: this.props.view, name: this.state.edit}]);
-      return true;
-    },
-    componentDidUpdate: function() {
-      //@HACK: React doesn't correctly clear contentEditable fields
-      this.getDOMNode().textContent = "";
-    },
-    render: function() {
-      return JSML.react(["div", this.wrapEditable({
-        className: "header add-header",
-        key: this.props.view + "-add-header"}, "")]);
-    }
-  }),
-  row: reactFactory({
-    mixins: [/*   editableRowMixin   */], // @TODO: Fixme
-    commit: function(ix) {
-      var view = this.props.view;
 
-      //if this is a constant view, then we just modify the row
-      if(ui.indexer.hasTag(view, "constant")) {
-        var oldRow = this.props.row;
-        var newRow = oldRow.slice();
-        var edits = this.state.edits;
-        foreach(ix, field of newRow) {
-          if(edits[ix] !== null && edits[ix] !== undefined) {
-            newRow[ix] = edits[ix];
-          }
-        }
-        ui.dispatch(["updateRow", {view: view, oldRow: oldRow, newRow: newRow}]);
-      } else if(ix > -1 && this.state.edits[ix] !== undefined) { //FIXME: how is blur getting called with an ix of -1?
-        //if this isn't a constant view, then we have to modify
-        ui.dispatch(["updateCalculated", {view: view, field: this.props.fields[ix][0], value: this.state.edits[ix]}]);
-      }
-      return true;
+  row: reactFactory({
+    displayName: "row",
+    propTypes: {
+      fact: PropTypes.array.isRequired,
+      hidden: PropTypes.array.isRequired,
+      onEdit: PropTypes.func,
+      className: PropTypes.string
+    },
+    fieldChanged: function(ix, value) {
+      if(!this.props.onEdit) { return false; }
+      var fact = this.props.fact;
+      var old = fact.slice();
+      fact[ix] = value;
+      return this.props.onEdit(fact, old);
     },
     render: function() {
-      var fields = [];
-      foreach(ix, field of this.props.row) {
+      var className = (this.props.className || "") + " grid-row";
+      var row = ["div", {className: className, key: JSON.stringify(this.props.fact)}];
+      var fieldChangedHandler = (this.props.onEdit ? this.fieldChanged : undefined);
+      foreach(ix, field of this.props.fact) {
         if(this.props.hidden[ix]) { continue; }
-        fields.push(["div", {"data-ix": ix}, field]);
+        row.push(viewComponents.field({value: field, ix: ix, onEdit: fieldChangedHandler}));
       }
-      return JSML.react(["div", {"className": "grid-row", "key": JSON.stringify(this.props.row)}, fields]);
+      return JSML.react(row);
     }
   }),
-  adderRow: reactFactory({
-    mixins: [/*   editableRowMixin   */], // @TODO: FIXME
-    checkComplete: function() {
-      for(var i = 0, len = this.props.len; i < len; i++) {
-        if(this.state.edits[i] === undefined || this.state.edits[i] === null) return false;
-      }
-      return true;
+
+  field: reactFactory({
+    mixins: [ui.mixin.contentEditable],
+    displayName: "field",
+    propTypes: {
+      value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+      ix: PropTypes.number.isRequired,
+      onEdit: PropTypes.func,
+      className: PropTypes.string
     },
     commit: function() {
-      if(this.checkComplete()) {
-        var row = this.state.edits.slice();
-        ui.ui.dispatch(["addRow", {view: this.props.view, row: row}]);
+      if(!this.props.onEdit) { return false; }
+      var result = this.props.onEdit(this.props.ix, this.state.edit);
+      if(result) {
         //@HACK: React doesn't correctly clear contentEditable fields
-        foreach(ix, _ of row) {
-          this.getDOMNode().children[ix].textContent = "";
-        }
-        return true;
+        // this.getDOMNode().textContent = this.props.value || "";
       }
-      return false;
+      return result;
     },
     render: function() {
-      var fields = [];
-      var className;
-      var contentEditable;
-      for(var i = 0, len = this.props.len; i < len; i++) {
-        fields.push(["div", {"tabIndex": -1, "data-ix": i}]);
+      var attrs = {className: this.props.className, "data-ix": this.props.ix};
+      if(this.props.onEdit) {
+        attrs = this.wrapEditable(attrs, this.props.value || "");
+        return JSML.react(["div", attrs]);
       }
-      return JSML.react(["div", {"className": "grid-row add-row", "key": "adderRow"}, fields]);
+
+      return JSML.react(["div", attrs, this.props.value]);
     }
   })
-};
+}
 
 // Tile components
 // Tile content for rendering views.
@@ -185,14 +190,28 @@ var viewTile = reactFactory({
     if(!view) { throw new Error("No view found for tile: '" + this.props.tile + "'."); }
     return {view: view};
   },
+  getFields: function() {
+    var fields = ui.indexer.index("field", "collector", [1])[this.state.view] || [];
+    fields = _.sortBy(fields, 2);
+    fields = fields.map(function(cur, ix) {
+      var id = cur[0];
+      return {
+        id: id,
+        ix: ix,
+        hidden: ui.indexer.hasTag(id, "hidden"),
+        grouped: ui.indexer.hasTag(cur[0], "grouped")
+      };
+    });
+    return fields;
+  },
   contextMenu: function(e) {
     var isInput = ui.indexer.hasTag(this.state.view, "input");
     if(!isInput) {
       e.preventDefault();
-      ui.ui.dispatch(["contextMenu", {e: {clientX: e.clientX, clientY: e.clientY},
-                                items: [
-                                  [0, "viewSearcher", "Add table", "addTableToView", this.state.view]
-                                ]}]);
+      ui.dispatch(["contextMenu", {
+        e: {clientX: e.clientX, clientY: e.clientY},
+        items: [[0, "viewSearcher", "Add table", "addTableToView", this.state.view]]
+      }]);
     }
   },
   dragOver: function(e) {
@@ -207,43 +226,83 @@ var viewTile = reactFactory({
     if(dragged) {
       unpack[view, field] = dragged;
       if(this.state.view !== view) {
-        ui.ui.dispatch(["addFieldToView", {view: view, field: field, current: this.state.view}]);
+        ui.dispatch(["addFieldToView", {view: view, field: field, current: this.state.view}]);
       }
     }
   },
+
+  showMenu: function(info) {
+    return ui.dispatch(["contextMenu", info]);
+  },
+
+  updateTitle: function(neue) {
+    ui.dispatch(["rename", {id: this.state.view, name: neue}]);
+    return true;
+  },
+  addField: function(__, name) {
+    ui.dispatch(["addField", {view: this.state.view, name: name}]);
+    return true;
+  },
+  updateField: function(id, name) {
+    ui.dispatch(["rename", {id: id, name: name}]);
+    return true;
+  },
+  addRow: function(row) {
+    // Bail if row isn't fully specified.
+    foreach(field of row) {
+      if(field === undefined) {
+        return;
+      }
+    }
+    ui.dispatch(["addRow", {table: this.state.view, row: row}]);
+    return true;
+  },
+  updateRow: function(neue, old) {
+    ui.dispatch(["updateRow", {table: this.state.view, newRow: neue, oldRow: old}]);
+    return true;
+  },
+
   render: function() {
     var self = this;
     var view = this.state.view;
-    var viewFields = ui.indexer.index("field", "collector", [1])[view] || [];
-    viewFields = _.sortBy(viewFields, 2);
+    var fields = this.getFields();
+    var isConstant = ui.indexer.hasTag(view, "constant");
+    var isInput = ui.indexer.hasTag(view, "input");
     var hidden = [];
     var grouped = [];
-    var headers = viewFields.map(function(cur, ix) {
-      hidden[ix] = ui.indexer.hasTag(cur[0], "hidden");
-      if(ui.indexer.hasTag(cur[0], "grouped")) {
+    var headers = [];
+    foreach(ix, cur of fields) {
+      hidden[ix] = cur.hidden;
+      if(cur.grouped) {
         grouped.push(ix);
       }
-      if(!hidden[ix]) {
-        return viewComponents.header({field: cur, view: view});
+      if(!cur.hidden) {
+        headers.push(viewComponents.header(ui.mergeAttrs({
+          onEdit: this.updateField,
+          showMenu: this.showMenu
+        }, cur)));
       }
-    });
+    }
+    var addHeader = viewComponents.header({id: "", ix: headers.length, className: "add-header", onEdit: this.addField});
+    headers.push(addHeader);
 
+    var rowEdited = (isConstant ? this.updateRow : undefined);
     function indexToRows(index, hidden, startIx) {
       startIx = startIx || 0;
       hidden = hidden || [];
       var rows = [];
       if(index instanceof Array) {
         rows = index.map(function factToRow(cur) {
-          return viewComponents.row({row: cur, view: view, fields: viewFields, hidden: hidden});
+          return viewComponents.row({fact: cur, hidden: hidden, onEdit: rowEdited});
         }).filter(Boolean);
       } else {
         var newHidden = hidden.slice();
         newHidden[startIx] = true;
         forattr(value, group of index) {
           var groupRow = ["div", {className: "grid-group"}];
-          groupRow.push.apply(groupRow, indexToRows(group, newHidden, startIx + 1));
+          groupRow.pushapply(groupRow, indexToRows(group, newHidden, startIx + 1));
           rows.push(["div", {className: "grid-row grouped-row"},
-                     ["div", {className: "grouped-field"}, value],
+                     ["div", {className: "grouped-field"}, value], //@TODO make this a viewComponent.field.
                      groupRow]);
         }
       }
@@ -251,25 +310,24 @@ var viewTile = reactFactory({
     }
 
     var rowIndex;
-    // @TODO: Reimplement grouping.
     if(grouped.length) {
       rowIndex = ui.indexer.index(view, "collector", grouped);
     } else {
       rowIndex = ui.indexer.facts(view) || [];
     }
     var rows = indexToRows(rowIndex, hidden);
-    var isConstant = ui.indexer.hasTag(view, "constant");
-    var isInput = ui.indexer.hasTag(view, "input");
+    if(isConstant) {
+      rows.push(viewComponents.row({fact: new Array(fields.length), hidden: hidden, className: "add-row", onEdit: this.addRow}));
+    }
+    //@TODO if isConstant attach an adder row.
     var className = (isConstant || isInput) ? "input-card" : "view-card";
-    var content =  [viewComponents.title({id: view}),
+    var content =  [viewComponents.title({id: view, onEdit: this.updateTitle}),
                     (this.props.active ? ["pre", viewToDSL(view)] : null),
                     ["div", {className: "grid"},
                      ["div", {className: "grid-header"},
-                      headers,
-                      viewComponents.addHeader({view: view})],
+                      headers],
                      ["div", {className: "grid-rows"},
-                      rows,
-                      isConstant ? this.adderRow({len: headers.length, view: view}) : null]]];
+                      rows]]];
     return ui.tileWrapper({pos: this.props.pos, size: this.props.size, tile: this.props.tile, class: className, content: content, contextMenu: this.contextMenu,
                           drop: this.drop, dragOver: this.dragOver});
   }
