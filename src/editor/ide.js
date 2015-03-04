@@ -215,7 +215,6 @@ function dispatch(eventInfo) {
     case "openView":
       unpack [tableId, name] = info.selected;
       var diff = {
-        // subscription: {adds: [[tableId]], removes: []}, @FIXME: WHY
         workspaceView: {adds: [[tableId]], removes: []}
       };
       indexer.handleDiffs(diff);
