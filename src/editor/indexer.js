@@ -362,17 +362,28 @@ Indexer.prototype = {
     return Object.keys(incoming);
   },
 
-  // Return all views depending on `curTable.
+  // Return all views depending on `curTable`.
   outgoingTables: function outgoingTables(curTable) {
     //@TODO
   },
 
+  getActiveGrid: function getActiveGrid() {
+    var activeGrid = this.first("activeGrid")[0];
+    if(!activeGrid) {
+      throw new Error("No active grid, aborting.");
+    }
+    return activeGrid;
+  },
+
   // List the positions and sizes of each tile currently in the grid.
   getTileFootprints: function getTileFootprints() {
+    var activeGrid = this.getActiveGrid();
+
     return this.facts("gridTile").map(function(cur, ix) {
-      unpack [tile, type, w, h, x, y] = cur;
+      unpack [tile, grid, type, w, h, x, y] = cur;
+      if(grid !== activeGrid) { return; }
       return {pos: [x, y], size: [w, h]};
-    });
+    }).filter(Boolean);
   }
 };
 

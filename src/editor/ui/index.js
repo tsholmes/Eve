@@ -14,12 +14,11 @@ var JSML = require("../jsml");
 // Globals
 //---------------------------------------------------------
 
-var tileGrid;
 var indexer;
 var dispatch;
 var defaultSize = [6,3];
 module.exports.defaultSize = defaultSize;
-var aggregateFuncs = ["sum", "count", "avg", "maxBy"];
+
 var KEYCODES = {
   UP: 38,
   DOWN: 40,
@@ -29,20 +28,22 @@ var KEYCODES = {
   ESCAPE: 27
 };
 
+var tileGrid;
+
 //---------------------------------------------------------
-// React helpers
+// Helpers
 //---------------------------------------------------------
 
 function init(_indexer, dispatcher) {
   React.unmountComponentAtNode(document.body);
+  module.exports.indexer = indexer = _indexer;
+  module.exports.dispatch = dispatch = dispatcher;
   var dims = document.body.getBoundingClientRect();
   module.exports.tileGrid = tileGrid = grid.makeGrid(document.body, {
     dimensions: [dims.width - 100, dims.height - 110],
     gridSize: [12, 12],
     marginSize: [10,10]
   });
-  module.exports.indexer = indexer = _indexer;
-  module.exports.dispatch = dispatch = dispatcher;
 };
 module.exports.init = init;
 
@@ -92,6 +93,7 @@ function mergeAttrs(attrs, wrapper) {
   return attrs;
 }
 module.exports.mergeAttrs = mergeAttrs;
+
 
 //---------------------------------------------------------
 // Mixins
@@ -394,8 +396,10 @@ var Root = React.createFactory(React.createClass({
     return [rowEdge, colEdge];
   },
   render: function() {
+    var activeGrid = indexer.getActiveGrid();
     var tiles = indexer.facts("gridTile").map(function(cur, ix) {
-      unpack [tile, type, width, height, row, col] = cur;
+      unpack [tile, grid, type, width, height, row, col] = cur;
+      if(grid !== activeGrid) { return; }
       var gridItem = {
         tile: tile,
         size: [width, height],
@@ -405,7 +409,7 @@ var Root = React.createFactory(React.createClass({
         throw new Error("Unknown tile type: '" + type + "' for gridItem: " + JSON.stringify(gridItem));
       }
       return tileComponent[type](gridItem);
-    });
+    }).filter(Boolean);
 
     var menu = indexer.first("contextMenu");
     var gridContainer = ["div", {"id": "cards", "onClick": this.click}, tiles];
@@ -458,7 +462,7 @@ var tileWrapper = reactFactory({
                onDragOver: this.props.dragOver,
                onContextMenu: this.props.contextMenu || undefined,
                onClick: (this.props.selectable) ? this.selectTile : undefined,
-               onDoubleClick: (this.props.navigable) ? this.enterTile : undefined,
+               onDoubleClick: this.enterTile,
                style: grid.getSizeAndPosition(tileGrid, this.props.size, this.props.pos)},
        controls,
        this.props.content]

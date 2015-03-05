@@ -11,6 +11,7 @@ var ui = require("./ui");
 
 var ide = module.exports;
 var indexer;
+var aggregateFuncs = ["sum", "count", "avg", "maxBy"];
 
 function parseValue(value) {
   //if there are non-numerics then it can't be a number
@@ -107,6 +108,12 @@ function dispatch(eventInfo) {
       console.timeEnd("render");
       break;
 
+    case "locationChange":
+      var activeGrid = indexer.getActiveGrid();
+      var target = info.state.activeGrid || "default";
+      var diff = {activeGrid: {adds: [[target]], removes: [[activeGrid]]}};
+      indexer.handleDiffs(diff);
+      break;
 
     //---------------------------------------------------------
     // Tiles
@@ -129,6 +136,21 @@ function dispatch(eventInfo) {
       indexer.handleDiffs(diff);
       break;
 
+    case "enterTile":
+      var target = indexer.index("tileTarget", "lookup", [0, 1])[info];
+      if(!target) { break; }
+      console.info("Entering tile", info, "->", target);
+      if(target.indexOf("grid://") !== 0) {
+        // @FIXME: Support for generic links.
+        break;
+      }
+      var activeGrid = indexer.getActiveGrid();
+      var fragment = "#" + target.substring(7);
+      window.history.pushState({activeGrid: activeGrid}, "", fragment);
+      var diff = {activeGrid: {adds: [[target]], removes: [[activeGrid]]}};
+      indexer.handleDiffs(diff);
+      break;
+
     case "addView":
       var id = global.uuid();
       var diff = {
@@ -148,6 +170,7 @@ function dispatch(eventInfo) {
     case "addTile":
       var id = info.id;
       var tileId = global.uuid();
+      var activeGrid = indexer.getActiveGrid();
       if(!info.pos) {
         info.pos = grid.firstGap(ui.tileGrid, indexer.getTileFootprints(), ui.defaultSize);
         if(!info.pos) {
@@ -157,9 +180,15 @@ function dispatch(eventInfo) {
       }
       unpack [x, y] = info.pos;
       unpack [w, h] = info.size;
+      var gridUrl = "grid://" + id;
+      var gridTileId = global.uuid();
       var diff = {
-        tableTile: {adds: [[tileId, id]], removes: []},
-        gridTile: {adds: [[tileId, info.type, w, h, x, y]], removes: []},
+        tableTile: {adds: [[tileId, id], [gridTileId, id]], removes: []},
+        gridTile: {adds: [
+          [tileId, activeGrid, info.type, w, h, x, y],
+          [gridTileId, gridUrl, info.type, 12, 12, 0, 0]
+        ], removes: []},
+        tileTarget: {adds: [[tileId, gridUrl]], removes: []},
         activePosition: {adds: [], removes: indexer.facts("activePosition")}
       };
       indexer.handleDiffs(diff);
@@ -1180,9 +1209,11 @@ function ideTables() {
   pushAll(facts, inputView("editId", ["view", "fact", "id"], ["system input"]));
   pushAll(facts, inputView("join", ["field", "sourceField"]));
   pushAll(facts, inputView("activePosition", ["w", "h", "x", "y"]));
+  pushAll(facts, inputView("activeGrid", ["grid"]));
   pushAll(facts, inputView("activeTile", ["tile"]));
-  pushAll(facts, inputView("gridTile", ["tile", "type", "w", "h", "x", "y"]));
+  pushAll(facts, inputView("gridTile", ["tile", "grid", "type", "w", "h", "x", "y"]));
   pushAll(facts, inputView("tableTile", ["tile", "table"]));
+  pushAll(facts, inputView("tileTarget", ["tile", "target"]));
   pushAll(facts, inputView("contextMenu", ["x", "y"]));
   pushAll(facts, inputView("contextMenuItem", ["pos", "type", "text", "event", "id"]));
   pushAll(facts, inputView("uiEditorElement", ["id", "type", "x", "y", "w", "h"]));
@@ -1200,7 +1231,10 @@ function ideTables() {
 //---------------------------------------------------------
 
 function startingDiffs() {
-  return {"gridTile": {adds: [["uiTile", "ui", ui.defaultSize[0], ui.defaultSize[1], 0, 0]], removes: []}}
+  return {
+    activeGrid: {adds: [["default"]], removes: []},
+    gridTile: {adds: [["uiTile", "default", "ui", ui.defaultSize[0], ui.defaultSize[1], 0, 0]], removes: []}
+  };
 }
 
 function init(program) {
@@ -1212,6 +1246,7 @@ function init(program) {
     dispatch(["locationChange", event]);
   });
   indexer.handleDiffs(startingDiffs());
+  window.history.replaceState({activeGrid: indexer.getActiveGrid()}, "", "");
 }
 
 module.exports.init = init;

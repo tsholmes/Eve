@@ -35,9 +35,7 @@ var mixin = {
   }
 };
 
-
 // Components
-
 var viewComponents = {
   title: reactFactory({
     mixins: [ui.mixin.contentEditable],
@@ -182,7 +180,6 @@ var viewComponents = {
   })
 }
 
-// Tile components
 // Tile content for rendering views.
 var viewTile = reactFactory({
   getInitialState: function() {
@@ -262,6 +259,28 @@ var viewTile = reactFactory({
     return true;
   },
 
+  indexToRows: function indexToRows(index, rowEdited, hidden, startIx) {
+    startIx = startIx || 0;
+    hidden = hidden || [];
+    var rows = [];
+    if(index instanceof Array) {
+      rows = index.map(function factToRow(cur) {
+        return viewComponents.row({fact: cur, hidden: hidden, onEdit: rowEdited});
+      }).filter(Boolean);
+    } else {
+      var newHidden = hidden.slice();
+      newHidden[startIx] = true;
+      forattr(value, group of index) {
+        var groupRow = ["div", {className: "grid-group"}];
+        groupRow.push.apply(groupRow, indexToRows(group, newHidden, startIx + 1));
+        rows.push(["div", {className: "grid-row grouped-row"},
+                   ["div", {className: "grouped-field"}, value], //@TODO make this a viewComponent.field.
+                   groupRow]);
+      }
+    }
+    return rows;
+  },
+
   render: function() {
     var self = this;
     var view = this.state.view;
@@ -287,27 +306,6 @@ var viewTile = reactFactory({
     headers.push(addHeader);
 
     var rowEdited = (isConstant ? this.updateRow : undefined);
-    function indexToRows(index, hidden, startIx) {
-      startIx = startIx || 0;
-      hidden = hidden || [];
-      var rows = [];
-      if(index instanceof Array) {
-        rows = index.map(function factToRow(cur) {
-          return viewComponents.row({fact: cur, hidden: hidden, onEdit: rowEdited});
-        }).filter(Boolean);
-      } else {
-        var newHidden = hidden.slice();
-        newHidden[startIx] = true;
-        forattr(value, group of index) {
-          var groupRow = ["div", {className: "grid-group"}];
-          groupRow.pushapply(groupRow, indexToRows(group, newHidden, startIx + 1));
-          rows.push(["div", {className: "grid-row grouped-row"},
-                     ["div", {className: "grouped-field"}, value], //@TODO make this a viewComponent.field.
-                     groupRow]);
-        }
-      }
-      return rows;
-    }
 
     var rowIndex;
     if(grouped.length) {
@@ -315,19 +313,19 @@ var viewTile = reactFactory({
     } else {
       rowIndex = ui.indexer.facts(view) || [];
     }
-    var rows = indexToRows(rowIndex, hidden);
+    var rows = this.indexToRows(rowIndex, rowEdited, hidden);
     if(isConstant) {
       rows.push(viewComponents.row({fact: new Array(fields.length), hidden: hidden, className: "add-row", onEdit: this.addRow}));
     }
     //@TODO if isConstant attach an adder row.
     var className = (isConstant || isInput) ? "input-card" : "view-card";
-    var content =  [viewComponents.title({id: view, onEdit: this.updateTitle}),
-                    (this.props.active ? ["pre", viewToDSL(view)] : null),
-                    ["div", {className: "grid"},
-                     ["div", {className: "grid-header"},
-                      headers],
-                     ["div", {className: "grid-rows"},
-                      rows]]];
+    var content = [viewComponents.title({id: view, onEdit: this.updateTitle}),
+                   (this.props.active ? ["pre", viewToDSL(view)] : null),
+                   ["div", {className: "grid"},
+                    ["div", {className: "grid-header"},
+                     headers],
+                    ["div", {className: "grid-rows"},
+                     rows]]];
     return ui.tileWrapper({pos: this.props.pos, size: this.props.size, tile: this.props.tile, class: className, content: content, contextMenu: this.contextMenu,
                           drop: this.drop, dragOver: this.dragOver});
   }
