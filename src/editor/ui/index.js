@@ -94,6 +94,59 @@ function mergeAttrs(attrs, wrapper) {
 }
 module.exports.mergeAttrs = mergeAttrs;
 
+function renderTiles(tiles) {
+  var gridContainer = ["div", {id: "cards", onClick: this.click}];
+  foreach(ix, cur of tiles) {
+    if(!tileComponent[cur.type]) {
+      throw new Error("Unknown tile type: '" + cur.type + "' for gridItem: " + JSON.stringify(cur));
+    }
+    gridContainer.push(tileComponent[cur.type](cur));
+  }
+  return gridContainer;
+}
+
+//---------------------------------------------------------
+// Animations
+//---------------------------------------------------------
+var animation = {
+  _running: false,
+  current: undefined,
+  _queue: [],
+  _type: {
+    gridIn: {duration: 1005},
+    gridOut: {duration: 1005}
+  },
+  _step: function() {
+    var old = animation.current;
+    animation.current = animation._queue.shift();
+    if(old) {
+      old.callback();
+    }
+    if(!animation.current) {
+      animation._running = false;
+      return;
+    }
+    setTimeout(animation._step, animation.current.duration);
+    render();
+  },
+  start: function(type, info, callback) {
+    var anim = animation._type[type];
+    if(!anim) {
+      throw new Error("Animation of type: '" + type + "' does not exist for '" + info + "'.");
+    }
+    animation._queue.push({
+      type: type,
+      info: info,
+      callback: callback,
+      duration: anim.duration
+    });
+    if(!animation._running) {
+      animation._step();
+    }
+    animation._running = true;
+  }
+};
+module.exports.animation = animation;
 
 //---------------------------------------------------------
 // Mixins
@@ -397,38 +450,49 @@ var Root = React.createFactory(React.createClass({
   },
   render: function() {
     var activeGrid = indexer.getActiveGrid();
-    var tiles = indexer.facts("gridTile").map(function(cur, ix) {
-      unpack [tile, grid, type, width, height, row, col] = cur;
-      if(grid !== activeGrid) { return; }
-      var gridItem = {
-        tile: tile,
-        size: [width, height],
-        pos: [row, col]
-      };
-      if(!tileComponent[type]) {
-        throw new Error("Unknown tile type: '" + type + "' for gridItem: " + JSON.stringify(gridItem));
-      }
-      return tileComponent[type](gridItem);
-    }).filter(Boolean);
+    var tiles = indexer.getTiles(activeGrid);
 
-    var menu = indexer.first("contextMenu");
-    var gridContainer = ["div", {"id": "cards", "onClick": this.click}, tiles];
-
-    var gridItems = indexer.getTileFootprints();
+    // Pack open grid slots with addTiles.
     while(true) {
-      var slot = grid.firstGap(tileGrid, gridItems, defaultSize);
+      var slot = grid.firstGap(tileGrid, tiles, defaultSize);
       if(!slot) { break; }
-      var gridItem = {size: defaultSize, pos: slot};
-      gridItems.push(gridItem);
-      gridContainer.push(tileComponent.add(gridItem));
+      var gridItem = {size: defaultSize, pos: slot, type: "add"};
+      tiles.push(gridItem);
     }
 
+    // Render tiles to components.
+    var gridContainer = renderTiles(tiles);
+
+    // If animating, render the targetGrid.
+    var animGridContainer = null;
+    if(animation.current) {
+      var curAnim = animation.current;
+      if(curAnim.type === "gridIn" || curAnim.type === "gridOut") {
+        var animTiles = indexer.getTiles(curAnim.info);
+        var animGridContainer = renderTiles(animTiles);
+        var animGridOpts = animGridContainer[1];
+        animGridOpts.id = "";
+        animGridOpts.className = curAnim.type + " initial";
+        var gridOpts = gridContainer[1];
+        gridOpts.className = curAnim.type + "-prev";
+        var self = this;
+        setTimeout(function() {
+          var animGridEl = self.getDOMNode().querySelector("." + curAnim.type + ".initial");
+          animGridEl.classList.toggle("initial");
+        }, 5);
+      }
+    }
+    console.log("rendering", animation.current);
+
+    var menu = indexer.first("contextMenu");
+    menu = menu ? ContextMenu({x: menu[0], y: menu[1]}) : null;
     return JSML.react(
       ["div",
        ["canvas", {id: "clear-pixel", width: 1, height: 1}],
        ProgramLoader(),
        gridContainer,
-       menu ? ContextMenu({x: menu[0], y: menu[1]}) : null]
+       animGridContainer,
+       menu]
     );
   }
 }));

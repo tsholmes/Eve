@@ -112,7 +112,9 @@ function dispatch(eventInfo) {
       var activeGrid = indexer.getActiveGrid();
       var target = info.state.activeGrid || "default";
       var diff = {activeGrid: {adds: [[target]], removes: [[activeGrid]]}};
-      indexer.handleDiffs(diff);
+      ui.animation.start("gridOut", target, function() {
+        indexer.handleDiffs(diff);
+      });
       break;
 
     //---------------------------------------------------------
@@ -148,7 +150,9 @@ function dispatch(eventInfo) {
       var fragment = "#" + target.substring(7);
       window.history.pushState({activeGrid: activeGrid}, "", fragment);
       var diff = {activeGrid: {adds: [[target]], removes: [[activeGrid]]}};
-      indexer.handleDiffs(diff);
+      ui.animation.start("gridIn", target, function() {
+        indexer.handleDiffs(diff);
+      });
       break;
 
     case "addView":
@@ -172,7 +176,7 @@ function dispatch(eventInfo) {
       var tileId = global.uuid();
       var activeGrid = indexer.getActiveGrid();
       if(!info.pos) {
-        info.pos = grid.firstGap(ui.tileGrid, indexer.getTileFootprints(), ui.defaultSize);
+        info.pos = grid.firstGap(ui.tileGrid, indexer.getTiles(), ui.defaultSize);
         if(!info.pos) {
           console.warn("Grid is full, aborting.");
           break;
@@ -1233,7 +1237,11 @@ function ideTables() {
 function startingDiffs() {
   return {
     activeGrid: {adds: [["default"]], removes: []},
-    gridTile: {adds: [["uiTile", "default", "ui", ui.defaultSize[0], ui.defaultSize[1], 0, 0]], removes: []}
+    gridTile: {adds: [
+      ["uiTile", "default", "ui", ui.defaultSize[0], ui.defaultSize[1], 0, 0],
+      ["uiTileFull", "grid://ui", "ui", 12, 12, 0, 0]
+    ], removes: []},
+    tileTarget: {adds: [["uiTile", "grid://ui"]], removes: []}
   };
 }
 

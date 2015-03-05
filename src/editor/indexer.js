@@ -376,13 +376,13 @@ Indexer.prototype = {
   },
 
   // List the positions and sizes of each tile currently in the grid.
-  getTileFootprints: function getTileFootprints() {
-    var activeGrid = this.getActiveGrid();
+  getTiles: function getTiles(curGrid) {
+    curGrid = curGrid || this.getActiveGrid();
 
     return this.facts("gridTile").map(function(cur, ix) {
       unpack [tile, grid, type, w, h, x, y] = cur;
-      if(grid !== activeGrid) { return; }
-      return {pos: [x, y], size: [w, h]};
+      if(grid !== curGrid) { return; }
+      return {tile: tile, grid: grid, type: type, pos: [x, y], size: [w, h]};
     }).filter(Boolean);
   }
 };
