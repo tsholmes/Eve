@@ -508,7 +508,7 @@ var Root = React.createFactory(React.createClass({
     }
     gridContainer = renderTiles(tiles, gridOpts);
     if(animTiles && animTiles.length) {
-      animGridContainer = renderTiles(animTiles, gridOpts);
+      animGridContainer = renderTiles(animTiles, animGridOpts);
     }
 
     var menu = indexer.first("contextMenu");
