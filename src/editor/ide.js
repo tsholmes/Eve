@@ -142,11 +142,10 @@ function dispatch(eventInfo) {
 
     case "enterTile":
       var target = indexer.index("tileTarget", "lookup", [0, 1])[info];
+      if(!target) { break; }
       var tile = indexer.index("gridTile", "lookup", [0, false])[info];
       unpack [__, __, __, __, __, x, y] = tile;
       var pos = [x, y];
-      console.log("POS!", pos);
-      if(!target) { break; }
       console.info("Entering tile", info, "->", target);
       if(target.indexOf("grid://") !== 0) {
         // @FIXME: Support for generic links.

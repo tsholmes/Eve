@@ -502,9 +502,6 @@ var Root = React.createFactory(React.createClass({
       animGridOpts = _.clone(gridOpts);
       animGridOpts.className += " " + curAnim.type;
       gridOpts.className += " " + curAnim.type + "-prev";
-
-      console.log('G', gridOpts);
-      console.log('A', animGridOpts);
     }
     gridContainer = renderTiles(tiles, gridOpts);
     if(animTiles && animTiles.length) {
