@@ -184,7 +184,6 @@ function confineTiles(tiles, to) {
 function confineGrid(attrs, size, pos) {
   attrs.style = attrs.style || {};
   var specs = grid.getSizeAndPosition(tileGrid, size, pos);
-  console.log("S", size, "P", pos, specs);
   attrs.style.top = specs.top + tileGrid.colMargin;
   attrs.style.left = specs.left + tileGrid.rowMargin;
   attrs.style.transform = "scale(" + specs.width / tileGrid.width + ", " + specs.height / tileGrid.height + ")";
@@ -518,8 +517,6 @@ var Root = React.createFactory(React.createClass({
           break;
       }
 
-      console.log('rendering', curAnim.type);
-
       animGridOpts.className += " " + curAnim.type;
       gridOpts.className += " " + curAnim.type + "-prev";
     }
@@ -603,7 +600,6 @@ var tileComponent = {
 };
 
 function registerTile(type, tile) {
-  console.log("registering", type, tile);
   tileComponent[type] = tile;
 };
 module.exports.registerTile = registerTile;
