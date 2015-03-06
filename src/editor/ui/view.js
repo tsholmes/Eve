@@ -187,6 +187,11 @@ var viewTile = reactFactory({
     if(!view) { throw new Error("No view found for tile: '" + this.props.tile + "'."); }
     return {view: view};
   },
+  componentWillReceiveProps: function(props) {
+    var view = ui.indexer.index("tableTile", "lookup", [0, 1])[props.tile];
+    if(!view) { throw new Error("No view found for tile: '" + props.tile + "'."); }
+    this.setState({view: view});
+  },
   getFields: function() {
     var fields = ui.indexer.index("field", "collector", [1])[this.state.view] || [];
     fields = _.sortBy(fields, 2);

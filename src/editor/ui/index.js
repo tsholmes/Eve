@@ -97,7 +97,7 @@ module.exports.mergeAttrs = mergeAttrs;
 
 function renderTiles(tiles, opts) {
   opts = opts || {};
-  var gridContainer = ["div", mergeAttrs({className: "gridContainer", onClick: this.click}, opts)];
+  var gridContainer = ["div", mergeAttrs({className: "gridContainer"}, opts)];
   foreach(ix, cur of tiles) {
     if(!tileComponent[cur.type]) {
       throw new Error("Unknown tile type: '" + cur.type + "' for gridItem: " + JSON.stringify(cur));
@@ -494,7 +494,7 @@ var Root = React.createFactory(React.createClass({
       while(true) {
         var slot = grid.firstGap(tileGrid, tiles, defaultSize);
         if(!slot) { break; }
-        var gridItem = {size: defaultSize, pos: slot, type: "add"};
+        var gridItem = {size: defaultSize, pos: slot, type: "add", tile: global.uuid()};
         tiles.push(gridItem);
       }
     } else {
@@ -595,7 +595,7 @@ var tileComponent = {
     render: function() {
       var className = "add-tile" + (this.props.active ? " selected" : "");
       var content = JSML.react(["div", {onClick: this.click, onContextMenu: this.click}, "+"]);
-      return tileWrapper({pos: this.props.pos, size: this.props.size, id: "addTile", class: className, content: content, controls: false, selectable: false});
+      return tileWrapper({pos: this.props.pos, size: this.props.size, tile: this.props.tile, class: className, content: content, controls: false, selectable: false});
     }
   })
 };
