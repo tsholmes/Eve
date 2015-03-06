@@ -157,8 +157,8 @@ function evacuateTiles(tiles, from) {
     var rowOffset = row - fromRow;
     var colOffset = col - fromCol;
     // @FIXME: Why is this -2 here?
-    var rowEdge = rowOffset > 0 ? tileGrid.rows + 1 : (rowOffset < 0 ? -height : row);
-    var colEdge = colOffset > 0 ? tileGrid.cols + 1 : (colOffset < 0 ? -width : col);
+    var rowEdge = rowOffset > 0 ? tileGrid.rows + 1 : (rowOffset < 0 ? -height - 1 : row);
+    var colEdge = colOffset > 0 ? tileGrid.cols + 1 : (colOffset < 0 ? -width - 1 : col);
     if(rowEdge === row && colEdge === col) {
       colEdge = tileGrid.cols + 1;
     }
@@ -489,7 +489,7 @@ var Root = React.createFactory(React.createClass({
       var animTiles = _.cloneDeep(indexer.getTiles(curAnim.info.target));
 
       if(curAnim.type === "gridOut") {
-        evacuateTiles(tiles);
+        evacuateTiles(tiles, curAnim.info.pos);
         gridOpts.className = "animating";
       } else if(curAnim.type === "gridIn") {
         confineTiles(tiles, curAnim.info.pos);
@@ -497,7 +497,7 @@ var Root = React.createFactory(React.createClass({
       } else if(curAnim.type === "gridOutInitial") {
         confineTiles(animTiles, curAnim.info.pos);
       } else if(curAnim.type === "gridInInitial") {
-        evacuateTiles(animTiles);
+        evacuateTiles(animTiles, curAnim.info.pos);
       }
       animGridOpts = _.clone(gridOpts);
       animGridOpts.className += " " + curAnim.type;

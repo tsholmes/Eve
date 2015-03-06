@@ -110,7 +110,7 @@ function dispatch(eventInfo) {
 
     case "locationChange":
       var activeGrid = indexer.getActiveGrid();
-      var target = info.state.activeGrid || "default";
+      var target = info.state.grid || "default";
       var pos = info.state.pos;
       var diff = {activeGrid: {adds: [[target]], removes: [[activeGrid]]}};
       console.log(info.state);
@@ -154,7 +154,8 @@ function dispatch(eventInfo) {
       }
       var activeGrid = indexer.getActiveGrid();
       var fragment = "#" + target.substring(7);
-      window.history.pushState({activeGrid: activeGrid, pos: pos}, "", fragment);
+      window.history.replaceState({grid: activeGrid, pos: pos});
+      window.history.pushState({grid: target, pos: pos}, "", fragment);
       var diff = {activeGrid: {adds: [[target]], removes: [[activeGrid]]}};
       ui.animation.start("gridOut", {target: target, pos: pos}, function() {
         indexer.handleDiffs(diff);
@@ -1260,7 +1261,6 @@ function init(program) {
     dispatch(["locationChange", event]);
   });
   indexer.handleDiffs(startingDiffs());
-  window.history.replaceState({activeGrid: indexer.getActiveGrid(), pos: [0, 0]}, "", "");
 }
 
 module.exports.init = init;
