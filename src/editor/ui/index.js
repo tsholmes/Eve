@@ -115,8 +115,8 @@ var animation = {
   current: undefined,
   _queue: [],
   _type: {
-    gridIn: {duration: 500},
-    gridOut: {duration: 500}
+    gridIn: {duration: 400, prev: ["gridInInitial", 50]},
+    gridOut: {duration: 400, prev: ["gridOutInitial", 50]},
   },
   _step: function() {
     var old = animation.current;
@@ -124,22 +124,29 @@ var animation = {
     if(old && old.callback) {
       old.callback();
     }
+    render();
     if(!animation.current) {
       animation._running = false;
       return;
     }
     setTimeout(animation._step, animation.current.duration);
-    render();
+
   },
   start: function(type, info, callback) {
     var anim = animation._type[type];
     if(!anim) {
       throw new Error("Animation of type: '" + type + "' does not exist for '" + info + "'.");
     }
-    animation._queue.push(
-      {type: type + "Initial", info: info, duration: 100},
-      {type: type, info: info, callback: callback, duration: anim.duration}
-    );
+    var steps = [];
+    if(anim.prev) {
+      steps.push({type: anim.prev[0], info: info, duration: anim.prev[1]});
+    }
+    steps.push({type: type, info: info, duration: anim.duration});
+    if(anim.next)  {
+      steps.push({type: anim.next[0], info: info, duration: anim.next[1]});
+    }
+    steps[steps.length - 1].callback = callback;
+    animation._queue.push.apply(animation._queue, steps);
     if(!animation._running) {
       animation._step();
     }
@@ -148,7 +155,7 @@ var animation = {
 };
 module.exports.animation = animation;
 
-function evacuateTiles(tiles, from) {
+function evacuateTiles(tiles, from, force) {
   from = from || [tileGrid.rows / 2, tileGrid.cols / 2];
   unpack [fromRow, fromCol] = from;
   foreach(cur of tiles) {
@@ -159,7 +166,7 @@ function evacuateTiles(tiles, from) {
     // @FIXME: Why is this -2 here?
     var rowEdge = rowOffset > 0 ? tileGrid.rows + 1 : (rowOffset < 0 ? -height - 1 : row);
     var colEdge = colOffset > 0 ? tileGrid.cols + 1 : (colOffset < 0 ? -width - 1 : col);
-    if(rowEdge === row && colEdge === col) {
+    if(force && rowEdge === row && colEdge === col) {
       colEdge = tileGrid.cols + 1;
     }
     cur.pos = [rowEdge, colEdge];
@@ -170,9 +177,18 @@ function evacuateTiles(tiles, from) {
 function confineTiles(tiles, to) {
   foreach(cur of tiles) {
     cur.pos = to;
-    cur.size = [0, 0];
   }
   return tiles;
+}
+
+function confineGrid(attrs, size, pos) {
+  attrs.style = attrs.style || {};
+  var specs = grid.getSizeAndPosition(tileGrid, size, pos);
+  console.log("S", size, "P", pos, specs);
+  attrs.style.top = specs.top + tileGrid.colMargin;
+  attrs.style.left = specs.left + tileGrid.rowMargin;
+  attrs.style.transform = "scale(" + specs.width / tileGrid.width + ", " + specs.height / tileGrid.height + ")";
+  return attrs;
 }
 
 //---------------------------------------------------------
@@ -462,7 +478,6 @@ var ContextMenu = reactFactory({
 //---------------------------------------------------------
 // Root
 //---------------------------------------------------------
-var gridSize = [6, 2];
 var gridAnimations = ["gridInInitial", "gridIn", "gridOutInitial", "gridOut"];
 var Root = React.createFactory(React.createClass({
   render: function() {
@@ -485,21 +500,26 @@ var Root = React.createFactory(React.createClass({
       }
     } else {
       // If animating, render additional animGrid (target) and adjust tile positions/sizes accordingly.
-
+      gridOpts.className = animGridOpts.className = "animating";
       var animTiles = _.cloneDeep(indexer.getTiles(curAnim.info.target));
 
-      if(curAnim.type === "gridOut") {
-        evacuateTiles(tiles, curAnim.info.pos);
-        gridOpts.className = "animating";
-      } else if(curAnim.type === "gridIn") {
-        confineTiles(tiles, curAnim.info.pos);
-        gridOpts.className = "animating";
-      } else if(curAnim.type === "gridOutInitial") {
-        confineTiles(animTiles, curAnim.info.pos);
-      } else if(curAnim.type === "gridInInitial") {
-        evacuateTiles(animTiles, curAnim.info.pos);
+      switch(curAnim.type) {
+        case "gridOutInitial":
+          confineGrid(animGridOpts, defaultSize, curAnim.info.pos);
+          break;
+        case "gridOut":
+          evacuateTiles(tiles, curAnim.info.pos, true);
+          break;
+        case "gridInInitial":
+          evacuateTiles(animTiles, curAnim.info.pos, true);
+          break;
+        case "gridIn":
+          confineGrid(gridOpts, defaultSize, curAnim.info.pos);
+          break;
       }
-      animGridOpts = _.clone(gridOpts);
+
+      console.log('rendering', curAnim.type);
+
       animGridOpts.className += " " + curAnim.type;
       gridOpts.className += " " + curAnim.type + "-prev";
     }

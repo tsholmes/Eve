@@ -384,6 +384,18 @@ Indexer.prototype = {
       if(grid !== curGrid) { return; }
       return {tile: tile, grid: grid, type: type, pos: [x, y], size: [w, h]};
     }).filter(Boolean);
+  },
+
+  getTileAt: function getTileAt(gridOrTiles, pos) {
+    var tiles;
+    if(typeof gridOrTiles === "string") {
+      tiles = getTiles(gridOrTiles);
+    } else {
+      tiles = gridOrTiles;
+    }
+    return _.filter(tiles, function(tile) {
+      return _.isEqual(tile.pos, pos);
+    })[0];
   }
 };
 
