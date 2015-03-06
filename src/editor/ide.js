@@ -153,7 +153,7 @@ function dispatch(eventInfo) {
       }
       var activeGrid = indexer.getActiveGrid();
       var fragment = "#" + target.substring(7);
-      window.history.replaceState({grid: activeGrid, pos: pos});
+      window.history.replaceState({grid: activeGrid, pos: pos}, "", "#" + (activeGrid === "default" ? "" : activeGrid));
       window.history.pushState({grid: target, pos: pos}, "", fragment);
       var diff = {activeGrid: {adds: [[target]], removes: [[activeGrid]]}};
       ui.animation.start("gridOut", {target: target, pos: pos}, function() {

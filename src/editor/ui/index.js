@@ -500,8 +500,8 @@ var Root = React.createFactory(React.createClass({
     } else {
       // If animating, render additional animGrid (target) and adjust tile positions/sizes accordingly.
       var animTiles = _.cloneDeep(indexer.getTiles(curAnim.info.target));
-      animGridOpts.className += "animating " + curAnim.type;
-      gridOpts.className += "animating " + curAnim.type + "-prev";
+      animGridOpts.className = "animating " + curAnim.type;
+      gridOpts.className = "animating " + curAnim.type + "-prev";
 
       switch(curAnim.type) {
         case "gridOutInitial":
