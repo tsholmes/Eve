@@ -111,8 +111,10 @@ function dispatch(eventInfo) {
     case "locationChange":
       var activeGrid = indexer.getActiveGrid();
       var target = info.state.activeGrid || "default";
+      var pos = info.state.pos;
       var diff = {activeGrid: {adds: [[target]], removes: [[activeGrid]]}};
-      ui.animation.start("gridOut", target, function() {
+      console.log(info.state);
+      ui.animation.start("gridIn", {target: target, pos: pos}, function() {
         indexer.handleDiffs(diff);
       });
       break;
@@ -140,6 +142,10 @@ function dispatch(eventInfo) {
 
     case "enterTile":
       var target = indexer.index("tileTarget", "lookup", [0, 1])[info];
+      var tile = indexer.index("gridTile", "lookup", [0, false])[info];
+      unpack [__, __, __, __, __, x, y] = tile;
+      var pos = [x, y];
+      console.log("POS!", pos);
       if(!target) { break; }
       console.info("Entering tile", info, "->", target);
       if(target.indexOf("grid://") !== 0) {
@@ -148,9 +154,9 @@ function dispatch(eventInfo) {
       }
       var activeGrid = indexer.getActiveGrid();
       var fragment = "#" + target.substring(7);
-      window.history.pushState({activeGrid: activeGrid}, "", fragment);
+      window.history.pushState({activeGrid: activeGrid, pos: pos}, "", fragment);
       var diff = {activeGrid: {adds: [[target]], removes: [[activeGrid]]}};
-      ui.animation.start("gridIn", target, function() {
+      ui.animation.start("gridOut", {target: target, pos: pos}, function() {
         indexer.handleDiffs(diff);
       });
       break;
@@ -1254,7 +1260,7 @@ function init(program) {
     dispatch(["locationChange", event]);
   });
   indexer.handleDiffs(startingDiffs());
-  window.history.replaceState({activeGrid: indexer.getActiveGrid()}, "", "");
+  window.history.replaceState({activeGrid: indexer.getActiveGrid(), pos: [0, 0]}, "", "");
 }
 
 module.exports.init = init;

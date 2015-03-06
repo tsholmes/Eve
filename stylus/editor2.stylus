@@ -70,10 +70,11 @@ body {
 // Tiles
 
 // @TODO: rename #cards -> #tiles
-#tiles, #cards {
+.gridContainer {
   height: 100%;
   margin-top: 2em; padding: $base-margin;
-  position: relative;
+  position: absolute; left: 0; right: 0;
+  z-index: 1;
 }
 
 
@@ -237,3 +238,22 @@ body {
   }
 }
  */
+
+// Animation
+.gridContainer.animating > .card {
+  transition: 0.5s ease-in-out;
+}
+.gridIn, .gridInInitial {
+  z-index: 10;
+}
+.gridIn-prev > .card {
+  box-shadow: 0 2px 3px black;
+}
+
+.gridOut, .gridOutInitial {
+  z-index: 0;
+}
+.gridOutInitial > .card {
+  background: red !important;
+  box-shadow: 0 2px 3px black;
+}

@@ -7,8 +7,9 @@ function getSizeAndPosition(grid, size, position) {
   obj.top = row * grid.unitHeight + row * grid.colMargin;
   obj.left = col * grid.unitWidth + col * grid.rowMargin;
 //   obj.transform = "translate3d(" + left + "px, " + top + "px, 0)"
-  obj.width = width * grid.unitWidth + ((width - 1) * grid.colMargin);
-  obj.height = height * grid.unitHeight + ((height - 1) * grid.rowMargin);
+
+  obj.width = width ? width * grid.unitWidth + ((width - 1) * grid.colMargin) : 1;
+  obj.height = height ? height * grid.unitHeight + ((height - 1) * grid.rowMargin) : 1;
   return obj;
 }
 module.exports.getSizeAndPosition = getSizeAndPosition;

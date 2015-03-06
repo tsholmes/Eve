@@ -2,6 +2,7 @@ import macros from "../../macros.sjs";
 
 var document = global.document;
 var _ = require("lodash");
+_.mixin(require("lodash-deep"));
 var React = require("react/addons");
 var bootstrap = require("../bootstrap");
 var grid = require("../grid");
@@ -94,8 +95,9 @@ function mergeAttrs(attrs, wrapper) {
 }
 module.exports.mergeAttrs = mergeAttrs;
 
-function renderTiles(tiles) {
-  var gridContainer = ["div", {id: "cards", onClick: this.click}];
+function renderTiles(tiles, opts) {
+  opts = opts || {};
+  var gridContainer = ["div", mergeAttrs({className: "gridContainer", onClick: this.click}, opts)];
   foreach(ix, cur of tiles) {
     if(!tileComponent[cur.type]) {
       throw new Error("Unknown tile type: '" + cur.type + "' for gridItem: " + JSON.stringify(cur));
@@ -113,13 +115,13 @@ var animation = {
   current: undefined,
   _queue: [],
   _type: {
-    gridIn: {duration: 1005},
-    gridOut: {duration: 1005}
+    gridIn: {duration: 500},
+    gridOut: {duration: 500}
   },
   _step: function() {
     var old = animation.current;
     animation.current = animation._queue.shift();
-    if(old) {
+    if(old && old.callback) {
       old.callback();
     }
     if(!animation.current) {
@@ -134,12 +136,10 @@ var animation = {
     if(!anim) {
       throw new Error("Animation of type: '" + type + "' does not exist for '" + info + "'.");
     }
-    animation._queue.push({
-      type: type,
-      info: info,
-      callback: callback,
-      duration: anim.duration
-    });
+    animation._queue.push(
+      {type: type + "Initial", info: info, duration: 100},
+      {type: type, info: info, callback: callback, duration: anim.duration}
+    );
     if(!animation._running) {
       animation._step();
     }
@@ -147,6 +147,33 @@ var animation = {
   }
 };
 module.exports.animation = animation;
+
+function evacuateTiles(tiles, from) {
+  from = from || [tileGrid.rows / 2, tileGrid.cols / 2];
+  unpack [fromRow, fromCol] = from;
+  foreach(cur of tiles) {
+    unpack [row, col] = cur.pos;
+    unpack [width, height] = cur.size;
+    var rowOffset = row - fromRow;
+    var colOffset = col - fromCol;
+    // @FIXME: Why is this -2 here?
+    var rowEdge = rowOffset > 0 ? tileGrid.rows + 1 : (rowOffset < 0 ? -height : row);
+    var colEdge = colOffset > 0 ? tileGrid.cols + 1 : (colOffset < 0 ? -width : col);
+    if(rowEdge === row && colEdge === col) {
+      colEdge = tileGrid.cols + 1;
+    }
+    cur.pos = [rowEdge, colEdge];
+  }
+  return tiles;
+};
+
+function confineTiles(tiles, to) {
+  foreach(cur of tiles) {
+    cur.pos = to;
+    cur.size = [0, 0];
+  }
+  return tiles;
+}
 
 //---------------------------------------------------------
 // Mixins
@@ -436,53 +463,53 @@ var ContextMenu = reactFactory({
 // Root
 //---------------------------------------------------------
 var gridSize = [6, 2];
-
+var gridAnimations = ["gridInInitial", "gridIn", "gridOutInitial", "gridOut"];
 var Root = React.createFactory(React.createClass({
-  adjustPosition: function(activeTile, cur) {
-    unpack [tile, type, width, height, row, col] = cur;
-    unpack [atile, atype, awidth, aheight, activeRow, activeCol] = activeTile;
-    var rowOffset = row - activeRow;
-    var colOffset = col - activeCol;
-    // @FIXME: Why is this -2 here?
-    var rowEdge = rowOffset > 0 ? tileGrid.rows + 1 : (rowOffset < 0 ? -2 * height : row);
-    var colEdge = colOffset > 0 ? tileGrid.cols + 1 : (colOffset < 0 ? -2 * width : col);
-    return [rowEdge, colEdge];
-  },
   render: function() {
     var activeGrid = indexer.getActiveGrid();
-    var tiles = indexer.getTiles(activeGrid);
-
-    // Pack open grid slots with addTiles.
-    while(true) {
-      var slot = grid.firstGap(tileGrid, tiles, defaultSize);
-      if(!slot) { break; }
-      var gridItem = {size: defaultSize, pos: slot, type: "add"};
-      tiles.push(gridItem);
-    }
+    var tiles = _.cloneDeep(indexer.getTiles(activeGrid));
+    var gridContainer;
+    var animGridContainer;
 
     // Render tiles to components.
-    var gridContainer = renderTiles(tiles);
-
-    // If animating, render the targetGrid.
-    var animGridContainer = null;
-    if(animation.current) {
-      var curAnim = animation.current;
-      if(curAnim.type === "gridIn" || curAnim.type === "gridOut") {
-        var animTiles = indexer.getTiles(curAnim.info);
-        var animGridContainer = renderTiles(animTiles);
-        var animGridOpts = animGridContainer[1];
-        animGridOpts.id = "";
-        animGridOpts.className = curAnim.type + " initial";
-        var gridOpts = gridContainer[1];
-        gridOpts.className = curAnim.type + "-prev";
-        var self = this;
-        setTimeout(function() {
-          var animGridEl = self.getDOMNode().querySelector("." + curAnim.type + ".initial");
-          animGridEl.classList.toggle("initial");
-        }, 5);
+    var gridOpts = {className: ""};
+    var animGridOpts = {};
+    var curAnim = animation.current;
+    if(!curAnim || gridAnimations.indexOf(curAnim.type) === -1) {
+      // Pack open grid slots with addTiles if not currently animating.
+      while(true) {
+        var slot = grid.firstGap(tileGrid, tiles, defaultSize);
+        if(!slot) { break; }
+        var gridItem = {size: defaultSize, pos: slot, type: "add"};
+        tiles.push(gridItem);
       }
+    } else {
+      // If animating, render additional animGrid (target) and adjust tile positions/sizes accordingly.
+
+      var animTiles = _.cloneDeep(indexer.getTiles(curAnim.info.target));
+
+      if(curAnim.type === "gridOut") {
+        evacuateTiles(tiles);
+        gridOpts.className = "animating";
+      } else if(curAnim.type === "gridIn") {
+        confineTiles(tiles, curAnim.info.pos);
+        gridOpts.className = "animating";
+      } else if(curAnim.type === "gridOutInitial") {
+        confineTiles(animTiles, curAnim.info.pos);
+      } else if(curAnim.type === "gridInInitial") {
+        evacuateTiles(animTiles);
+      }
+      animGridOpts = _.clone(gridOpts);
+      animGridOpts.className += " " + curAnim.type;
+      gridOpts.className += " " + curAnim.type + "-prev";
+
+      console.log('G', gridOpts);
+      console.log('A', animGridOpts);
     }
-    console.log("rendering", animation.current);
+    gridContainer = renderTiles(tiles, gridOpts);
+    if(animTiles && animTiles.length) {
+      animGridContainer = renderTiles(animTiles, gridOpts);
+    }
 
     var menu = indexer.first("contextMenu");
     menu = menu ? ContextMenu({x: menu[0], y: menu[1]}) : null;

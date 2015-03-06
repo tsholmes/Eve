@@ -96,7 +96,7 @@ input { font-size: 0.9em; }
 
   background: $tile-bg;
   color: $tile-fg;
-  transition: 0.4s ease-in-out;
+  //transition: 0.4s ease-in-out;
 
   &.add-tile {
     background: alpha($tile-bg, 0);
