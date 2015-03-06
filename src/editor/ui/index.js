@@ -499,14 +499,17 @@ var Root = React.createFactory(React.createClass({
       }
     } else {
       // If animating, render additional animGrid (target) and adjust tile positions/sizes accordingly.
-      gridOpts.className = animGridOpts.className = "animating";
       var animTiles = _.cloneDeep(indexer.getTiles(curAnim.info.target));
+      animGridOpts.className += "animating " + curAnim.type;
+      gridOpts.className += "animating " + curAnim.type + "-prev";
 
       switch(curAnim.type) {
         case "gridOutInitial":
+          _.remove(tiles, indexer.getTileAt(tiles, curAnim.info.pos))
           confineGrid(animGridOpts, defaultSize, curAnim.info.pos);
           break;
         case "gridOut":
+          _.remove(tiles, indexer.getTileAt(tiles, curAnim.info.pos))
           evacuateTiles(tiles, curAnim.info.pos, true);
           break;
         case "gridInInitial":
@@ -516,10 +519,8 @@ var Root = React.createFactory(React.createClass({
           confineGrid(gridOpts, defaultSize, curAnim.info.pos);
           break;
       }
-
-      animGridOpts.className += " " + curAnim.type;
-      gridOpts.className += " " + curAnim.type + "-prev";
     }
+
     gridContainer = renderTiles(tiles, gridOpts);
     if(animTiles && animTiles.length) {
       animGridContainer = renderTiles(animTiles, animGridOpts);
