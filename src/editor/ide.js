@@ -190,7 +190,7 @@ function dispatch(eventInfo) {
       }
       unpack [x, y] = info.pos;
       unpack [w, h] = info.size;
-      var gridUrl = "grid://" + id;
+      var gridUrl = "grid://" + tileId;
       var gridTileId = global.uuid();
       var diff = {
         tableTile: {adds: [[tileId, id], [gridTileId, id]], removes: []},
@@ -1247,7 +1247,7 @@ function startingDiffs() {
       ["uiTile", "default", "ui", ui.defaultSize[0], ui.defaultSize[1], 0, 0],
       ["uiTileFull", "grid://ui", "ui", 12, 12, 0, 0]
     ], removes: []},
-    tileTarget: {adds: [["uiTile", "grid://ui"]], removes: []}
+    tileTarget: {adds: [["uiTile", "grid://uiTile"]], removes: []}
   };
 }
 
