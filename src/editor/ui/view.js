@@ -296,8 +296,8 @@ var viewTile = reactFactory({
     var rows = [];
     if(index instanceof Array) {
       var self = this;
-      rows = index.map(function factToRow(cur) {
-        return viewComponents.row({fact: cur, hidden: hidden, editable: editable, onEdit: self.updateRow});
+      rows = index.map(function factToRow(cur, ix) {
+        return viewComponents.row({fact: cur, hidden: hidden, editable: editable, onEdit: self.updateRow, ref: ix});
       }).filter(Boolean);
     } else {
       var newHidden = hidden.slice();
@@ -305,8 +305,10 @@ var viewTile = reactFactory({
       forattr(value, group of index) {
         var groupRow = ["div", {className: "grid-group"}];
         groupRow.push.apply(groupRow, this.indexToRows(group, editable, newHidden, startIx + 1));
+        if(groupRow.length < 3) { continue; }
+        var groupedFieldChanged = (editable[startIx] ? this.refs[0].fieldChanged.bind(this.refs[0]) : undefined);
         rows.push(["div", {className: "grid-row grouped-row"},
-                   ["div", {className: "grouped-field"}, value], //@TODO make this a viewComponent.field.
+                   viewComponents.field({value: value, ix: startIx, onEdit: groupedFieldChanged, className: "grouped-field"}),
                    groupRow]);
       }
     }
