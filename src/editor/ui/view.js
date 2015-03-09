@@ -125,9 +125,13 @@ var viewComponents = {
 
   row: reactFactory({
     displayName: "row",
+    getInitialState: function() {
+      return {dirtyFields: []};
+    },
     propTypes: {
       fact: PropTypes.array.isRequired,
       hidden: PropTypes.array.isRequired,
+      editable: PropTypes.array.isRequired,
       onEdit: PropTypes.func,
       className: PropTypes.string
     },
@@ -136,14 +140,23 @@ var viewComponents = {
       var fact = this.props.fact;
       var old = fact.slice();
       fact[ix] = value;
-      return this.props.onEdit(fact, old);
+      var dirty = this.state.dirtyFields;
+      dirty.push(ix);
+      dirty = _.uniq(dirty);
+      var result = this.props.onEdit(fact, old, dirty);
+      if(result) {
+        this.setState({dirtyFields: []});
+      } else {
+        this.setState({dirtyFields: dirty});
+      }
+      return result;
     },
     render: function() {
       var className = (this.props.className || "") + " grid-row";
       var row = ["div", {className: className, key: JSON.stringify(this.props.fact)}];
-      var fieldChangedHandler = (this.props.onEdit ? this.fieldChanged : undefined);
       foreach(ix, field of this.props.fact) {
         if(this.props.hidden[ix]) { continue; }
+        var fieldChangedHandler = (this.props.onEdit && this.props.editable[ix] ? this.fieldChanged : undefined);
         row.push(viewComponents.field({value: field, ix: ix, onEdit: fieldChangedHandler}));
       }
       return JSML.react(row);
@@ -259,25 +272,36 @@ var viewTile = reactFactory({
     ui.dispatch(["addRow", {table: this.state.view, row: row}]);
     return true;
   },
-  updateRow: function(neue, old) {
-    ui.dispatch(["updateRow", {table: this.state.view, newRow: neue, oldRow: old}]);
+  updateRow: function(neue, old, dirty) {
+    var view = this.state.view;
+    var isConstant = ui.indexer.hasTag(view, "constant");
+    if(isConstant) {
+      ui.dispatch(["updateRow", {table: view, newRow: neue, oldRow: old}]);
+    } else {
+      var fields = this.getFields();
+      foreach(fieldIx of dirty) {
+        ui.dispatch(["updateCalculated", {table: view, field: fields[fieldIx].id, value: neue[fieldIx]}]);
+      }
+    }
     return true;
   },
 
-  indexToRows: function indexToRows(index, rowEdited, hidden, startIx) {
+  indexToRows: function indexToRows(index, editable, hidden, startIx) {
     startIx = startIx || 0;
     hidden = hidden || [];
+    editable = editable || [];
     var rows = [];
     if(index instanceof Array) {
+      var self = this;
       rows = index.map(function factToRow(cur) {
-        return viewComponents.row({fact: cur, hidden: hidden, onEdit: rowEdited});
+        return viewComponents.row({fact: cur, hidden: hidden, editable: editable, onEdit: self.updateRow});
       }).filter(Boolean);
     } else {
       var newHidden = hidden.slice();
       newHidden[startIx] = true;
       forattr(value, group of index) {
         var groupRow = ["div", {className: "grid-group"}];
-        groupRow.push.apply(groupRow, indexToRows(group, newHidden, startIx + 1));
+        groupRow.push.apply(groupRow, indexToRows(group, editable, newHidden, startIx + 1));
         rows.push(["div", {className: "grid-row grouped-row"},
                    ["div", {className: "grouped-field"}, value], //@TODO make this a viewComponent.field.
                    groupRow]);
@@ -293,10 +317,14 @@ var viewTile = reactFactory({
     var isConstant = ui.indexer.hasTag(view, "constant");
     var isInput = ui.indexer.hasTag(view, "input");
     var hidden = [];
+    var editable = [];
     var grouped = [];
     var headers = [];
     foreach(ix, cur of fields) {
       hidden[ix] = cur.hidden;
+      if(isConstant || ui.indexer.hasTag(cur.id, "calculated")) {
+        editable[ix] = true;
+      }
       if(cur.grouped) {
         grouped.push(ix);
       }
@@ -310,17 +338,21 @@ var viewTile = reactFactory({
     var addHeader = viewComponents.header({id: "", ix: headers.length, className: "add-header", onEdit: this.addField});
     headers.push(addHeader);
 
-    var rowEdited = (isConstant ? this.updateRow : undefined);
-
     var rowIndex;
     if(grouped.length) {
       rowIndex = ui.indexer.index(view, "collector", grouped);
     } else {
       rowIndex = ui.indexer.facts(view) || [];
     }
-    var rows = this.indexToRows(rowIndex, rowEdited, hidden);
+    var rows = this.indexToRows(rowIndex, editable, hidden);
     if(isConstant) {
-      rows.push(viewComponents.row({fact: new Array(fields.length), hidden: hidden, className: "add-row", onEdit: this.addRow}));
+      rows.push(viewComponents.row({
+        fact: new Array(fields.length),
+        hidden: hidden,
+        editable: editable,
+        className: "add-row",
+        onEdit: this.addRow
+      }));
     }
     //@TODO if isConstant attach an adder row.
     var className = (isConstant || isInput) ? "input-card" : "view-card";
