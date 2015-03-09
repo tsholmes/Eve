@@ -158,7 +158,6 @@ var viewComponents = {
       var className = (this.props.className || "") + " grid-row";
       var row = ["div", {className: className, key: JSON.stringify(this.props.fact)}];
       foreach(ix, field of this.state.fact) {
-        console.log("ix", ix, "v", field, "h", this.props.hidden[ix], "editable", this.props.editable[ix], "onEdit", this.props.onEdit);
         if(this.props.hidden[ix]) { continue; }
         var fieldChangedHandler = (this.props.onEdit && this.props.editable[ix] ? this.fieldChanged : undefined);
         row.push(viewComponents.field({value: field, ix: ix, onEdit: fieldChangedHandler}));
