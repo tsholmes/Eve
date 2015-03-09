@@ -126,7 +126,10 @@ var viewComponents = {
   row: reactFactory({
     displayName: "row",
     getInitialState: function() {
-      return {dirtyFields: []};
+      return {dirtyFields: [], fact: this.props.fact.slice()};
+    },
+    componentWillReceiveProps: function(nextProps) {
+      this.setState({fact: nextProps.fact.slice()});
     },
     propTypes: {
       fact: PropTypes.array.isRequired,
@@ -137,8 +140,8 @@ var viewComponents = {
     },
     fieldChanged: function(ix, value) {
       if(!this.props.onEdit) { return false; }
-      var fact = this.props.fact;
-      var old = fact.slice();
+      var fact = this.state.fact;
+      var old = this.props.fact;
       fact[ix] = value;
       var dirty = this.state.dirtyFields;
       dirty.push(ix);
@@ -154,7 +157,8 @@ var viewComponents = {
     render: function() {
       var className = (this.props.className || "") + " grid-row";
       var row = ["div", {className: className, key: JSON.stringify(this.props.fact)}];
-      foreach(ix, field of this.props.fact) {
+      foreach(ix, field of this.state.fact) {
+        console.log("ix", ix, "v", field, "h", this.props.hidden[ix], "editable", this.props.editable[ix], "onEdit", this.props.onEdit);
         if(this.props.hidden[ix]) { continue; }
         var fieldChangedHandler = (this.props.onEdit && this.props.editable[ix] ? this.fieldChanged : undefined);
         row.push(viewComponents.field({value: field, ix: ix, onEdit: fieldChangedHandler}));
@@ -301,7 +305,7 @@ var viewTile = reactFactory({
       newHidden[startIx] = true;
       forattr(value, group of index) {
         var groupRow = ["div", {className: "grid-group"}];
-        groupRow.push.apply(groupRow, indexToRows(group, editable, newHidden, startIx + 1));
+        groupRow.push.apply(groupRow, this.indexToRows(group, editable, newHidden, startIx + 1));
         rows.push(["div", {className: "grid-row grouped-row"},
                    ["div", {className: "grouped-field"}, value], //@TODO make this a viewComponent.field.
                    groupRow]);
