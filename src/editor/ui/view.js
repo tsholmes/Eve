@@ -175,17 +175,14 @@ var viewComponents = {
       onEdit: PropTypes.func,
       className: PropTypes.string
     },
+    valueProp: "value",
     commit: function() {
       if(!this.props.onEdit) { return false; }
-      var result = this.props.onEdit(this.props.ix, this.state.edit);
-      if(result) {
-        //@HACK: React doesn't correctly clear contentEditable fields
-        // this.getDOMNode().textContent = this.props.value || "";
-      }
+      var result = this.props.onEdit(this.props.ix, this.state.edit || "");
       return result;
     },
     render: function() {
-      var attrs = {className: this.props.className, "data-ix": this.props.ix};
+      var attrs = {className: this.props.className, key: this.props.ix};
       if(this.props.onEdit) {
         attrs = this.wrapEditable(attrs, this.props.value || "");
         return JSML.react(["div", attrs]);

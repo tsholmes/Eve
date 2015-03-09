@@ -200,7 +200,7 @@ var mixin = {
       return {editing: false, edit: null};
     },
     startEditing: function(e) {
-      this.setState({editing: true});
+      this.setState({editing: true, edit: this.props[this.valueProp] || ""});
       e.currentTarget.focus();
       e.stopPropagation();
     },
