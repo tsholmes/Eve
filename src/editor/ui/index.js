@@ -201,8 +201,12 @@ var mixin = {
     },
     startEditing: function(e) {
       this.setState({editing: true, edit: this.props[this.valueProp] || ""});
-      e.currentTarget.focus();
       e.stopPropagation();
+      // Delay focusing so the element has a chance to rerender as focusable first.
+      var target = e.currentTarget;
+      setTimeout(function() {
+        target.focus();
+      }, 1);
     },
     stop: function(e) {
       e.stopPropagation();
