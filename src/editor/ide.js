@@ -98,6 +98,24 @@ function _clearFilter(field) {
   return diff;
 }
 
+function updateRow(table, neue, old) {
+  var diff = {};
+  var oldFact = JSON.stringify(old);
+  var newFact = JSON.stringify(neue);
+  var edits = indexer.index("editId", "lookup", [0, 1, 2])[table];
+  var editId;
+  if(edits && edits[oldFact] !== undefined && edits[oldFact] !== null) {
+    editId = edits[oldFact];
+  } else {
+    // Hack-around until every constant row has a *saved* editId.
+    editId = maxRowId(table) + 1;
+  }
+
+  diff[table] = {adds: [neue], removes: [old]};
+  diff["editId"] = {adds: [[table, newFact, editId]], removes: [[table, oldFact, editId]]};
+  return diff;
+}
+
 function dispatch(eventInfo) {
   unpack [event, info] = eventInfo;
   switch(event) {
@@ -316,20 +334,15 @@ function dispatch(eventInfo) {
       break;
 
     case "updateRow":
-      var diff = {};
-      var oldFact = JSON.stringify(info.oldRow);
-      var newFact = JSON.stringify(info.newRow);
-      var edits = indexer.index("editId", "lookup", [0, 1, 2])[info.table];
-      var editId;
-      if(edits && edits[oldFact] !== undefined && edits[oldFact] !== null) {
-        editId = edits[oldFact];
-      } else {
-        // Hack-around until every constant row has a *saved* editId.
-        editId = maxRowId(info.table) + 1;
-      }
+      var diff = updateRow(info.table, info.newRow, info.oldRow);
+      indexer.handleDiffs(diff);
+      break;
 
-      diff[info.table] = {adds: [info.newRow], removes: [info.oldRow]};
-      diff["editId"] = {adds: [[info.table, newFact, editId]], removes: [[info.table, oldFact, editId]]};
+    case "updateRows":
+      var diff = {};
+      foreach(ix, newRow of info.newRows) {
+        helpers.merge(diff, updateRow(info.table, newRow, info.oldRows[ix]));
+      }
       indexer.handleDiffs(diff);
       break;
 

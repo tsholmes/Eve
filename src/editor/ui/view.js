@@ -160,7 +160,7 @@ var viewComponents = {
       foreach(ix, field of this.state.fact) {
         if(this.props.hidden[ix]) { continue; }
         var fieldChangedHandler = (this.props.onEdit && this.props.editable[ix] ? this.fieldChanged : undefined);
-        row.push(viewComponents.field({value: field, ix: ix, onEdit: fieldChangedHandler}));
+        row.push(viewComponents.field({value: field || "", ix: ix, onEdit: fieldChangedHandler}));
       }
       return JSML.react(row);
     }
@@ -285,25 +285,49 @@ var viewTile = reactFactory({
     }
     return true;
   },
+  updateGroup: function(ix, neue, index) {
+    var oldRows = this.indexToFacts(index);
+    var newRows = _.cloneDeep(oldRows);
+    foreach(row of newRows) {
+      row[ix] = neue;
+    }
+    ui.dispatch(["updateRows", {table: this.state.view, newRows: newRows, oldRows: oldRows}]);
+  },
+
+  groupedFieldChanged: function(group, ix, edit) {
+    this.updateGroup(ix, edit, group);
+  },
+
+  indexToFacts: function indexToFacts(index) {
+    if(index instanceof Array) {
+      return index;
+    } else {
+      var facts = [];
+      forattr(value, subIndex of index) {
+        facts.push.apply(facts, indexToFacts(subIndex));
+      }
+      return facts;
+    }
+  },
 
   indexToRows: function indexToRows(index, editable, hidden, startIx) {
     startIx = startIx || 0;
     hidden = hidden || [];
     editable = editable || [];
     var rows = [];
+    var self = this;
     if(index instanceof Array) {
-      var self = this;
       rows = index.map(function factToRow(cur, ix) {
-        return viewComponents.row({fact: cur, hidden: hidden, editable: editable, onEdit: self.updateRow, ref: ix});
+        return viewComponents.row({fact: cur, hidden: hidden, editable: editable, onEdit: self.updateRow});
       }).filter(Boolean);
     } else {
       var newHidden = hidden.slice();
       newHidden[startIx] = true;
-      forattr(value, group of index) {
+      forattr(value, subIndex of index) {
         var groupRow = ["div", {className: "grid-group"}];
-        groupRow.push.apply(groupRow, this.indexToRows(group, editable, newHidden, startIx + 1));
+        groupRow.push.apply(groupRow, this.indexToRows(subIndex, editable, newHidden, startIx + 1));
         if(groupRow.length < 3) { continue; }
-        var groupedFieldChanged = (editable[startIx] ? this.refs[0].fieldChanged.bind(this.refs[0]) : undefined);
+        var groupedFieldChanged = (editable[startIx] ? this.groupedFieldChanged.bind(this, subIndex) : undefined);
         rows.push(["div", {className: "grid-row grouped-row"},
                    viewComponents.field({value: value, ix: startIx, onEdit: groupedFieldChanged, className: "grouped-field"}),
                    groupRow]);
