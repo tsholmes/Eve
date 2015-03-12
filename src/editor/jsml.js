@@ -80,7 +80,3 @@ var JSML = module.exports = {
     return React.createElement(tag, attrs);
   }
 };
-
-
-["div" ["span"]]
-["div" [["span"] ["span"]]]

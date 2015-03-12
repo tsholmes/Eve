@@ -45,8 +45,8 @@ var viewComponents = {
       onEdit: PropTypes.func
     },
     commit: function() {
-      if(!this.state.edit || !this.state.onEdit) { return; }
-      return this.state.onEdit(this.state.edit);
+      if(!this.state.edit || !this.props.onEdit) { return; }
+      return this.props.onEdit(this.state.edit);
     },
     render: function() {
       var id = this.props.id;
@@ -286,16 +286,24 @@ var viewTile = reactFactory({
     return true;
   },
   updateGroup: function(ix, neue, index) {
-    var oldRows = this.indexToFacts(index);
-    var newRows = _.cloneDeep(oldRows);
-    foreach(row of newRows) {
-      row[ix] = neue;
+    var view = this.state.view;
+    var isConstant = ui.indexer.hasTag(view, "constant");
+    if(isConstant) {
+      var oldRows = this.indexToFacts(index);
+      var newRows = _.cloneDeep(oldRows);
+      foreach(row of newRows) {
+        row[ix] = neue;
+      }
+      ui.dispatch(["updateRows", {table: view, newRows: newRows, oldRows: oldRows}]);
+    } else {
+      var fields = this.getFields();
+      ui.dispatch(["updateCalculated", {table: view, field: fields[ix].id, value: neue}]);
     }
-    ui.dispatch(["updateRows", {table: this.state.view, newRows: newRows, oldRows: oldRows}]);
   },
 
   groupedFieldChanged: function(group, ix, edit) {
     this.updateGroup(ix, edit, group);
+    return true;
   },
 
   indexToFacts: function indexToFacts(index) {
@@ -326,7 +334,6 @@ var viewTile = reactFactory({
       forattr(value, subIndex of index) {
         var groupRow = ["div", {className: "grid-group"}];
         groupRow.push.apply(groupRow, this.indexToRows(subIndex, editable, newHidden, startIx + 1));
-        if(groupRow.length < 3) { continue; }
         var groupedFieldChanged = (editable[startIx] ? this.groupedFieldChanged.bind(this, subIndex) : undefined);
         rows.push(["div", {className: "grid-row grouped-row"},
                    viewComponents.field({value: value, ix: startIx, onEdit: groupedFieldChanged, className: "grouped-field"}),
@@ -380,7 +387,6 @@ var viewTile = reactFactory({
         onEdit: this.addRow
       }));
     }
-    //@TODO if isConstant attach an adder row.
     var className = (isConstant || isInput) ? "input-card" : "view-card";
     var content = [viewComponents.title({id: view, onEdit: this.updateTitle}),
                    (this.props.active ? ["pre", viewToDSL(view)] : null),

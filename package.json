@@ -9,10 +9,10 @@
     "cookie-parser": "*",
     "express": "4.10.x",
     "nib": "*",
+    "react": "^0.13.0",
     "serve-favicon": "*",
     "serve-static": "*",
     "socket.io": "1.2.1",
-    "react": "0.12.2",
     "stylus": "*"
   },
   "scripts": {

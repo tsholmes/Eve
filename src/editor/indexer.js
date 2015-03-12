@@ -177,7 +177,7 @@ Indexer.prototype = {
 
     //if we forced a recompile, we shouldn't redraw until the worker comes back
     //with the latest diffs.
-    if(!isSpecial && this.handlers.diffsHandled) {
+    if(this.handlers.diffsHandled) {
       this.handlers.diffsHandled(diffs);
     }
   },

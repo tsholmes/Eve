@@ -121,7 +121,6 @@ function dispatch(eventInfo) {
 
   switch(event) {
     case "diffsHandled":
-      if(_.size(info) === 0) { break; }
       //TODO: Should we push this off to a requestAnimationFrame?
       console.time("render");
       ui.render();
