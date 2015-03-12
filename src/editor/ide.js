@@ -118,8 +118,10 @@ function updateRow(table, neue, old) {
 
 function dispatch(eventInfo) {
   unpack [event, info] = eventInfo;
+
   switch(event) {
     case "diffsHandled":
+      if(_.size(info) === 0) { break; }
       //TODO: Should we push this off to a requestAnimationFrame?
       console.time("render");
       ui.render();
@@ -389,7 +391,7 @@ function dispatch(eventInfo) {
       var viewConstraints = indexer.index("viewConstraint", "collector", [1])[queryId];
       var viewConstraintId;
       foreach(vc of viewConstraints) {
-        unpack [vcId, _, sourceView, isNegated] = vc;
+        unpack [vcId, __, sourceView, isNegated] = vc;
         if(sourceView === addedTable) {
           viewConstraintId = vcId;
         }
@@ -988,7 +990,7 @@ function elementAttrToViews(attr) {
 
 function elementTextToViews(text) {
   var results = {view: [], field: [], query: [], viewConstraint: [], viewConstraintBinding: [], constantConstraint: [], displayName: []};
-  unpack [id, _, field, isBinding] = text;
+  unpack [id, __, field, isBinding] = text;
   var view = indexer.index("field", "lookup", [0, 1])[field];
   //uiText view
   var uiTextFeederId = id + "|uiTextFeeder";
@@ -1125,12 +1127,12 @@ function viewToDSL(view) {
   var viewConstraintBindings = {};
   var VCBIndex = indexer.index("viewConstraintBinding", "collector", [0]);
   foreach(vc of viewConstraints) {
-    unpack [id, _, sourceView] = vc;
+    unpack [id, __, sourceView] = vc;
     var bindings = VCBIndex[id];
     if(!bindings) continue;
 
     foreach(binding of bindings) {
-      unpack [_, field, sourceField] = binding;
+      unpack [__, field, sourceField] = binding;
       if(!viewConstraintBindings[field]) {
         viewConstraintBindings[field] = [];
       }
@@ -1143,12 +1145,12 @@ function viewToDSL(view) {
   var aggregateConstraintBindings = {};
   var ACBIndex = indexer.index("aggregateConstraintBinding", "lookup", [0, false]);
   foreach(agg of aggregateConstraints) {
-    unpack [id, _, field, sourceView, code] = agg;
+    unpack [id, __, field, sourceView, code] = agg;
     var bindings = ACBIndex[id];
     if(!bindings) continue;
 
     foreach(binding of bindings) {
-      unpack [_, field, sourceField] = binding;
+      unpack [__, field, sourceField] = binding;
       if(!aggregateConstraintBindings[field]) {
         aggregateConstraintBindings[field] = [];
       }
@@ -1157,7 +1159,7 @@ function viewToDSL(view) {
   }
 
   foreach(vc of viewConstraints) {
-    unpack [id, _, sourceView] = vc;
+    unpack [id, __, sourceView] = vc;
     final += "with " + displayNames[sourceView] + "\n";
   }
 
