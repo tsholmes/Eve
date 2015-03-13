@@ -239,7 +239,7 @@ var mixin = {
         onKeyDown: this.maybeStopEditing,
         onInput: this.updateEdit,
         onBlur: this.stopEditing,
-        dangerouslySetInnerHTML: {__html: this.state.edit || content }
+        dangerouslySetInnerHTML: {__html: this.state.edit || content || "" }
       };
       return mergeAttrs(attrs, wrapper);
     }
@@ -551,6 +551,9 @@ var Root = React.createFactory(React.createClass({
   // Requires: {content: JSML}
   // Accepts: {navigable:Bool=false, selectable:Bool=false, controls:Bool=true}
 var tileWrapper = reactFactory({
+  getInitialState: function() {
+    return {flipping: false, flipped: false};
+  },
   enterTile: function() {
     dispatch(["enterTile", this.props.tile]);
   },
@@ -559,14 +562,28 @@ var tileWrapper = reactFactory({
     dispatch(["closeTile", this.props.tile]);
     e.stopPropagation();
   },
+  flipTile: function(e) {
+    if(this.state.flipping) { return; }
+    var self = this;
+    this.setState({flipping: setTimeout(function() {
+      self.setState({flipping: false, flipped: !self.state.flipped});
+    }, 500)});
+  },
   render: function() {
     var controls = "";
     if(this.props.controls !== false) {
       controls = ["div", {className: "tile-controls"},
-                  ["button", {className: "tile-control close-btn", onClick: this.closeTile}, "X"]];
+                  (this.props.backContent ? ["button", {className: "tile-control flip-btn ion-reply", onClick: this.flipTile}] : ""),
+                  ["button", {className: "tile-control close-btn ion-close-round", onClick: this.closeTile}]
+                 ];
     }
+    var classes = "card ";
+    if(this.state.flipping) { classes += "flipping "; }
+    if(this.state.flipped) { classes += "flipped "; }
+    classes += (this.props.class || "");
+    console.log(classes);
     return JSML.react(
-      ["div", {className: "card " + (this.props.class || ""),
+      ["div", {className: classes,
                key: this.props.tile,
                onDrop: this.props.drop,
                onDragOver: this.props.dragOver,

@@ -389,14 +389,15 @@ var viewTile = reactFactory({
     }
     var className = (isConstant || isInput) ? "input-card" : "view-card";
     var content = [viewComponents.title({id: view, onEdit: this.updateTitle}),
-                   (this.props.active ? ["pre", viewToDSL(view)] : null),
                    ["div", {className: "grid"},
                     ["div", {className: "grid-header"},
                      headers],
                     ["div", {className: "grid-rows"},
                      rows]]];
-    return ui.tileWrapper({pos: this.props.pos, size: this.props.size, tile: this.props.tile, class: className, content: content, contextMenu: this.contextMenu,
-                          drop: this.drop, dragOver: this.dragOver});
+    var backContent = ["div", ["pre", viewToDSL(view)]];
+    return ui.tileWrapper({pos: this.props.pos, size: this.props.size, tile: this.props.tile, class: className,
+                           content: content, backContent: backContent,
+                           contextMenu: this.contextMenu, drop: this.drop, dragOver: this.dragOver});
   }
 });
 
