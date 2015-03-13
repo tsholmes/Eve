@@ -131,15 +131,14 @@ input { font-size: 0.9em; }
     opacity: 0;
     transition: 0.2s ease-out;
 
-    & > .tile-control { opacity: 0.6; }
-    & > .tile-control:hover { opacity: 0.8; }
-    & > .tile-control:active { opacity: 1; }
-
-    & > .tile-control.close-btn {
+    & > .tile-control {
       background: #aaa;
       border-width: 0px; border-radius: 0;
       color: white;
+      opacity: 0.6;
     }
+    & > .tile-control:hover { opacity: 0.8; }
+    & > .tile-control:active { opacity: 1; }
   }
   &:hover .tile-controls { opacity: 1; }
 }
