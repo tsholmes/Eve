@@ -566,8 +566,12 @@ var tileWrapper = reactFactory({
     if(this.state.flipping) { return; }
     var self = this;
     this.setState({flipping: setTimeout(function() {
-      self.setState({flipping: false, flipped: !self.state.flipped});
-    }, 500)});
+      self.setState({
+        flipping: setTimeout(function() {
+          self.setState({flipping: false});
+        }, 250),
+        flipped: !self.state.flipped});
+    }, 250)});
   },
   render: function() {
     var controls = "";
@@ -592,7 +596,8 @@ var tileWrapper = reactFactory({
                onDoubleClick: this.enterTile,
                style: grid.getSizeAndPosition(tileGrid, this.props.size, this.props.pos)},
        controls,
-       this.props.content]
+       ["div" {className: "content"},
+        (this.state.flipped ? this.props.backContent : this.props.content)]]
     );
   }
 });
