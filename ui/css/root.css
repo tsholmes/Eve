@@ -84,7 +84,7 @@ body {
   position: absolute;
   top: 0px; right: 0px; bottom: 0px; left: 0px;
   z-index: 1;
-  transform-origin: top right;
+  transform-origin: top left;
   transition: transform 0.2s ease-in-out;
 
   perspective: 5000;
@@ -195,12 +195,12 @@ body {
 .grid-tile.addChooser .pane-1 button:active { background: rgba(255, 255, 255, 0.2); color: rgb(96, 208, 255); }
 .grid-tile.addChooser .pane { padding: 4px 8px; }
 
-.grid-tile.table {
+/* .grid-tile.table {
   background: url("../resources/input.jpg");
 }
 .grid-tile.table > .grid-tile-inner {
   background: rgba(0, 0, 0, 0.7);
-}
+} */
 
 .minimap { position:absolute; top:0; bottom:0; right:0; width:100px; background:#1c1c1c; box-shadow:inset 0 0 5px #171717; border-left:0px solid #111; overflow:hidden;}
 .minimap .thumb { position:absolute; transition: all 0.1s ease-in-out;  z-index: 10; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255, 0.25); border-radius:2px; }
@@ -315,7 +315,7 @@ th:last-child { border-radius: 0 2px 2px 0; }
 
 .ui-inspector td > * { min-height: 1em; vertical-align: baseline;}
 
-.ui-canvas {flex: 1; position:relative; }
+.ui-canvas {flex: 1; position:relative; background: #000; margin:10;}
 .ui-canvas > *, .ui-selection > div > * { position:absolute; }
 .ui-canvas .control { background:rgba(255,255,255, 0.08); }
 .ui-canvas .resize-handle { position:absolute; background: rgba(170,204,255,0.3); border: 1px solid #acf; z-index: 1000; }

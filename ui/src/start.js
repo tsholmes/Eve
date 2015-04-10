@@ -11,7 +11,27 @@ var KEYS = {UP: 38,
             Z: 90};
 
 function reactFactory(obj) {
-  return React.createFactory(React.createClass(obj));
+//   return React.createFactory(React.createClass(obj));
+  return function(props) {
+    var neue = clone(obj);
+    neue.props = props || {};
+    neue.setState = function(s) {
+      for(var i in s) {
+        neue.state[i] = s;
+      }
+    }
+    for(var i in neue) {
+      if(typeof neue[i] === "function") {
+        neue[i] = neue[i].bind(neue);
+      }
+    }
+    if(neue.getInitialState) {
+      neue.state = neue.getInitialState();
+    }
+
+    neue.render = neue.render.bind(neue);
+    return neue;
+  };
 }
 
 function extend(dest, src, ignoreHasOwnProperty) {
@@ -662,6 +682,7 @@ var stage = reactFactory({
     return {
       accepts: ["tile/generic"],
       grid: grid,
+      initialized: true,
       addTiles: this.getAddTiles(grid, this.props.tiles),
       gridShadows: this.getGridShadows(grid)
     };
@@ -851,7 +872,7 @@ var stage = reactFactory({
         }
       }, ""]);
     }
-    return JSML(["div", {className: "tile-grid-wrapper", onScroll: this.props.onScroll}, content]);
+    return JSML(["div", {className: "tile-grid-wrapper", scroll: this.props.onScroll}, content]);
   }
 });
 
@@ -1254,7 +1275,7 @@ var structuredMultiSelector = reactFactory({
     }
   },
   selectEditable: function() {
-    React.findDOMNode(this.refs.editable).focus();
+//     React.findDOMNode(this.refs.editable).focus();
   },
   setConstant: function(value) {
     this.set(["constant", value]);
@@ -2106,7 +2127,16 @@ var uiAttrs = {
   ],
   appearance: [
     {displayName: "background", type: "color", group: "appearance", prop: "backgroundColor"},
-    {displayName: "image", type: "image", group: "appearance", prop: "backgroundImage"},
+    {displayName: "image", type: "image", group: "appearance", prop: "backgroundImage",
+     get: function(elements, canvas) {
+
+     },
+     set: function(image) {
+       var neue = elements.map(function(elements, canvas, value) {
+         return {property: prop, id: elem.id, value:"url('" + value + "')"};
+       });
+       dispatch("updateUiComponentAttributes", neue);
+     }},
     {displayName: "border-width", type: "number", group: "appearance", prop: "borderWidth"},
     {displayName: "border-style", type: makeEnum(["none", "dotted", "dashed", "solid", "double"]), group: "appearance", prop: "borderStyle"},
     {displayName: "border-color", type: "color", group: "appearance", prop: "borderColor"},
@@ -3064,6 +3094,7 @@ tiles.ui = {
     getElements: function(layersMap) {
       var self = this;
       layersMap = layersMap || this.getLayers().map;
+      var removed = ixer.index("remove");
       var elements = ixer.index("uiComponentToElements")[this.props.tileId] || [];
       elements = elements.map(function(cur, ix) {
         var element = {tx: cur[0], id: cur[1], component: cur[2], layer: cur[3], control: cur[4], left: cur[5], top: cur[6], right: cur[7], bottom: cur[8]};
@@ -3075,6 +3106,8 @@ tiles.ui = {
         element.select = self.select;
 
         return element;
+      }).filter(function(cur) {
+        return !removed[cur.id];
       });
 
       // @TODO: Elements on uninitialized layers will generate a layer.
@@ -3622,7 +3655,7 @@ function initIndexer() {
 
   //example tables
   ixer.handleDiffs(
-    code.diffs.addView("employees", {department: "string", name: "string", salary: "float"}, [], false, ["table"]));
+    code.diffs.addView("employees", {department: "string", name: "string", salary: "number"}, [], false, ["table"]));
   ixer.handleDiffs(
     code.diffs.addView("department heads", {department: "string", head: "string"}, [], false, ["table"]));
 
@@ -3703,7 +3736,8 @@ function connectToServer() {
     ixer.handleMapDiffs(data.changes);
 
     console.time("render");
-    React.render(root(), document.body);
+//     React.render(root(), document.body);
+    document.body.appendChild(root().render());
     console.timeEnd("render");
   };
 
@@ -3722,6 +3756,18 @@ function sendToServer(message) {
 //     console.log("sending: ", JSON.stringify(message), performance.now());
     server.ws.send(JSON.stringify(message));
   }
+}
+
+function rerender() {
+  console.time("clear");
+  while(document.body.firstChild) {
+    document.body.removeChild(document.body.firstChild);
+  }
+  console.timeEnd("clear");
+  console.time("render");
+//     React.render(root(), document.body);
+  document.body.appendChild(root().render());
+  console.timeEnd("render");
 }
 
 function toMapDiffs(diffs) {
