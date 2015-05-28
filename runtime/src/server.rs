@@ -107,6 +107,7 @@ pub fn serve() -> mpsc::Receiver<ServerEvent> {
                 // accept request
                 let request = connection.unwrap().read_request().unwrap();
                 request.validate().unwrap();
+
                 let response = request.accept();
                 let (mut sender, mut receiver) = response.send().unwrap().split();
 
@@ -158,10 +159,12 @@ pub fn run() {
 
     let mut events = OpenOptions::new().write(true).append(true).open("./events").unwrap();
     let mut senders: Vec<sender::Sender<_>> = Vec::new();
+
     for server_event in serve() {
         match server_event {
 
             ServerEvent::Sync(mut sender) => {
+
                 time!("syncing", {
                     let changes = flow.as_changes();
                     let text = format!("{}", Event{changes: changes}.to_json());
@@ -179,17 +182,8 @@ pub fn run() {
                     let event: Event = FromJson::from_json(&json);
                     events.write_all(input_text.as_bytes()).unwrap();
                     events.write_all("\n".as_bytes()).unwrap();
-                    let old_flow = flow.clone();
-                    flow = flow.quiesce(event.changes);
-                    let changes = flow.changes_from(old_flow);
-                    let output_text = format!("{}", Event{changes: changes}.to_json());
                     events.flush().unwrap();
-                    for sender in senders.iter_mut() {
-                        match sender.send_message(Message::Text(output_text.clone())) {
-                            Ok(_) => (),
-                            Err(error) => println!("Send error: {}", error),
-                        };
-                    }
+                    flow = send_changes(event,flow,&mut senders);
                 })
             }
 
@@ -200,22 +194,39 @@ pub fn run() {
                                                           let ip = sender.get_mut().peer_addr().unwrap();
                                                           let ip_addr = format!("{}", ip);
                                                           ip_addr == terminate_ip
-                                                     });
+                                                        });
                 match ip_ix {
                     Some(ix) => {
-                        senders[ix].send_message(Message::Close(None)).unwrap();
+                        // Close the connection
+                        let _ = senders[ix].send_message(Message::Close(None));
+
                         match senders[ix].get_mut().shutdown(Shutdown::Both) {
                             Ok(_) => {
-                                senders.remove(ix);
                                 println!("Connection from {} has closed successfully.",terminate_ip);
                             },
-                            Err(_) => println!("Connection from {} failed to shut down!",terminate_ip),
+                            Err(e) => println!("Connection from {} failed to shut down properly: {}",terminate_ip,e),
                         }
+
+                        senders.remove(ix);
                     },
                     None => panic!("IP address {} is not connected",terminate_ip),
                 }
             }
-
         }
     }
+}
+
+fn send_changes(event: Event, mut flow: Flow, mut senders: &mut Vec<sender::Sender<WebSocketStream>>) -> Flow {
+
+    let old_flow = flow.clone();
+    flow = flow.quiesce(event.changes);
+    let changes = flow.changes_from(old_flow);
+    let output_text = format!("{}", Event{changes: changes}.to_json());
+    for sender in senders.iter_mut() {
+        match sender.send_message(Message::Text(output_text.clone())) {
+            Ok(_) => (),
+            Err(error) => println!("Send error: {}", error),
+        };
+    }
+    flow
 }
