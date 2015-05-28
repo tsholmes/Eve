@@ -8,10 +8,12 @@ use std::io::prelude::*;
 use std::fs::OpenOptions;
 use std::net::Shutdown;
 use rustc_serialize::json::{Json, ToJson};
+use hyper::header::Cookie;
 
 use value::Value;
 use relation::Change;
 use flow::{Changes, Flow};
+use client;
 
 trait FromJson {
     fn from_json(json: &Json) -> Self;
@@ -92,7 +94,7 @@ impl FromJson for Event {
 
 pub enum ServerEvent {
     Change(String),
-    Sync(sender::Sender<WebSocketStream>),
+    Sync((sender::Sender<WebSocketStream>,Option<String>)),
     Terminate(Option<CloseData>),
 }
 
@@ -108,6 +110,17 @@ pub fn serve() -> mpsc::Receiver<ServerEvent> {
                 let request = connection.unwrap().read_request().unwrap();
                 request.validate().unwrap();
 
+                // Get the User ID from a cookie in the headers
+                let user_id = match request.headers.get::<Cookie>(){
+                    Some(cookies) => {
+                        match cookies.iter().find(|cookie| cookie.name == "userid") {
+                            Some(user_id) => Some(user_id.value.clone()),
+                            None => None,
+                        }
+                    },
+                    None => None,
+                };
+
                 let response = request.accept();
                 let (mut sender, mut receiver) = response.send().unwrap().split();
 
@@ -116,7 +129,7 @@ pub fn serve() -> mpsc::Receiver<ServerEvent> {
                 ::std::io::stdout().flush().unwrap(); // TODO is this actually necessary?
 
                 // hand over sender
-                event_sender.send(ServerEvent::Sync(sender)).unwrap();
+                event_sender.send(ServerEvent::Sync((sender,user_id))).unwrap();
 
                 // handle messages
                 for message in receiver.incoming_messages() {
@@ -160,10 +173,29 @@ pub fn run() {
     let mut events = OpenOptions::new().write(true).append(true).open("./events").unwrap();
     let mut senders: Vec<sender::Sender<_>> = Vec::new();
 
+    // Create sessions table
+    let sessisons_table = client::create_table(&"sessions",&vec!["id","user id","status"]);
+    flow = flow.quiesce(sessisons_table.changes);
+
     for server_event in serve() {
         match server_event {
 
-            ServerEvent::Sync(mut sender) => {
+            ServerEvent::Sync((mut sender,user_id)) => {
+
+                // If we have a user ID, create a new session
+                match user_id {
+                    Some(user_id) => {
+                        let session_id = format!("{}", sender.get_mut().peer_addr().unwrap());
+                        let session = client::insert_fact(&"sessions",&vec!["id","user id","status"],&vec![Value::String(session_id),
+                                                                                                            Value::String(user_id),
+                                                                                                            Value::Float(1f64)
+                                                                                                           ]);
+                        {
+                            flow = send_changes(session,flow,&mut senders);
+                        }
+                    },
+                    None => (),
+                };
 
                 time!("syncing", {
                     let changes = flow.as_changes();
@@ -190,11 +222,14 @@ pub fn run() {
             ServerEvent::Terminate(m) => {
                 let terminate_ip = m.unwrap().reason;
                 println!("Closing connection from {}....",terminate_ip);
+                // Find the index of the connection's sender
                 let ip_ix = senders.iter_mut().position(|mut sender| {
                                                           let ip = sender.get_mut().peer_addr().unwrap();
                                                           let ip_addr = format!("{}", ip);
                                                           ip_addr == terminate_ip
                                                         });
+
+                // Properly clean up connections and the session table
                 match ip_ix {
                     Some(ix) => {
                         // Close the connection
@@ -208,6 +243,27 @@ pub fn run() {
                         }
 
                         senders.remove(ix);
+
+                        // Update the session table
+                        // TODO this is a little hacky. Should do it the eve way.
+                        let sessions = flow.get_output("sessions").clone();
+                        let ip_string = Value::String(terminate_ip.clone());
+
+                        match sessions.index.iter().find(|session| session[0] == ip_string) {
+                            Some(session) => {
+                                let mut closed_session = session.clone();
+                                closed_session[1] = Value::Float(0f64);
+                                let change = Change {
+                                                        fields: sessions.fields.clone(),
+                                                        insert: vec![closed_session.clone()],
+                                                        remove: vec![session.clone()],
+                                                    };
+                                let event = Event{changes: vec![("sessions".to_string(),change)]};
+                                flow = send_changes(event,flow,&mut senders);
+
+                            },
+                            None => println!("No session found"),
+                        }
                     },
                     None => panic!("IP address {} is not connected",terminate_ip),
                 }
