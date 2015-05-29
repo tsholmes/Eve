@@ -15,7 +15,7 @@ use relation::Change;
 use flow::{Changes, Flow};
 use client;
 
-trait FromJson {
+pub trait FromJson {
     fn from_json(json: &Json) -> Self;
 }
 
@@ -55,6 +55,7 @@ impl<T: FromJson> FromJson for Vec<T> {
     }
 }
 
+#[derive(Debug)]
 pub struct Event {
     pub changes: Changes,
 }
@@ -111,15 +112,7 @@ pub fn serve() -> mpsc::Receiver<ServerEvent> {
                 request.validate().unwrap();
 
                 // Get the User ID from a cookie in the headers
-                let user_id = match request.headers.get::<Cookie>(){
-                    Some(cookies) => {
-                        match cookies.iter().find(|cookie| cookie.name == "userid") {
-                            Some(user_id) => Some(user_id.value.clone()),
-                            None => None,
-                        }
-                    },
-                    None => None,
-                };
+                let user_id = get_user_id(request.headers.get::<Cookie>());
 
                 let response = request.accept();
                 let (mut sender, mut receiver) = response.send().unwrap().split();
@@ -190,9 +183,7 @@ pub fn run() {
                                                                                                             Value::String(user_id),
                                                                                                             Value::Float(1f64)
                                                                                                            ]);
-                        {
-                            flow = send_changes(session,flow,&mut senders);
-                        }
+                        flow = send_changes(session,flow,&mut senders);
                     },
                     None => (),
                 };
@@ -224,9 +215,8 @@ pub fn run() {
                 println!("Closing connection from {}....",terminate_ip);
                 // Find the index of the connection's sender
                 let ip_ix = senders.iter_mut().position(|mut sender| {
-                                                          let ip = sender.get_mut().peer_addr().unwrap();
-                                                          let ip_addr = format!("{}", ip);
-                                                          ip_addr == terminate_ip
+                                                          let ip = format!("{}",sender.get_mut().peer_addr().unwrap());
+                                                          ip == terminate_ip
                                                         });
 
                 // Properly clean up connections and the session table
@@ -252,7 +242,7 @@ pub fn run() {
                         match sessions.index.iter().find(|session| session[0] == ip_string) {
                             Some(session) => {
                                 let mut closed_session = session.clone();
-                                closed_session[1] = Value::Float(0f64);
+                                closed_session[1] = Value::Float(0f64); // Set status to 0
                                 let change = Change {
                                                         fields: sessions.fields.clone(),
                                                         insert: vec![closed_session.clone()],
@@ -285,4 +275,16 @@ fn send_changes(event: Event, mut flow: Flow, mut senders: &mut Vec<sender::Send
         };
     }
     flow
+}
+
+pub fn get_user_id(cookies: Option<&Cookie>) -> Option<String> {
+    match cookies {
+        Some(cookies) => {
+            match cookies.iter().find(|cookie| cookie.name == "userid") {
+                Some(user_id) => Some(user_id.value.clone()),
+                None => None,
+            }
+        },
+        None => None,
+    }
 }
