@@ -38,12 +38,14 @@ fn all_filenames() -> Vec<String> {
     let mut filenames = vec![];
     filenames.push("./autosave".to_owned());
     filenames.push("./bootstrap".to_owned());
+    /*
     for entry in walk_dir("./test-inputs").unwrap() {
         filenames.push(entry.unwrap().path().to_str().unwrap().to_owned());
     }
     for entry in walk_dir("./test-outputs").unwrap() {
         filenames.push(entry.unwrap().path().to_str().unwrap().to_owned());
     }
+    */
     for entry in walk_dir("./examples").unwrap() {
         filenames.push(entry.unwrap().path().to_str().unwrap().to_owned());
     }
