@@ -978,6 +978,8 @@ module uiEditor {
 
     if (type === "image") {
       elem.attr = "backgroundImage";
+    } else if(type === "upload") {
+      elem.children = [{"t":"input","c":"uploadcare-uploader"}];
     } else {
       elem.attr = "text";
     }
@@ -1198,7 +1200,7 @@ module uiEditor {
     { text: "link", icon: "ion-link" },
     { text: "map", icon: "ion-map" },
     { text: "input", icon: "ion-compose" },
-    //                        {text: "map", icon: "ion-ios-location"}
+    { text: "upload", icon: "ion-upload" },
   ];
 
   function uiControls(componentId, activeLayer) {
