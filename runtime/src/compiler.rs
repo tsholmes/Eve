@@ -276,6 +276,10 @@ pub fn editor_schema() -> Vec<(&'static str, Vec<&'static str>)> {
     ("geocoding request", vec!["formatted address"]),
     ("geocoding response status", vec!["formatted address","status"]),
     ("geocoding response data", vec!["formatted address","lat","lng"]),
+    ("user images", vec!["file id","width","height"]),
+    ("user uploads", vec!["file id","owner id","file name","file size","hosted uuid","url"]),
+    ("upload requests", vec!["upload request id","session","file id","file name","file","upload state","upload progress","total progress"]),
+    ("upload errors", vec!["upload error id","upload request id","error description"]),
     ]
 }
 
