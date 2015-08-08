@@ -960,7 +960,9 @@ module api {
      "captured key": {},
      "editor node position": {key: "node"},
      "editor item": {key: "item", foreign: {view: "item"}, dependents: pkDependents},
-     "block aggregate": {foreign: {view: "view"}}
+     "block aggregate": {foreign: {view: "view"}},
+     "upload requests": {},
+     "user uploads": {},
   };
 
   /***************************************************************************\

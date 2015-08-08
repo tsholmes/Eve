@@ -11,6 +11,7 @@
 module uiEditorRenderer {
   declare var google;
   declare var dispatcher;
+  declare var uploadcare;
 
   var ixer = api.ixer;
   var code = api.code;
@@ -24,7 +25,7 @@ module uiEditorRenderer {
   ixer.addIndex("active page", ids["active page"], Indexing.create.lookup([ids.session, ids.page]));
 
   export var session = "me";
-    
+
   export function setSessionId(id) {
     session = id;
   }
@@ -34,10 +35,10 @@ module uiEditorRenderer {
     container: {},
     marker: {}
   };
-  
+
   export function refreshMaps() {
     for(var mapId in mapCache.map) {
-      var map = mapCache.map[mapId];     
+      var map = mapCache.map[mapId];
       google.maps.event.trigger(map, "resize");
       var lat = (ixer.selectOne("uiMapAttr", {map: mapId, property: "lat"}) || {"uiMapAttr: value": 0})["uiMapAttr: value"];
       var lng = (ixer.selectOne("uiMapAttr", {map: mapId, property: "lng"}) || {"uiMapAttr: value": 0})["uiMapAttr: value"];
@@ -45,7 +46,7 @@ module uiEditorRenderer {
     }
   }
 
-  
+
   /*-------------------------------------------------------
   - Renderer
   -------------------------------------------------------*/
@@ -104,7 +105,7 @@ module uiEditorRenderer {
       return JSON.stringify;
     }
   }
-  
+
   function getBoundRows(binding, key?) {
     var sessionIx;
     var keys = [];
@@ -113,14 +114,14 @@ module uiEditorRenderer {
           keys.push(fieldId);
       }
       if(code.name(fieldId) === "session") {
-        sessionIx = ix; 
-      } 
+        sessionIx = ix;
+      }
     });
     var query = {};
     if(sessionIx !== undefined) {
       query["session"] = session;
     }
-    
+
     // If key is singular we can short circuit this filter for speed improvements at selection time.
     var filterByKey = false;
     if(key !== undefined && keys.length === 1) {
@@ -185,7 +186,7 @@ module uiEditorRenderer {
 
     return {c: klass, id: layerId + (key ? "::" + key : ""), top: offset.top, left: offset.left, zIndex:layerIx, children: layerChildren};
   }
-  
+
   function reverseOffsetBoundingBox(box, offset) {
     if(!box || !offset) { return box; }
     let result = {top: box.top + offset.top, left: box.left + offset.left, width: box.width, height: box.height, bottom: box.bottom, right: box.right};
@@ -253,7 +254,7 @@ module uiEditorRenderer {
         mapContainer.style.height = node.style.height || document.body.offsetHeight;
         if(!mapInstance) {
           mapInstance = new google.maps.Map(mapContainer);
-          mapCache.map[mapId] = mapInstance;          
+          mapCache.map[mapId] = mapInstance;
         }
         var lat = (ixer.selectOne("uiMapAttr", {map: mapId, property: "lat"}) || {"uiMapAttr: value": 0})["uiMapAttr: value"];
         var lng = (ixer.selectOne("uiMapAttr", {map: mapId, property: "lng"}) || {"uiMapAttr: value": 0})["uiMapAttr: value"];
@@ -265,7 +266,7 @@ module uiEditorRenderer {
         if(mapInstance.getZoom() !== zoom) {
           mapInstance.setZoom(zoom);
         }
-        
+
         var mapAttrs = ixer.select("uiMapAttr", {map: mapId}) || [];
         var opts = {};
         for(var mapAttr of mapAttrs) {
@@ -275,18 +276,76 @@ module uiEditorRenderer {
           opts[mapAttr["uiMapAttr: property"]] = mapAttr["uiMapAttr: value"];
         }
         mapInstance.setOptions(opts);
-        
+
         if(!node.rendered) {
           node.appendChild(mapContainer);
         }
-        node.rendered = true;  
+        node.rendered = true;
       }
+
+    } else if(type === "upload") {
+        //console.log("Adding upload element");
+
+        elem.children = [{"t":"input","c":"uploadcare-uploader"}];
+
+        var widget = uploadcare.SingleWidget('[class=uploadcare-uploader]');
+
+        widget.onChange(function(file) {
+          console.log("Changed",file);
+          eventId = nextEventId();
+          let uploadEventId = eventId;
+          let requestId = session + ":" + uploadEventId;
+
+          if(file) {
+            file.progress(function(uploadInfo) {
+
+              // Parse the filename, extracting a name and an extension
+              var fullname = uploadInfo.incompleteFileInfo.name;
+              var dotIndex = fullname.lastIndexOf('.');
+              if (dotIndex === -1) {
+                dotIndex = fullname.length;
+              }
+              var filename = fullname.substr(0,dotIndex);
+              var extension = fullname.substr(dotIndex+1);
+
+              var diffs = api.insert("upload requests", {"session":session,
+                                                         "eventId":uploadEventId,
+                                                         "file name":filename,
+                                                         "file type":extension,
+                                                         "file size":uploadInfo.incompleteFileInfo.size,
+                                                         "upload state":uploadInfo.state,
+                                                         "upload progress":uploadInfo.uploadProgress,
+                                                         "total progress":uploadInfo.progress,
+                                                        });
+              client.sendToServer(api.toDiffs(diffs), false);
+            }).done(function(info) {
+              // Parse the filename, extracting a name and an extension
+              var fullname = info.name;
+              var dotIndex = fullname.lastIndexOf('.');
+              if (dotIndex === -1) {
+                dotIndex = fullname.length;
+              }
+              var filename = fullname.substr(0,dotIndex);
+              var extension = fullname.substr(dotIndex+1);
+
+              var diffs = api.insert("user uploads", {"file id":info.uuid,
+                                                      "owner id":session,
+                                                      "file name":filename,
+                                                      "file type":extension,
+                                                      "file size":info.size,
+                                                      "url":info.cdnUrl,
+                                                     });
+              client.sendToServer(api.toDiffs(diffs), false);
+            }).fail(function(error, fileInfo) {
+              console.log("upload failed",error);
+            });
+          }
+        });
     }
-    
+
     var attrsIndex = ixer.index("uiStyleToAttrs", true);
     var stylesIndex = ixer.index("uiElementToStyles", true);
     var attrBindingsIndex = ixer.index("elementAttrBindings", true);
-
 
     var attrs = [];
     var styles = stylesIndex[elementId] || [];
@@ -321,9 +380,10 @@ module uiEditorRenderer {
       elem.keyup = handleKeyUpEvent;
       if(elem.text !== undefined) {
         elem.value = elem.text;
-        elem.text = undefined;  
-      } 
+        elem.text = undefined;
+      }
     } else if(type === "link") {
+    } else if(type === "upload") {
     } else if(type === "map") {
     } else {
       elem.c += " non-interactive";
@@ -342,7 +402,7 @@ module uiEditorRenderer {
   export function setEventId(value) {
     eventId = value;
   }
-  
+
   export function nextEventId() {
     return ++eventId;
   }

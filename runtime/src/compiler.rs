@@ -276,10 +276,8 @@ pub fn editor_schema() -> Vec<(&'static str, Vec<&'static str>)> {
     ("geocoding request", vec!["formatted address"]),
     ("geocoding response status", vec!["formatted address","status"]),
     ("geocoding response data", vec!["formatted address","lat","lng"]),
-    ("user images", vec!["file id","width","height"]),
-    ("user uploads", vec!["file id","owner id","file name","file size","hosted uuid","url"]),
-    ("upload requests", vec!["upload request id","session","file id","file name","file type","file size","upload state","upload progress","total progress"]),
-    ("upload errors", vec!["upload error id","upload request id","error description"]),
+    //("user images", vec!["file id","width","height"]),
+    ("user uploads", vec!["file id","owner id","file name","file type","file size","url"]),
     ]
 }
 
@@ -298,6 +296,8 @@ pub fn client_schema() -> Vec<(&'static str, Vec<&'static str>)> {
     ("sessions", vec!["id", "status"]),
     ("session id to user id", vec!["session id", "user id"]),
     ("captured key", vec!["session", "eventId", "element", "key", "binding"]),
+    ("upload requests", vec!["session","eventId","file name","file type","file size","upload state","upload progress","total progress"]),
+    //("upload errors", vec!["upload request id","error description"]),
     ]
 }
 
