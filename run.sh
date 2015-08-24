@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 waitUrl="`pwd`/ui/waiting-room.html";
 
@@ -11,7 +11,7 @@ if [ $? -ne 0 ]; then
 fi
 hash multirust 2>/dev/null
 if [ $? -ne 0 ]; then
-  echo "Please install multirust with ('./install-multirust') before continuing."
+  echo "Please install multirust with ('./install-multirust.sh') before continuing."
   exit
 fi
 

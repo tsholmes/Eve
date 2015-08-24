@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::thread;
 use std::sync::mpsc;
 use websocket;
@@ -8,6 +9,7 @@ use std::io::prelude::*;
 use std::fs::{OpenOptions};
 use rustc_serialize::json::{Json, ToJson};
 use cbor;
+use std::env;
 
 use value::Value;
 use relation::Change;
@@ -47,6 +49,13 @@ impl ToJson for Value {
             Value::String(ref string) => Json::String(string.clone()),
             Value::Float(float) => Json::F64(float),
             Value::Column(ref column) => Json::Array(column.iter().map(|v| v.to_json()).collect()),
+            Value::Row{ref view_id, ref field_ids, ref values} => {
+                let keys = field_ids.iter().map(|field_id| field_id.to_owned());
+                let vals = values.iter().map(ToJson::to_json);
+                let mut object = keys.zip(vals).collect::<BTreeMap<_, _>>();
+                object.insert("view id".to_owned(), view_id.to_json());
+                Json::Object(object)
+            }
         }
     }
 }
@@ -60,6 +69,13 @@ impl FromJson for Value {
             Json::I64(int) => Value::Float(int as f64),
             Json::U64(uint) => Value::Float(uint as f64),
             Json::Array(ref array) => Value::Column(array.iter().map(FromJson::from_json).collect()),
+            Json::Object(ref object) => {
+                let view_id = object["view id"].as_string().unwrap().to_owned();
+                let (keys, vals): (Vec<_>, Vec<_>) = object.iter().filter(|&(field_id, _)| field_id != "view id").unzip();
+                let field_ids = keys.into_iter().map(|key| key.to_owned()).collect();
+                let values = vals.into_iter().map(|val| FromJson::from_json(val)).collect();
+                Value::Row{view_id: view_id, field_ids: field_ids, values: values}
+            }
             _ => panic!("Cannot decode {:?} as Value", json),
         }
     }
@@ -198,10 +214,12 @@ pub fn server_events() -> mpsc::Receiver<ServerEvent> {
     event_receiver
 }
 
-pub fn handle_event(server: &mut Server, event: Event, event_json: Json) {
+pub fn handle_event(server: &mut Server, event: Event, event_json: Json, saves_dir: &str) {
+    let autosave_path = saves_dir.to_owned() + "autosave";
+
     // save the event
     {
-        let mut autosave = OpenOptions::new().write(true).append(true).open("./autosave").unwrap();
+        let mut autosave = OpenOptions::new().write(true).append(true).open(&*autosave_path).unwrap();
         autosave.write_all(format!("{}", event_json).as_bytes()).unwrap();
         autosave.write_all("\n".as_bytes()).unwrap();
         autosave.flush().unwrap();
@@ -222,24 +240,32 @@ pub fn handle_event(server: &mut Server, event: Event, event_json: Json) {
                 server.flow = Flow::new();
                 load(&mut server.flow, "./bootstrap");
                 load(&mut server.flow, filename);
-                save(&server.flow, "./autosave");
-                let current_dir = ::std::env::current_dir().unwrap().to_str().unwrap().to_owned();
-                response_commands.push(vec!["loaded".to_owned(), current_dir, filename.to_owned()]);
+                save(&server.flow, &*autosave_path);
+
+                // Is there an easier way to get absolute path from a relative path?
+                let current_dir = env::current_dir().unwrap();
+                env::set_current_dir(saves_dir).unwrap();
+                let absolute_saves_dir = env::current_dir();
+                env::set_current_dir(current_dir).unwrap();
+                response_commands.push(vec!["loaded".to_owned(), absolute_saves_dir.unwrap().to_str().unwrap().to_owned(), filename.to_owned()]);
             }
             ["save", filename] => {
                 save(&server.flow, filename);
-                let current_dir = ::std::env::current_dir().unwrap().to_str().unwrap().to_owned();
-                response_commands.push(vec!["saved".to_owned(), current_dir, filename.to_owned()]);
+                let current_dir = env::current_dir().unwrap();
+                env::set_current_dir(saves_dir).unwrap();
+                let absolute_saves_dir = env::current_dir();
+                env::set_current_dir(current_dir).unwrap();
+                response_commands.push(vec!["saved".to_owned(), absolute_saves_dir.unwrap().to_str().unwrap().to_owned(), filename.to_owned()]);
             }
             ["get events", id] => {
-                let events_string = read_file("./autosave");
+                let events_string = read_file(&*autosave_path);
                 response_commands.push(vec!["events got".to_owned(), id.to_owned(), events_string]);
             }
             ["set events", id, events_string] => {
-                write_file("./autosave", events_string);
+                write_file(&*autosave_path, events_string);
                 server.flow = Flow::new();
                 load(&mut server.flow, "./bootstrap");
-                load(&mut server.flow, "./autosave");
+                load(&mut server.flow, &*autosave_path);
                 response_commands.push(vec!["events set".to_owned(), id.to_owned()]);
             }
             other => panic!("Unknown command: {:?}", other),
@@ -250,11 +276,14 @@ pub fn handle_event(server: &mut Server, event: Event, event_json: Json) {
     send_event(server, changes, &response_commands);
 }
 
-pub fn run() {
+pub fn run(saves_dir: &str) {
+
+    let autosave_path = saves_dir.to_owned() + "autosave";
+
     let mut flow = Flow::new();
     time!("reading saved state", {
         load(&mut flow, "./bootstrap");
-        load(&mut flow, "./autosave");
+        load(&mut flow, &*autosave_path);
     });
 
     let senders: Vec<sender::Sender<WebSocketStream>> = Vec::new();
@@ -282,7 +311,7 @@ pub fn run() {
                 let cbor = decoder.items().next().unwrap().unwrap();
                 let json = cbor.to_json();
                 let event = FromJson::from_json(&json);
-                handle_event(&mut server, event, json);
+                handle_event(&mut server, event, json, saves_dir);
             }
         }
     }
