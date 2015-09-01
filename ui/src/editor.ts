@@ -1,4 +1,5 @@
 /// <reference path="microReact.ts" />
+/// <reference path="ui.ts" />
 /// <reference path="api.ts" />
 /// <reference path="client.ts" />
 /// <reference path="tableEditor.ts" />
@@ -2341,6 +2342,7 @@ module drawn {
     // add the settings at the very end
     tools.push({c: "tool ion-gear-b",
                 title: "Settings",
+                semantic: "action::settings",
                 mouseover: showButtonTooltip,
                 mouseout: hideButtonTooltip,
                 click: openSettings,
@@ -2379,13 +2381,14 @@ module drawn {
     dispatch("hideTooltip", {});
   }
 
-  let settingsPanes = {
-    "save": {
+  let settingsPanes:ui.Pane[] = [
+    {
+      id: "save",
       title: "Save",
       content: function() {
         let saves = localState.saves || [];
         let selected = localState.selectedSave;
-        return [
+        return {semantic: "pane::save", children: [
 
           (saves.length ? {children: [
             {t: "h3", text: "Recent"},
@@ -2405,15 +2408,16 @@ module drawn {
             {c: "button", text: "Save to gist (remote)", click: saveToGist},
             {c: "button", text: "Save to file (local)", click: overwriteSave},
           ]}
-        ];
+        ]};
       }
     },
-    "load": {
+    {
+      id: "load",
       title: "Load",
       content: function() {
         let saves = localState.saves || [];
         let selected = localState.selectedSave;
-        return [
+        return {semantic: "pane::load", children: [
           {c: "input-row", children: [
             {c: "label", text: "url"},
             {t: "input", type: "text", input: setSaveLocation, value: localState.selectedSave},
@@ -2423,12 +2427,13 @@ module drawn {
             {t: "input", type: "file", change: setSaveFile},
             {c: "button", text: "Load from file (local)", click: loadSave},
           ]}
-        ]
+        ]};
       }
     },
-    "preferences": {
+    {
+      id: "preferences",
       title: "Preferences",
-      content: () =>  {
+      content: () => {
         let showHidden;
         if(localStorage["showHidden"]) {
           showHidden = {c: "button", click: toggleHidden, text: "Hide hidden"};
@@ -2442,15 +2447,13 @@ module drawn {
         } else {
           theme = {c: `button ${curTheme}`, click: toggleTheme, text: "Dark"};
         }
-        return [
-          {c: "preferences", children: [
-            theme,
-            showHidden,
-          ]}
-        ];
+        return {c: "preferences", semantic: "pane::preferences", children: [
+          theme,
+          showHidden,
+        ]};
       }
     }
-  };
+  ];
 
   function toggleHidden(e, elem) {
     dispatch("toggleHidden", {});
@@ -2461,16 +2464,9 @@ module drawn {
   }
 
   function settingsPanel() {
-    let current = settingsPanes[localState.currentTab] ? localState.currentTab : "preferences";
-    let tabs = [];
-    for(let tab in settingsPanes) {
-      tabs.push({c: (tab === current) ? "tab active" : "tab", tab, text: settingsPanes[tab].title, click: switchTab});
-    }
-
-    return {c: "settings-panel tabbed-box", children: [
-      {c: "tabs", children: tabs.concat({c: "flex-spacer"}, {c: "ion-close tab", click: closeTooltip})},
-      {c: "pane", children: settingsPanes[current].content()}
-    ]};
+    return ui.tabbedBox(
+      {id: "settings-pane", semantic: "pane::settings", defaultTab: "preferences", panes: settingsPanes, controls: [{c: "ion-close tab", click: closeTooltip}]}
+    );
   }
 
   function switchTab(evt, elem) {
@@ -2603,24 +2599,23 @@ module drawn {
     dispatch("showTooltip", tooltip);
   }
 
+  let importPanes:ui.Pane[] = [
+    {id: "csv", title: "CSV", content: function() {
+      return {semantic: "pane::csv", children: [
+        {t: "input", type: "file", change: updateCsvFile},
+        {c: "flex-row spaced-row", children: [
+          {text: "Treat first row as header"},
+          {t: "input", type: "checkbox", change: updateCsvHasHeader}
+        ]},
+        {c: "button", text: "Import", click: importFromCsv}
+      ]};
+    }}
+  ];
+
   function importPanel() {
-    let current = "csv";
-    return {c: "import-panel tabbed-box", children: [
-      {c: "tabs", children: [
-        {c:  ("csv" === current) ? "tab active" : "tab", text: "CSV"},
-        {c: "flex-spacer"}, {c: "ion-close tab", click: closeTooltip}]},
-      {c: "pane", children: (localState.importing) ?
-        [{text: "importing..."}] :
-        [
-          {t: "input", type: "file", change: updateCsvFile},
-          {c: "flex-row spaced-row", children: [
-            {text: "Treat first row as header"},
-            {t: "input", type: "checkbox", change: updateCsvHasHeader}
-          ]},
-          {c: "button", text: "Import", click: importFromCsv}
-        ]
-      }
-    ]};
+    return ui.tabbedBox(
+      {id: "import-pane", semantic: "pane::import", defaultTab: "csv", panes: importPanes, controls: [{c: "ion-close tab", click: closeTooltip}]}
+    );
   }
 
   function updateCsvFile(evt, elem) {
@@ -3764,6 +3759,7 @@ module drawn {
     initRenderer();
     initLocalstate();
     initInputHandling();
+    ui.init(localState, render);
     api.checkVersion(maybeShowUpdate);
     loadPositions();
     render();
