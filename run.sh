@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 
-waitUrl="$(pwd)/ui/waiting-room.html";
+waitUrl="$(pwd)/ui/waiting-room.html"
 rustVersion="nightly-2015-08-10"
+tscVersion="1.6.0-dev.20150731"
+tscBin="`pwd`/ui/node_modules/typescript/bin/tsc"
 debugFlag=false
 noBrowserFlag=false
 
@@ -36,25 +38,35 @@ done
 
 # Ensure that dependencies are installed.
 printf "* Checking dependencies..."
-deps="tsc multirust"
+deps="multirust $tscBin"
 for dep in $deps; do
   if ! which "$dep" &> /dev/null; then
-    printf "\n  x Please install %s: " "$dep"
-    if [ "$dep" = "tsc" ]; then
-      echo "sudo npm install -g typescript"
+    printf "\n  x Please install $dep:\n"
+    if [ "$dep" = "$tscBin" ]; then
+      echo "    cd ui && npm install && cd .."
     elif [ "$dep" = "multirust" ]; then
-      echo "./install-multirust"
+      echo "    ./install-multirust"
     fi
     exit 1
   fi
 done
+
+# Check tsc version
+version=$($tscBin --version)
+if [[ "$version" != *"Version $tscVersion"* ]]; then
+  echo ""
+  echo "  x Eve requires tsc version \"$tscVersion\" but \"$version\" is installed. Please reinstall using:"
+  echo "    cd ui && npm install && cd .. before continuing."
+  exit 1
+fi
+
 echo "done."
 
 # Try using the TypeScript compiler (tsc) to compile UI.
+printf "* Compiling editor..."
 pushd . &> /dev/null
-  printf "* Compiling editor..."
-  cd ui
-  tscError=$(tsc)
+  cd "ui";
+  tscError=$($tscBin)
   if [ $? -ne 0 ]; then
     printf "\n  x %s\n" "$tscError"
     popd &> /dev/null
@@ -68,9 +80,9 @@ popd &> /dev/null
 if ! $noBrowserFlag; then
   echo "* Opening editor: $waitUrl"
   if [[ "$OSTYPE" == "darwin"* ]]; then
-    open "$waitUrl" &
+    open "$waitUrl" &> /dev/null
   else
-    xdg-open "$waitUrl" &
+    xdg-open "$waitUrl" &> /dev/null
   fi
 fi
 

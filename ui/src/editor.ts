@@ -85,7 +85,7 @@ module drawn {
   // Utils
   //---------------------------------------------------------
 
-   function coerceInput(input) {
+   export function coerceInput(input) {
         if (input.match(/^-?[\d]+$/gim)) {
             return parseInt(input);
         }
@@ -109,14 +109,14 @@ module drawn {
         e.preventDefault();
     }
 
-    function focusOnce(node, elem) {
+    export function focusOnce(node, elem) {
         if (!node.__focused) {
             node.focus();
             node.__focused = true;
-            if(elem.contentEditable && node.firstChild) {
+            if(elem.contentEditable) {
               let range = document.createRange();
-              range.setStart(node.firstChild, node.textContent.length);
-              range.setEnd(node.firstChild, node.textContent.length);
+              range.selectNodeContents(node);
+              range.collapse(false);
               let sel = window.getSelection();
               sel.removeAllRanges();
               sel.addRange(range);
@@ -392,7 +392,7 @@ module drawn {
     return {fieldId, diffs};
   }
 
-  function removeBinding(binding) {
+  export function removeBinding(binding) {
     let diffs = [];
     let variableId = binding["binding: variable"];
     // determine if this is the only binding for this variable
@@ -446,7 +446,7 @@ module drawn {
     return diffs;
   }
 
-  function addSourceFieldVariable(itemId, sourceViewId, sourceId, fieldId) {
+  export function addSourceFieldVariable(itemId, sourceViewId, sourceId, fieldId, selectAll = false) {
     let diffs = [];
     let kind;
     // check if we're adding an ordinal
@@ -471,6 +471,9 @@ module drawn {
     } else {
       // otherwise we're an input field and we need to add a default constant value
       diffs.push(api.insert("constant binding", {variable: variableId, value: api.newPrimitiveDefaults[sourceViewId][fieldId]}));
+      if(selectAll) {
+        diffs.push.apply(diffs, dispatch("addSelectToQuery", {viewId: itemId, variableId: variableId, name: code.name(fieldId) || fieldId}, true));
+      }
     }
     return diffs;
   }
@@ -2216,8 +2219,8 @@ module drawn {
           {c: "query-selector", children: queries}
           : {c: "full-flex flex-center", children: [
             {c: "flex-row spaced-row", children: [
-              {text: "Click"}, {t: "button", c: "button", text: "New", click: startCreating}, {text: "or"},
-              {t: "button", c: "button", text: "Import", click: openImporter}, {text: "to begin working with Eve"}
+              {text: "Click"}, ui.button({text: "New", click: startCreating}), {text: "or"},
+              ui.button({text: "Import", click: openImporter}), {text: "to begin working with Eve"}
             ]}
           ]}
       ]}
@@ -2402,11 +2405,11 @@ module drawn {
           ]} : undefined),
           {c: "input-row", children: [
             {c: "label", text: "File name"},
-            {t: "input", type: "text", input: setSaveLocation, value: localState.selectedSave},
+            ui.input({input: setSaveLocation, value: localState.selectedSave}),
           ]},
           {c: "flex-row", children: [
-            {c: "button", text: "Save to gist (remote)", click: saveToGist},
-            {c: "button", text: "Save to file (local)", click: overwriteSave},
+            ui.button({text: "Save to gist (remote)", click: saveToGist}),
+            ui.button({text: "Save to file (local)", click: overwriteSave}),
           ]}
         ]};
       }
@@ -2420,12 +2423,12 @@ module drawn {
         return {semantic: "pane::load", children: [
           {c: "input-row", children: [
             {c: "label", text: "url"},
-            {t: "input", type: "text", input: setSaveLocation, value: localState.selectedSave},
-            {c: "button", text: "Load from gist (remote)", click: loadFromGist}
+            ui.input({input: setSaveLocation, value: localState.selectedSave}),
+            ui.button({text: "Load from gist (remote)", click: loadFromGist})
           ]},
           {c: "input-row", children: [
             {t: "input", type: "file", change: setSaveFile},
-            {c: "button", text: "Load from file (local)", click: loadSave},
+            ui.button({text: "Load from file (local)", click: loadSave}),
           ]}
         ]};
       }
@@ -2436,9 +2439,9 @@ module drawn {
       content: () => {
         let showHidden;
         if(localStorage["showHidden"]) {
-          showHidden = {c: "button", click: toggleHidden, text: "Hide hidden"};
+          showHidden = ui.button({click: toggleHidden, text: "Hide hidden"});
         } else {
-          showHidden = {c: "button", click: toggleHidden, text: "Show hidden"};
+          showHidden = ui.button({click: toggleHidden, text: "Show hidden"});
         }
         let theme;
         let curTheme = localStorage["theme"];
@@ -2478,7 +2481,7 @@ module drawn {
   }
 
   function setSaveLocation(evt, elem) {
-    dispatch("selectSave", {save: evt.currentTarget.value});
+    dispatch("selectSave", {save: evt.currentTarget.textContent});
   }
 
   function setSaveFile(evt, elem) {
@@ -2605,9 +2608,9 @@ module drawn {
         {t: "input", type: "file", change: updateCsvFile},
         {c: "flex-row spaced-row", children: [
           {text: "Treat first row as header"},
-          {t: "input", type: "checkbox", change: updateCsvHasHeader}
+          ui.checkbox({change: updateCsvHasHeader})
         ]},
-        {c: "button", text: "Import", click: importFromCsv}
+        ui.button({text: "Import", click: importFromCsv})
       ]};
     }}
   ];
@@ -2670,8 +2673,8 @@ module drawn {
       {c: "container", children: [
         {c: "surface", children: [
           {c: "query-editor", children: [
-            {c: "query-name-input", contentEditable: true, blur: rename, renameId: viewId, text: code.name(viewId)},
-            {c: "query-description-input", contentEditable: true, blur: setQueryDescription, viewId, text: description},
+            ui.input({c: "query-name-input", blur: rename, renameId: viewId, text: code.name(viewId)}),
+            ui.input({c: "query-description-input", blur: setQueryDescription, viewId, text: description}),
             queryCanvas(view, entityInfo),
           ]},
           queryErrors(view),
@@ -2849,7 +2852,7 @@ module drawn {
         }
         content.push({c: "error-description", children: [
           {text: curNode.error},
-          {c: "button", node: curNode, text: "remove", click: action},
+          ui.button({node: curNode, text: "remove", click: action}),
         ]});
       }
     }
@@ -3401,7 +3404,7 @@ module drawn {
       {c: "searcher-shade", mousedown: stopSearching},
       {c: "searcher", children: [
         {c: "search-results", children: resultGroups},
-        {t: "textarea", c: "search-box", postRender: focusOnce, value: localState.searchingFor, input: updateSearch, keydown: handleSearchKey}
+        ui.input({c: "search-box", multiline: true, postRender: focusOnce, text: localState.searchingFor, input: updateSearch, keydown: handleSearchKey})
       ]}
     ]};
   }
@@ -3426,7 +3429,7 @@ module drawn {
   }
 
   function updateSearch(e, elem) {
-    dispatch("updateSearch", {value: e.currentTarget.value});
+    dispatch("updateSearch", {value: e.currentTarget.textContent});
   }
 
   //---------------------------------------------------------
@@ -3583,7 +3586,7 @@ module drawn {
         {c: "form-description", contentEditable: true, blur: setQueryDescription, viewId: tableId, text: getDescription(tableId)},
         {c: "form-fields", children: fields},
         sizeUi,
-        {c: "button", click: submitTableEntry, text: "Submit"}
+        ui.button({click: submitTableEntry, text: "Submit"})
       ]},
     ]};
   }

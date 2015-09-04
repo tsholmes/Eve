@@ -180,6 +180,18 @@ pub fn editor_schema() -> Vec<(&'static str, Vec<&'static str>)> {
     // positions for nodes in the graphical editor
     ("editor node position", vec!["node", "x", "y"]),
 
+    // the non-field portions of a madlib
+    ("madlib descriptor", vec!["view", "ix", "content"]),
+
+    // cells in a notebook
+    // `kind` is one of "query", "add", "remove"
+    ("notebook cell", vec!["cell", "kind"]),
+    // order of cells in a notebook
+    ("related notebook cell", vec!["cell", "cell2"]),
+    ("related notebook cell order", vec!["cell", "cell2", "ix"]),
+    // "query", "add", and "remove" cells all have views associated to them
+    ("notebook cell view", vec!["cell", "view"]),
+
     // descriptions for views in the editor
     ("view description", vec!["view", "description"]),
 
@@ -1430,24 +1442,31 @@ pub fn bootstrap(flow: &mut Flow) {
                 field_table.index.insert(vec![string!("{}", view), string!("{}: {}", view, name), string!("output")]);
                 display_name_table.index.insert(vec![string!("{}: {}", view, name), string!("{}", name)]);
                 display_order_table.index.insert(vec![string!("{}: {}", view, name), Value::Float(ix as f64)]);
-                ix -= 1;
+                ix += 1;
             }
         }
 
         for (primitive, scalar_inputs, vector_inputs, outputs, description) in primitive::primitives().into_iter() {
+            let mut ix = 0;
             view_table.index.insert(vec![string!("{}", primitive), string!("primitive")]);
             display_name_table.index.insert(vec![string!("{}", primitive), string!("{}", primitive)]);
             for name in scalar_inputs.into_iter() {
                 field_table.index.insert(vec![string!("{}", primitive), string!("{}: {}", primitive, name), string!("scalar input")]);
                 display_name_table.index.insert(vec![string!("{}: {}", primitive, name), string!("{}", name)]);
+                display_order_table.index.insert(vec![string!("{}: {}", primitive, name), Value::Float(ix as f64)]);
+                ix += 1;
             }
             for name in vector_inputs.into_iter() {
                 field_table.index.insert(vec![string!("{}", primitive), string!("{}: {}", primitive, name), string!("vector input")]);
                 display_name_table.index.insert(vec![string!("{}: {}", primitive, name), string!("{}", name)]);
+                display_order_table.index.insert(vec![string!("{}: {}", primitive, name), Value::Float(ix as f64)]);
+                ix += 1;
             }
             for name in outputs.into_iter() {
                 field_table.index.insert(vec![string!("{}", primitive), string!("{}: {}", primitive, name), string!("output")]);
                 display_name_table.index.insert(vec![string!("{}: {}", primitive, name), string!("{}", name)]);
+                display_order_table.index.insert(vec![string!("{}: {}", primitive, name), Value::Float(ix as f64)]);
+                ix += 1;
             }
             view_description_table.index.insert(vec![string!("{}", primitive), string!("{}", description)]);
         }
