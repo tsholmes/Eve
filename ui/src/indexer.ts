@@ -215,6 +215,16 @@ module Indexing {
       });
       return fieldIds;
     }
+    getKeys(table:Id):Id[] {
+      var fieldIds = api.ixer.getFields(table) || [];
+      var keys = [];
+      for(let fieldId of fieldIds) {
+        if(api.code.hasTag(fieldId, "key")) {
+          keys.push(fieldId);
+        }
+      }
+      return keys;
+    }
     handleDiff(table: Id, fields:Id[], adds: MapFact[] = [], removes: MapFact[] = []) {
       var dedupedAdds = adds;
       var dedupedRemoves = removes;
@@ -359,17 +369,22 @@ module Indexing {
       var facts:MapFact[] = [];
       var first = this.first(table, true);
       if(!first) { return []; }
-      var fieldIds = (this.index("view to fields", true)[table] || []).map((fact) => fact["field: field"]);
       var names, keys;
       if(!useIds) {
-        names = this.index("display name", true);
-        var fieldNames = fieldIds.map((cur) => names[cur]);
-        keys = Object.keys(opts).filter((key) => opts[key] !== undefined);
-        keys = keys.map(function (key) {
-          var result = fieldIds[fieldNames.indexOf(key)];
-          if(result === undefined) { throw new Error("Field " + keys + " is not a valid field of table " + table); }
-          return result;
-        });
+        keys = [];
+        names = this.indexes["display name"].index;
+        let fields = (this.indexes["view to fields"].index[table] || []);
+        let fieldLookup = {};
+        for(let field of fields) {
+          let fieldId = field["field: field"];
+          fieldLookup[names[fieldId]] = fieldId;
+        }
+        for(let key of Object.keys(opts)) {
+          if(opts[key] === undefined) continue;
+          var result = fieldLookup[key];
+          if(result === undefined) { throw new Error("Field " + key + " is not a valid field of table " + table); }
+          keys.push(result);
+        }
       } else {
         keys = Object.keys(opts);
         names = {};
@@ -380,11 +395,11 @@ module Indexing {
       keys.sort();
       if(keys.length > 0) {
         var indexName = `${table}|${keys.join("|") }`;
-        var index = this.index(indexName, true);
+        var index = this.indexes[indexName] ? this.indexes[indexName].index : false;
 
         if (!index) {
           this.addIndex(indexName, table, create.collector(keys));
-          index = this.index(indexName, true);
+          index = this.indexes[indexName].index;
         }
         for(var key of keys) {
           if(index === undefined) break;

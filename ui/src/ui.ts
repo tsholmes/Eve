@@ -27,6 +27,7 @@ module ui {
 
   export interface UiState {
     tabbedBox: {[id:string]: string}
+    accordion: {[id:string]: string}
   }
 
   //---------------------------------------------------------
@@ -46,7 +47,8 @@ module ui {
   //---------------------------------------------------------
   export var onChange = () => undefined;
   export var uiState:UiState = {
-    tabbedBox: {}
+    tabbedBox: {},
+    accordion: {},
   };
 
   export function init(localState:any, changeHandler:() => void) {
@@ -62,7 +64,11 @@ module ui {
     switchTab: ({tab, tabbedBox}:{tab:string, tabbedBox:string}) => {
       uiState.tabbedBox[tabbedBox] = tab;
       return true;
-    }
+    },
+    switchAccordion: ({pane, accordion}:{pane:string, accordion:string}) => {
+      uiState.accordion[accordion] = pane;
+      return true;
+    },
   };
   export function dispatch(evt:string, info:any) {
     if(!dispatches[evt]) {
@@ -111,6 +117,38 @@ module ui {
 
   function switchTab(evt, elem) {
     dispatch("switchTab", {tabbedBox: elem.tabbedBox, tab: elem.tab});
+  }
+
+  export interface AccordionElement extends Element {
+    panes: Pane[]
+    defaultPane?:string
+    horizontal?:boolean
+  }
+  export function accordion(elem:AccordionElement):Element {
+    let {id, defaultPane, panes = [], horizontal} = elem;
+    if(panes.length < 1) { return; }
+    let tabs = [];
+    let currentPane;
+    
+    // manage the default selected pane if none is supplied
+    let selected = uiState.accordion[id];
+    if(selected === undefined) {
+      selected = uiState.tabbedBox[id] = (defaultPane !== undefined) ? defaultPane : panes[0].id;
+    }
+ 
+    elem.c = `accordion ${elem.c || ""}`;
+    elem.children = [];
+    // for each pane, inject the title, and if the pane is selected its content
+    for(let p of panes) {
+      let isSelected = (p.id === selected);      
+      elem.children.push(inject({c: isSelected ? "tab selected" : "tab", accordion: id, pane: p.id, click: switchAccordion}, p.title));
+      if(isSelected) { elem.children.push(inject({c: "pane"}, p.content)) }; 
+    }
+    return elem;
+  } 
+  
+  function switchAccordion(evt,elem) {
+    dispatch("switchAccordion", {accordion: elem.accordion, pane: elem.pane});
   }
 
   export function horizontal(elem:Element):Element {
@@ -186,7 +224,7 @@ module ui {
 
     return elem;
   }
-
+  
   //---------------------------------------------------------
   // Inputs
   //---------------------------------------------------------
@@ -244,8 +282,8 @@ module ui {
   //---------------------------------------------------------
   // Components
   //---------------------------------------------------------
-  export function image(elem: Element): Element {
-    elem.c = (elem.c) ? "image " + elem.c : "image";
+  export function image(elem:Element): Element {
+    elem.c = `image ${elem.c || ""}`;
     return elem;
   }
 
@@ -260,46 +298,92 @@ module ui {
     SPLINE,
     AREA,
     AREASPLINE,
+    PIE,
   }
-
+ 
+  export interface ChartData {
+    label: string
+    data: number[]
+  }
+ 
   interface ChartElement extends Element {
-    chartData: [(string|number)]
+    chartData: ChartData[]
     chartType: ChartType
   }
-  export function chart(elem:Element):Element {
+  
+  export class BarChartElement implements ChartElement {
+    // @NOTE key added to satisfy TS type checker
+    [key: string]: any;
+    chartType = ChartType.BAR;
+    constructor(public chartData: ChartData[]) {}
+  }
+  
+  export class LineChartElement implements ChartElement {
+    // @NOTE key added to satisfy TS type checker
+    [key: string]: any;
+    chartType = ChartType.LINE;
+    constructor(public chartData: ChartData[]) {}
+  }
+  
+  export class PieChartElement implements ChartElement {
+    // @NOTE key added to satisfy TS type checker
+    [key: string]: any;
+    chartType = ChartType.PIE;
+    constructor(public chartData: ChartData[]) {
+      // check to make sure each data has only a single point
+      for(let d of chartData) {
+        console.log(d.data.length)
+        if(d.data.length !== 1) {
+          throw new Error("Pie charts can only have a single datum per column.");
+        }
+      }
+    }
+  }
+  
+  export function chart(elem:ChartElement):Element {
     let {chartData,chartType} = elem;
 
+    // stringify the chart type
     let chartTypeString: string;
     switch(chartType) {
-      case ui.ChartType.BAR:
+      case ChartType.BAR:
         chartTypeString = "bar";
         break;
-      case ui.ChartType.LINE:
+      case ChartType.LINE:
         chartTypeString = "line";
         break;
-      case ui.ChartType.SPLINE:
+      case ChartType.SPLINE:
         chartTypeString = "spline";
         break;
-      case ui.ChartType.AREA:
+      case ChartType.AREA:
         chartTypeString = "area";
         break;
-      case ui.ChartType.AREASPLINE:
+      case ChartType.AREASPLINE:
         chartTypeString = "area-spline";
         break;
+      case ChartType.PIE:
+        chartTypeString = "pie";
+        break;
       default:
-        console.log("unrecognized chart type");
-        chartTypeString = "line";
+        Error("unrecognized chart type");
+    }
+    
+    // get the labels and data into the right format for c3
+    let formattedData = [];
+    for(let d of chartData) {
+      let labelAndData: (string|number)[] = d.data;
+      labelAndData.unshift(d.label);
+      formattedData.push(labelAndData);
     }
 
     elem.postRender = function(chartNode,elem) {
       let chart = c3.generate({
         bindto: chartNode,
         data:{
-          columns:[],
+          columns:formattedData,
           type: chartTypeString,
         },
       });
-      chart.load({columns:chartData})
     }
 
     return elem;
