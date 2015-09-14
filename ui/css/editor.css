@@ -15,7 +15,7 @@ body { font-family:"Lato"; overflow:hidden; height: 100vh; }
 .__root, .__root > div { height: 100%; }
 
 /* we want everything to be flex and to use a sane box-sizing model */
-body * { display: flex; flex-direction:column; box-sizing: border-box; outline:none; }
+body * { display: flex; display: -webkit-flex; flex-direction:column; -webkit-direction-flex: column; box-sizing: border-box; outline:none; }
 
 /*---------------------------------------------------------
 - Shared
@@ -45,6 +45,15 @@ input[type="text"], textarea { font-family: "Lato"; font-size: 16px; }
   [contenteditable="true"].input:empty { box-sizing: content-box; position: relative; top: -5px; }
 }
 [contenteditable="true"].input:empty:before { content: attr(placeholder); display: block; /* For Firefox */ }
+
+body table { display: table; color: inherit; }
+body table * { flex: none; }
+body table thead { display: table-header-group; }
+body table tbody { display: table-row-group; }
+body table tr { display: table-row; }
+body table th, body table td { display: table-cell; }
+body table th { text-align: left; }
+body table th * { display: inline-block; }
 
 
 /*---------------------------------------------------------

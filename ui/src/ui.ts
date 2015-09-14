@@ -7,7 +7,7 @@ module ui {
   // Types
   //---------------------------------------------------------
   type Element = microReact.Element;
-  type Content = (() => Element)|string;
+  type Content = (() => Element)|(() => Element[])|string|Element|Element[];
   type Handler = microReact.Handler<Event>;
 
   export interface ElemOpts {
@@ -28,17 +28,35 @@ module ui {
   export interface UiState {
     tabbedBox: {[id:string]: string}
     accordion: {[id:string]: string}
+    sort: {[id:string]: {field: string, direction: number}}
   }
 
   //---------------------------------------------------------
   // Utilities
   //---------------------------------------------------------
-  function inject(elem:Element, content:Content):Element {
+  function inject(elem:Element, content:Content, noClone:boolean = false):Element {
+    let res:Element|Element[];
     if(typeof content === "string") {
-      elem.text = content;
+      res = {text: content};
     } else if(typeof content === "function") {
-      elem.children = [content()];
+      res = (<Function>content)();
+    } else if(typeof content === "object") {
+      if(noClone) {
+        res = content;
+      } else {
+        // @NOTE: This is a slow path and should be avoided in tight loops.
+        res = api.clone(content);
+      }
     }
+
+    if(!elem.children) { elem.children = []; }
+
+    if(res instanceof Array) {
+      elem.children.push.apply(elem.children, res);
+    } else {
+      elem.children.push(res);
+    }
+
     return elem;
   }
 
@@ -49,6 +67,7 @@ module ui {
   export var uiState:UiState = {
     tabbedBox: {},
     accordion: {},
+    sort: {}
   };
 
   export function init(localState:any, changeHandler:() => void) {
@@ -69,6 +88,10 @@ module ui {
       uiState.accordion[accordion] = pane;
       return true;
     },
+    setSort: ({forId, fieldId, direction}:{forId:string, fieldId: string, direction:number}) => {
+      uiState.sort[forId] = {field: fieldId, direction};
+      return true;
+    }
   };
   export function dispatch(evt:string, info:any) {
     if(!dispatches[evt]) {
@@ -129,34 +152,34 @@ module ui {
     if(panes.length < 1) { return; }
     let tabs = [];
     let currentPane;
-    
+
     // manage the default selected pane if none is supplied
     let selected = uiState.accordion[id];
     if(selected === undefined) {
       selected = uiState.tabbedBox[id] = (defaultPane !== undefined) ? defaultPane : panes[0].id;
     }
- 
+
     elem.c = `accordion ${elem.c || ""}`;
     elem.children = [];
     // for each pane, inject the title, and if the pane is selected its content
     for(let p of panes) {
-      let isSelected = (p.id === selected);      
+      let isSelected = (p.id === selected);
       elem.children.push(inject({c: isSelected ? "tab selected" : "tab", accordion: id, pane: p.id, click: switchAccordion}, p.title));
-      if(isSelected) { elem.children.push(inject({c: "pane"}, p.content)) }; 
+      if(isSelected) { elem.children.push(inject({c: "pane"}, p.content)) };
     }
     return elem;
-  } 
-  
+  }
+
   function switchAccordion(evt,elem) {
     dispatch("switchAccordion", {accordion: elem.accordion, pane: elem.pane});
   }
 
-  export function horizontal(elem:Element):Element {
+  export function row(elem:Element):Element {
     elem.c = `flex-row ${elem.c || ""}`;
     return elem;
   }
 
-  export function vertical(elem:Element):Element {
+  export function column(elem:Element):Element {
     elem.c = `flex-column ${elem.c || ""}`;
     return elem;
   }
@@ -181,50 +204,119 @@ module ui {
     return elem;
   }
 
-  interface TableElement extends Element {
-    tableHeaders: string[]
-    tableData: any[]
+  interface SortToggleElement extends Element {
+    for: string
+    field: string
+    direction?: number
+    active?: boolean
   }
+  export function sortToggle(elem:SortToggleElement) {
+    let {"for":forId, field:fieldId, direction = 1, active = false} = elem;
+
+    var sortClass = `icon ${(direction === 1 || !active) ? "ion-android-arrow-dropdown" : "ion-android-arrow-dropup"} ${active ? "active" : ""}`;
+    return {c: sortClass, click: setSort, forId, fieldId, direction};
+  }
+  function setSort(evt, elem) {
+    dispatch("setSort", {forId: elem.forId, fieldId: elem.fieldId, direction: elem.direction === 1 ? -1 : 1});
+  }
+
+  interface TableElement extends Element {
+    headerControls?: Content[]
+    headerClick?: microReact.Handler<MouseEvent>
+    rowClick?: microReact.Handler<MouseEvent>
+    cellClick?: microReact.Handler<MouseEvent>
+
+    data: (any[][]|{}[])
+    headers?: string[]
+    heterogenous?: boolean
+
+    autosort? : boolean
+    sortable?: boolean
+    staticHeaders?: boolean
+  }
+
   export function table(elem:TableElement):Element {
-    let {tableData:data = [], tableHeaders:columns = []} = elem;
+    // Get a consistent list of headers and rows.
+    var data:any[][];
+    var headers:string[] = elem.headers || [];
+    if(elem.headers && !elem.staticHeaders) {
+      headers.sort(api.displaySort);
+    }
+    if(elem.data.length === 0) {
+      data = [];
+    } else if(elem.data[0] instanceof Array) {
+      data = <any[][]> elem.data;
+    } else {
+      if(!elem.headers) {
+        if(!elem.heterogenous) {
+          headers = Object.keys(elem.data[0]);
+        } else {
+          let headerFields = {};
+          for(let row of <{}[]>elem.data) {
+            for(let field in row) {
+              headerFields[field] = true;
+            }
+          }
+          headers = Object.keys(headerFields);
+        }
+        if(elem.headers && !elem.staticHeaders) {
+          headers.sort(api.displaySort);
+        }
+      }
 
-    elem.postRender = function(tableNode,elem) {
-
-      // create table elements
-      let table = d3.select(tableNode).append("table"),
-          tableHead = table.append("thead"),
-          tableBody = table.append("tbody");
-
-
-      // create the table header
-      tableHead.append("tr")
-               .selectAll("th")
-               .data(columns)
-               .enter()
-               .append("th")
-               .text(function(column) { return column; });
-
-      // create a table row for each row in the data
-      var rows = tableBody.selectAll("tr")
-                          .data(data)
-                          .enter()
-                          .append("tr");
-
-      // create cells in each row
-      var cells = rows.selectAll("td")
-                      .data(function(row) {
-                          return columns.map(function(column) {
-                              return {column: column, value: row[column]};
-                          });
-                      })
-                      .enter()
-                      .append("td")
-                      .text(function(d) { return d.value; });
+      data = [];
+      for(let row of <{}[]>elem.data) {
+        let entry = [];
+        for(let field of headers) {
+          entry.push(row[field]);
+        }
+        data.push(entry);
+      }
     }
 
+    let {autosort = true, sortable} = elem;
+    if(autosort && elem.id && uiState.sort[elem.id]) {
+      let {field: sortField, direction: sortDirection} = uiState.sort[elem.id];
+      let sortIx = headers.indexOf(sortField);
+      if(sortIx !== -1) {
+        api.sortRows(data, sortIx, sortDirection);
+      }
+    }
+
+    elem.children = [];
+    let headerControls = elem.headerControls || [];
+    let headerRow = [];
+    for(let header of headers) {
+      let {field: activeField, direction: dir} = uiState.sort[elem.id] || {field: undefined, direction: undefined};
+      let active = (activeField === header);
+      headerRow.push(
+        inject({t: "th", c: "spaced-row header", click: elem.headerClick, header, children: [
+          <Element>{text: (elem.staticHeaders ? header : api.code.name(header))},
+          (sortable ? ui.sortToggle({"for": elem.id, field: header, direction: active ? dir : 1, active}) : undefined)
+        ]}, headerControls));
+    }
+    elem.children.push({t: "thead", children: [
+      {t: "tr", c: "header-row", children: headerRow}
+    ]});
+
+    let rowIx = 0;
+    let bodyRows = [];
+    for(let row of data) {
+      let entryRow = [];
+      let ix = 0;
+      for(let cell of row) {
+        entryRow.push({t: "td", c: "cell", click: elem.cellClick, header: headers[ix], text: (cell instanceof Array) ? cell.join(", ") : cell});
+        ix++;
+      }
+      bodyRows.push({t: "tr", c: "row", children: entryRow, row: rowIx, click: elem.rowClick});
+      rowIx++;
+    }
+    elem.children.push({t: "tbody", children: bodyRows});
+
+    elem.t = "table";
     return elem;
   }
-  
+
   //---------------------------------------------------------
   // Inputs
   //---------------------------------------------------------
@@ -298,95 +390,212 @@ module ui {
     SPLINE,
     AREA,
     AREASPLINE,
+    SCATTER,
     PIE,
+    DONUT,
+    GAUGE,
   }
- 
-  export interface ChartData {
-    label: string
-    data: number[]
-  }
- 
-  interface ChartElement extends Element {
-    chartData: ChartData[]
+
+  export interface ChartElement extends Element {
+    labels?: string[]
+    ydata: number[][]
+    xdata?: number[][]
+    pointLabels?: string[][]
     chartType: ChartType
   }
-  
-  export class BarChartElement implements ChartElement {
-    // @NOTE key added to satisfy TS type checker
-    [key: string]: any;
-    chartType = ChartType.BAR;
-    constructor(public chartData: ChartData[]) {}
-  }
-  
-  export class LineChartElement implements ChartElement {
-    // @NOTE key added to satisfy TS type checker
-    [key: string]: any;
-    chartType = ChartType.LINE;
-    constructor(public chartData: ChartData[]) {}
-  }
-  
-  export class PieChartElement implements ChartElement {
-    // @NOTE key added to satisfy TS type checker
-    [key: string]: any;
-    chartType = ChartType.PIE;
-    constructor(public chartData: ChartData[]) {
-      // check to make sure each data has only a single point
-      for(let d of chartData) {
-        console.log(d.data.length)
-        if(d.data.length !== 1) {
-          throw new Error("Pie charts can only have a single datum per column.");
-        }
+
+  export function chart(elem:ChartElement):Element {
+    let {labels,ydata,xdata,pointLabels,chartType,line,area,bar,pie,donut,gauge,groups} = elem;
+    elem.key = `${elem.key + " " || ""}${chartType}
+                ${labels ? `::labels[${labels.join(",")}]` : ""}
+                ${pointLabels ? `::pointLabels[${pointLabels.join(",")}]` : ""}
+                ${xdata ? `::xs[${xdata.join(",")}]` : ""}
+                ${ydata ? `::ys[${ydata.join(",")}]` : ""}`;
+
+    // If no labels are provided, we need some default labels
+    if(labels === undefined) {
+      labels = [];
+      for(let i in ydata) {
+        labels.push('data' + i);
       }
     }
-  }
-  
-  export function chart(elem:ChartElement):Element {
-    let {chartData,chartType} = elem;
 
-    // stringify the chart type
+    // Set the data spec based on chart type
     let chartTypeString: string;
+    let dataSpec: ChartDataSpec = {};
+    let linespec, areaspec, barspec, piespec, donutspec, gaugespec = {};
     switch(chartType) {
       case ChartType.BAR:
+        dataSpec.xeqy = true;
         chartTypeString = "bar";
+        barspec = bar;
         break;
       case ChartType.LINE:
+        dataSpec.xeqy = true;
         chartTypeString = "line";
+        linespec = line;
         break;
       case ChartType.SPLINE:
+        dataSpec.xeqy = true;
         chartTypeString = "spline";
+        linespec = line;
         break;
       case ChartType.AREA:
+        dataSpec.xeqy = true;
         chartTypeString = "area";
+        areaspec = area;
         break;
       case ChartType.AREASPLINE:
+        dataSpec.xeqy = true;
         chartTypeString = "area-spline";
+        areaspec = area;
+        linespec = line;
         break;
       case ChartType.PIE:
+        dataSpec.nox = true;
+        dataSpec.singleydata = true;
         chartTypeString = "pie";
+        piespec = pie;
+        break;
+      case ChartType.DONUT:
+        dataSpec.nox = true;
+        dataSpec.singleydata = true;
+        chartTypeString = "donut";
+        donutspec = donut;
+        break;
+      case ChartType.SCATTER:
+        dataSpec.reqx = true;
+        dataSpec.xeqy = true;
+        chartTypeString = "scatter";
+        break;
+      case ChartType.GAUGE:
+        dataSpec.nox = true;
+        dataSpec.singleydata = true;
+        dataSpec.singledata = true;
+        chartTypeString = "gauge";
+        gaugespec = gauge;
         break;
       default:
-        Error("unrecognized chart type");
-    }
-    
-    // get the labels and data into the right format for c3
-    let formattedData = [];
-    for(let d of chartData) {
-      let labelAndData: (string|number)[] = d.data;
-      labelAndData.unshift(d.label);
-      formattedData.push(labelAndData);
+        throw new Error("Undefined chart type");
     }
 
-    elem.postRender = function(chartNode,elem) {
-      let chart = c3.generate({
-        bindto: chartNode,
-        data:{
-          columns:formattedData,
-          type: chartTypeString,
-        },
-      });
+    // check array lengths
+    let formattedData = [];
+   if(!(ydata.length === labels.length &&
+         (xdata === undefined || ydata.length === xdata.length) &&
+         (pointLabels === undefined || ydata.length === pointLabels.length)
+      )) {
+        throw new Error("ChartElement arrays must have the same number of elements");
+   }
+
+    // convert input data into nice format for type checking
+    let formatedData = [];
+    for(let i in labels) {
+      let formatted = {};
+      formatted["label"] = labels[i];
+      formatted["ydata"] = ydata[i];
+      if(xdata !== undefined && xdata[i].length > 0) {
+        formatted["xdata"] = xdata[i];
+      }
+      formattedData.push(formatted);
     }
+
+    // verify data matches the format expected by the chart type
+    if(!checkData(formattedData,dataSpec)) {
+      throw new Error("Could not render chart: " + elem);
+    }
+
+    // get the labels and data into the right format for c3
+    let formattedC3Data = [];
+    let xdataBindings = [];
+    for(let d of formattedData) {
+      let labelAndData: (string|number)[] = d.ydata.slice(0);
+      labelAndData.unshift(d.label);
+      formattedC3Data.push(labelAndData);
+      if(d.xdata !== undefined) {
+        let labelAndData: (string|number)[] = d.xdata.slice(0);
+        let xlabel = d.label + "_x";
+        labelAndData.unshift(xlabel);
+        formattedC3Data.push(labelAndData);
+        xdataBindings[d.label] = xlabel;
+      }
+    }
+
+    let c3PointLabels = {};
+    if(pointLabels !== undefined) {
+      c3PointLabels =
+        function(v,id,i,j) {
+          if(id === undefined) {
+            return;
+          }
+          return pointLabels[j][i];
+        };
+    }
+
+    elem.postRender = api.debounce(200,function(chartNode,elem) {
+      if(chartNode.chart) {
+        chartNode.chart.load({
+          xs: xdataBindings,
+          columns:formattedC3Data,
+          type: chartTypeString,
+          groups: groups,
+          labels: {
+            format: c3PointLabels
+          },
+          unload: chartNode.chart.columns
+        });
+      } else {
+        chartNode.chart = c3.generate({
+          bindto: chartNode,
+          data:{
+            xs: xdataBindings,
+            columns:formattedC3Data,
+            type: chartTypeString,
+            groups: groups,
+            labels: {
+              format: c3PointLabels
+            }
+          },
+          line: linespec,
+          area: areaspec,
+          bar: barspec,
+          pie: piespec,
+          donut: donutspec,
+          gauge: gaugespec,
+        })
+      }
+    });
 
     return elem;
+  }
+
+  interface ChartDataSpec {
+    singledata?: boolean
+    singleydata?: boolean
+    nox?: boolean
+    reqx?: boolean
+    xeqy?: boolean
+  }
+  function checkData(chartData: any[], dataSpec: ChartDataSpec):boolean {
+    if(dataSpec.singledata && chartData.length > 1) {
+      throw new Error("Chart accepts only a single chartData element.");
+    }
+    for(let d of chartData) {
+      if(dataSpec.singleydata && d.ydata.length !== 1) {
+        throw new Error("Chart accepts only a single ydata per chartData element");
+      }
+      if(dataSpec.nox && d.xdata !== undefined) {
+        throw new Error("Chart cannot have xdata.");
+      }
+      if(dataSpec.reqx && d.xdata === undefined) {
+        throw new Error("xdata required");
+      }
+      if(dataSpec.xeqy && d.xdata !== undefined && d.ydata.length !== d.xdata.length) {
+        throw new Error("xdata and ydata need to be equal length");
+      }
+    }
+
+    return true;
   }
 
 

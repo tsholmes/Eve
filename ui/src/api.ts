@@ -24,6 +24,23 @@ module api {
     return (new Date()).getTime();
   }
 
+  export function debounce(wait, func) {
+    var timer;
+    var args;
+    var runner = function() {
+      timer = false;
+      return func.apply(null, args);
+    }
+    return function() {
+      args = arguments;
+      if(timer) {
+        clearTimeout(timer);
+      }
+      timer = setTimeout(runner, wait);
+      return timer;
+    }
+  }
+
   export var arraysIdentical:(a:any[], b:any[])=>boolean = Indexing.arraysIdentical;
   export var zip:(keys:string[], rows:any[][])=>any[] = Indexing.zip;
   export var clone:<T>(item:T)=>T = Indexing.clone;
@@ -69,6 +86,24 @@ module api {
       res[obj[key]] = key;
     }
     return res;
+  }
+
+  // @NOTE Rows array will be mutated in place. Please slice in advance if source cannot be mutated.
+  export function sortRows(rows:any[], field:string|number, direction:number) {
+    rows.sort(function sort(a, b) {
+      a = a[field];
+      b = b[field];
+      if(direction < 0) { [a, b] = [b, a]; }
+      var typeA = typeof a;
+      var typeB = typeof b;
+      if(typeA === typeB && typeA === "number") { return a - b; }
+      if(typeA === "number") { return -1; }
+      if(typeB === "number") { return 1; }
+      if(typeA === "undefined") { return -1; }
+      if(typeB === "undefined") { return 1; }
+      if(a.constructor === Array) { return JSON.stringify(a).localeCompare(JSON.stringify(b)); }
+      return a.toString().localeCompare(b);
+    });
   }
 
   export var alphabet = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
@@ -322,14 +357,28 @@ module api {
   /***************************************************************************\
    * Read/Write primitives.
   \***************************************************************************/
-  function fillForeignKeys(type, query, context, silentThrow?) {
+  function fillForeignKeys(type, query, context, useIds = false, silentThrow?) {
     var schema = schemas[type];
     if(!schema) { throw new Error("Attempted to process unknown type " + type + " with query " + JSON.stringify(query)); }
     var foreignKeys = schema.foreign;
     if(!foreignKeys) { return query; }
 
+      if(useIds) {
+        let foreignIdKeys:{[field: string]: string} = {};
+        let fieldIds = ixer.getFields(type);
+        let nameToId = {};
+        for(let id of fieldIds) {
+          nameToId[code.name(id)] = id;
+        }
+        for(let foreignKey in foreignKeys) {
+          foreignIdKeys[foreignKey] = nameToId[foreignKeys[foreignKey]];
+        }
+        foreignKeys = foreignIdKeys;
+      }
+
     for(var contextKey in foreignKeys) {
       var foreignKey = foreignKeys[contextKey];
+
       if(!foreignKeys.hasOwnProperty(contextKey)) { continue; }
       if(query[foreignKey] !== undefined) { continue; }
       if(context[contextKey] === undefined && !silentThrow) {
@@ -357,7 +406,7 @@ module api {
 
     // Link foreign keys from context if missing.
     if(schema.foreign) {
-      var params = fillForeignKeys(type, params, context);
+      var params = fillForeignKeys(type, params, context, useIds);
     }
 
     // Fill primary keys if missing.
@@ -423,7 +472,7 @@ module api {
           var depSchema = schemas[dependent];
 
           //debugger;
-          var q = <{[key:string]:string}>fillForeignKeys(dependent, {}, factContext, true);
+          var q = <{[key:string]:string}>fillForeignKeys(dependent, {}, factContext, useIds, true);
 
           var results = retrieve(dependent, q, clone(factContext));
           if(results && results.length) {
