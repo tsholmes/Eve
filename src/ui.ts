@@ -412,10 +412,21 @@ let paneChrome:{[kind:number]: (paneId:string, entityId:string) => {c?: string, 
     c: "fullscreen",
     header: {t: "header", c: "flex-row", children: [
       // {c: "logo eve-logo", data: {paneId}, link: "", click: navigate},
-      searchInput(paneId, entityId),
-      {c: "controls visible", children: [
-         {c: "ion-gear-a toggle-settings", style: "font-size: 1.35em;", prompt: paneSettings, paneId, click: openPrompt}
-      ]}
+      {c: "chat", children: [
+        searchInput(paneId, entityId),
+        {c: "chat-history", children: [
+          {c: "bubble-user", text: "chris and josh"},
+          {c: "bubble-eve", text: "found 2"},
+          {c: "bubble-user", text: "employees with a salary"},
+          {c: "bubble-eve", text: "found 5 employees"},
+          {c: "bubble-user", text: "pets that are exotic and have a length > 3"},
+          {c: "bubble-eve", text: "found 2 pets"},
+        ]},
+        {c: "controls visible", children: [
+          // {c: "ion-gear-a toggle-settings", style: "font-size: 1.35em;", prompt: paneSettings, paneId, click: openPrompt}
+        ]}
+
+      ]},
     ]}
   }),
   [PANE.POPOUT]: (paneId, entityId) => {

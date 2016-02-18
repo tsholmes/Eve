@@ -1,4 +1,4 @@
-body { position: relative; padding-bottom: 1.5em; background:linear-gradient(-215deg, #fff 0%, rgb(236,238,242) 40%); color: rgb(76, 85, 90); font-family: "Lato", sans-serif; font-weight: 400; }
+body { position: relative; padding-bottom: 1.5em; background:linear-gradient(-215deg, #fff 0%, rgb(236,238,242) 40%);  background: rgb(236,238,242) ; color: rgb(76, 85, 90); font-family: "Lato", sans-serif; font-weight: 400; }
 * { box-sizing: border-box; }
 div { display: flex; flex-direction: column; }
 button, input { border:none; outline: none; font-family: "Lato", sans-serif; font-weight: 400; color: rgb(76,85,90); font-size: 12pt; }
@@ -51,7 +51,7 @@ div:hover > header > .controls, header > .controls.visible { opacity: 1; }
 /*---------------------------------------------------------
 - Pane
 ---------------------------------------------------------*/
-.wiki-pane.fullscreen { position: relative; padding: 50px 100px; }
+.wiki-pane.fullscreen { position: relative; padding: 0px 0px; }
 .wiki-pane > header { padding: 10px 0.5em; align-items: center; border-bottom: 1px solid #ccc; }
 .wiki-pane > header > * { margin: 0 0.5em;}
 .wiki-pane > header > .controls { margin-right: -43px; }
@@ -90,6 +90,28 @@ div:hover > header > .controls, header > .controls.visible { opacity: 1; }
 .wiki-pane.window .wiki-entity .CodeMirror { flex: 1; overflow:visible; }
 .wiki-pane.window .wiki-editor { padding: 0px 30px;  }
 .wiki-pane.window .card { margin: 0; }
+
+/*---------------------------------------------------------
+- Chat experiment
+---------------------------------------------------------*/
+
+.fullscreen { flex-direction:row; }
+content { align-items:center; justify-content:flex-start; flex: 1; padding:50px 0; }
+.fullscreen .card { margin-top: 0; }
+.fullscreen header { flex-direction:column; border:none; padding:0; }
+.fullscreen header .controls { display:none; }
+.fullscreen .wiki-search-wrapper { flex:none; width:100%; margin-bottom:0 !important; }
+.fullscreen .wiki-search-wrapper .wiki-search-input { flex: 1; padding: 10px; height:80px; background: white; border:0px solid #ddd; border-top:0px solid #eee; }
+.fullscreen .wiki-search-wrapper .wiki-search-input .CodeMirror { font-size: 12pt; }
+
+
+.fullscreen .disambiguation { display:none !important; }
+.fullscreen .chat { flex:1; width: 360px; padding:0; border-radius:0px; overflow:hidden; background: #555; margin:0; }
+.chat-history { flex: none; justify-content:flex-end; width:100%; padding:0; background: transparent; border:0px solid #ddd; padding-bottom:20px; }
+.chat-history > * { padding: 10px 20px; border-radius: 0px; width: 100%; background: #fff; }
+.bubble-user { padding: 10px 20px; border-top:1px solid #ddd; padding-top:20px; color: #008cdd; font-size: 12pt;}
+* + .bubble-user { padding-top:20px; }
+.bubble-eve { padding: 0 20px; padding-bottom:20px; width:auto; color: #999; }
 
 /*---------------------------------------------------------
 - Autocompleter
