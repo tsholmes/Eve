@@ -35,11 +35,8 @@
 (defn weasl-implications-for [id]
   (list (list
          'bind 'main
-         (list (list 'scan [4] [])
-               (list '= [5] [4 1] implication-oid)
-               '(filter [5])
-               (list '= [5] [4 0] (name id))
-               '(filter [5])
+         (list (list 'tuple [3] (name id) implication-oid)
+               (list 'scan [4] ((edb/index-of #{:entity :attribute}) 0) [3])
                (list 'tuple [5] exec/op-register [4 2])
                (list 'send 'out [5])))))
 

@@ -493,18 +493,20 @@
 
 
 (defn doscan [id d terms build c]
-  (let [[scan dest key] terms
+  (let [[scan dest index key] terms
         opened (atom ())
         flistener (edb/add-flush-listener d id c)
         scan (fn [r]
                (let [dr (object-array (vec r))
                      ;; handle needs to be moved to the top level
-                     handle (edb/full-scan d
-                                           (fn [op t]
-                                             (rset dr op-register op)
-                                             (when (= op 'insert)
-                                               (rset dr dest t))
-                                             (c dr)))]
+                     handle (edb/scan d
+                                      index
+                                      (rget r key)
+                                      (fn [op t]
+                                        (rset dr op-register op)
+                                        (when (= op 'insert)
+                                          (rset dr dest t))
+                                        (c dr)))]
                  (swap! opened conj handle)))]
 
 

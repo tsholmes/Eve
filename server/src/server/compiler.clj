@@ -160,29 +160,33 @@
         pmap (zipmap signature (range (count signature)))
         pmap (select-keys pmap used)
         [bound free] (partition-2 (fn [x] (is-bound? env (amap x))) used)
-        [index-inputs index-outputs] [() signature]
+        [index-name index-inputs index-outputs] (edb/index-of (set bound))
         filter-terms (set/intersection (set index-outputs) (set bound))
         target-reg-name (gensym 'target)
         target-reg (allocate-register env target-reg-name)
+        generate-inputs (> (count index-inputs) 0) 
         body (reduce (fn [b t]
                        (fn []
                          (generate-binary-filter
                           env
                           (with-meta (list '= :a [target-reg (pmap t)] :b (amap t)) m)
                           b)))
-                     down filter-terms)]
-
+                     down filter-terms)
+        scan-term (term env 'scan m
+                        (if collapse exec/temp-register target-reg-name)
+                        (name index-name)
+                        (if generate-inputs exec/temp-register []))]
+    
     (bind-names env (indirect-bind target-reg (zipmap (map pmap free) (map amap free))))
 
-    (if collapse
-      (apply build
-             ;; needs to take a projection set for the indices
-             (term env 'scan m exec/temp-register [])
-             (term env 'delta-e m target-reg-name exec/temp-register)
-             (list (body)))
-      (apply build
-             (term env 'scan m target-reg-name [])
-             (list (body))))))
+    (build 
+     ((fn [x]
+        (if collapse (build x (term env 'delta-e m target-reg-name exec/temp-register)) x))
+      (if generate-inputs
+        (build (apply term env 'tuple m exec/temp-register (map #(lookup env (amap %1)) index-inputs))
+               scan-term)
+        scan-term))
+     (body))))
 
 (defn make-continuation
   "Creates a new block that resumes execution in the scope of the given env from a child env"
