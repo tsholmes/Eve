@@ -1,7 +1,9 @@
 import app = require("./app");
 import {autoFocus} from "./utils";
-import * as CodeMirror from "codemirror";
+// import * as CodeMirror from "codemirror";
 import {Element, Handler, RenderHandler, Renderer} from "./microReact";
+
+declare var CodeMirror;
 
 let WebSocket = require('ws');
 let uuid = require("uuid");
@@ -53,6 +55,7 @@ export interface CloseMessage {
 export interface ResultMessage {
   type: string,
   id: string,
+  timestamp?: number,
   fields: Array<string>,
   insert: Array<Array<any>>,
   remove: Array<Array<any>>,
@@ -68,7 +71,7 @@ interface Query {
 
 interface QueryResult {
   fields: Array<string>,
-  values: Array<Array<any>>
+  values: Array<Array<any>>,
 }
 
 interface QueryInfo {
@@ -141,11 +144,11 @@ interface Repl {
 // Storage functions
 // ------------------
 
-function saveReplCard(card: ReplCard) {
+function saveCard(card: ReplCard) {
   localStorage.setItem("everepl-" + card.id, JSON.stringify(card));  
 }
 
-function loadReplCards(): Array<ReplCard> {
+function loadCards(): Array<ReplCard> {
   let storedCards: Array<ReplCard> = [];
   for (let item in localStorage) {
     if (item.substr(0,7) === "everepl") {
@@ -160,10 +163,9 @@ function loadReplCards(): Array<ReplCard> {
   return storedCards;
 }
 
-/*
-function deleteStoredReplCard(replCard: ReplCard) {
-  localStorage.removeItem("everepl-" + replCard.id);
-}*/
+function deleteStoredCard(card: ReplCard) {
+  localStorage.removeItem("everepl-" + card.id);
+}
 
 /*
 function saveCards() {
@@ -281,6 +283,7 @@ function connectToServer() {
     if (targetCard !== undefined) {
       if (parsed.type === "result") {
         let resultMsg: ResultMessage = parsed;
+        resultMsg.timestamp = new Date().getTime();
         if (resultMsg.fields.length > 0) {         
           // If the card is pending, it was submitted manually, 
           // so we replace the values with the inserts          
@@ -289,7 +292,7 @@ function connectToServer() {
             targetCard.resultDisplay = ResultsDisplay.TABLE;
             targetCard.query.result = undefined;
           }
-          if (resultMsg.insert.length > 0 || resultMsg.insert.length > 0) {
+          if (resultMsg.insert.length > 0 || resultMsg.remove.length > 0) {
             targetCard.history.push(resultMsg);
           }
           updateQueryResult(targetCard.query, resultMsg);
@@ -297,6 +300,9 @@ function connectToServer() {
           targetCard.resultDisplay = ResultsDisplay.NONE;
         }
         targetCard.state = CardState.GOOD;
+        if (targetCard.resultDisplay === ResultsDisplay.MESSAGE) {
+          targetCard.resultDisplay = ResultsDisplay.TABLE;          
+        }
         //saveReplCard(targetCard);
       } else if (parsed.type === "error") {
         targetCard.state = CardState.ERROR;
@@ -395,7 +401,7 @@ function connectToServer() {
           } else {
             repl.init = true;
             // @NOTE temporary: submit all the repl cards for evaluation
-            repl.deck.cards.filter((c) => c.state !== CardState.NONE).map(submitCard);
+            repl.deck.cards.filter((c) => c.query !== undefined && c.query.query !== "").map(submitCard);
           }
         }
       }
@@ -543,10 +549,16 @@ function submitCard(card: ReplCard) {
                                               :query "${card.query.query.replace(/"/g,'\\"')}"
                                               :display ${card.display}))`;
   sendAnonymousQuery(rcQuery);*/
-  saveReplCard(card);
+  saveCard(card);
   
   // Send the actual query
   let sent = sendQuery(card.query);
+  let queryText = card.query.query;
+  if(queryText.indexOf("insert-fact!") > -1
+     || queryText.indexOf("remove-by-t!") > -1
+     || queryText.indexOf("remove-fact!") > -1) {
+    sendClose(card.query);
+  }
   card.state = CardState.PENDING;
   if (card.query.result === undefined) {
     if (sent) {
@@ -559,12 +571,12 @@ function submitCard(card: ReplCard) {
   let emptyCardsInCol = repl.deck.cards.filter((r) => r.col === card.col && r.state === CardState.NONE);
   if (emptyCardsInCol.length === 0) {
     addCardToColumn(repl.deck.focused.col);
-    rerender();
   }
+  rerender();
 }
 
 function updateQueryResult(query: Query, message: ResultMessage) {
-  if (query.result === undefined) {
+  if (query.result === undefined || query.result.fields.length !== message.fields.length) {
     query.result = {
       fields: message.fields,
       values: message.insert,
@@ -601,6 +613,7 @@ function blurCard(replCard: ReplCard) {
 }
 
 function deleteCard(card: ReplCard) {
+  //console.log(card);
   // Delete a row from the repl-card table
   let delQuery = `(query []
                     (fact-btu "${card.id}" :tick t)
@@ -610,8 +623,10 @@ function deleteCard(card: ReplCard) {
   let ix = repl.deck.cards.map((c) => c.id).indexOf(card.id);
   // remove the card from the deck
   repl.deck.cards.splice(ix,1);
+  // Remove the card from local storage
+  deleteStoredCard(card);
   // Renumber the cards
-  repl.deck.cards.filter((r) => r.col === card.col).forEach((c,i) => c.row = i);
+  repl.deck.cards.filter((r) => r.col === card.col && r.row > card.row).forEach((c,i) => c.row = i + card.row);
   // send a remove to the server
   sendClose(card.query);
 }
@@ -619,7 +634,7 @@ function deleteCard(card: ReplCard) {
 function focusCard(replCard: ReplCard) {
   if (replCard !== undefined) {
     if (repl.deck.focused.id !== replCard.id) {
-      blurCard(repl.deck.focused);    
+      //blurCard(repl.deck.focused);    
     }
     repl.deck.cards.forEach((r) => r.focused = false);
     replCard.focused = true;
@@ -628,6 +643,7 @@ function focusCard(replCard: ReplCard) {
     // otherwise, I couldn't focus it, because it didn't exist
     // when the call was made
     let cm = getCodeMirrorInstance(replCard);
+    //console.log(cm);
     if (cm !== undefined) {
       cm.focus()
     } else {
@@ -660,18 +676,20 @@ function submitChatMessage(message: string) {
 // Register some global event handlers on the window
 window.onkeydown = function(event) {
   let thisReplCard = repl.deck.focused;
+  let modified = event.ctrlKey || event.metaKey;
   // Catch ctrl + arrow up or page up
-  if (event.keyCode === 38 && event.ctrlKey === true || event.keyCode === 33) {
+  if (event.keyCode === 38 && modified || event.keyCode === 33) {
     // Set the focus to the previous repl card
     let previousReplCard = getReplCard(thisReplCard.row - 1, thisReplCard.col);
     focusCard(previousReplCard);
   // Catch ctrl + arrow down or page down
-  } else if (event.keyCode === 40 && event.ctrlKey === true || event.keyCode === 34) {
+  } else if (event.keyCode === 40 && modified || event.keyCode === 34) {
     // Set the focus to the next repl card
     let nextReplCard = getReplCard(thisReplCard.row + 1, thisReplCard.col);
+    //console.log(nextReplCard.query);
     focusCard(nextReplCard);
   // Catch ctrl + arrow left
-  } else if (event.keyCode === 37 && event.ctrlKey === true) {
+  } else if (event.keyCode === 37 && modified) {
     let leftReplCard = getReplCard(thisReplCard.row, thisReplCard.col - 1);
     if (leftReplCard !== undefined) {
       focusCard(leftReplCard); 
@@ -681,7 +699,7 @@ window.onkeydown = function(event) {
       focusCard(leftReplCard);
     }    
   // Catch ctrl + arrow right
-  } else if (event.keyCode === 39 && event.ctrlKey === true) {
+  } else if (event.keyCode === 39 && modified) {
     let rightReplCard = getReplCard(thisReplCard.row, thisReplCard.col + 1);
     if (rightReplCard !== undefined) {
       focusCard(rightReplCard); 
@@ -691,10 +709,10 @@ window.onkeydown = function(event) {
       focusCard(rightReplCard);
     }
   // Catch ctrl + r
-  } else if (event.keyCode === 82 && event.ctrlKey === true) {
+  } else if (event.keyCode === 82 && event.ctrlKey) {
     addColumn();
   // Catch ctrl + e
-  } else if (event.keyCode === 69 && event.ctrlKey === true) {
+  } else if (event.keyCode === 69 && modified) {
     addCardToColumn(repl.deck.focused.col);
   } else {
     return;
@@ -712,23 +730,24 @@ window.onbeforeunload = function(event) {
 
 function queryInputKeydown(event, elem) {
   let thisReplCard: ReplCard = elemToReplCard(elem);
+  let modified = event.ctrlKey || event.metaKey;
   // Submit the query with ctrl + enter or ctrl + s
-  if ((event.keyCode === 13 || event.keyCode === 83) && event.ctrlKey === true) {
+  if ((event.keyCode === 13 || event.keyCode === 83) && modified) {
     submitCard(thisReplCard);
   // Catch ctrl + delete to remove a card
-  } else if (event.keyCode === 46 && event.ctrlKey === true) {
+  } else if (event.keyCode === 46 && modified) {
     deleteCard(thisReplCard);
   // Catch ctrl + home  
-  } else if (event.keyCode === 36 && event.ctrlKey === true) {
+  } else if (event.keyCode === 36 && modified) {
     //focusCard(replCards[0]);
   // Catch ctrl + end
-  } else if (event.keyCode === 35 && event.ctrlKey === true) {
+  } else if (event.keyCode === 35 && modified) {
     //focusCard(replCards[replCards.length - 1]);
   // Catch ctrl + b
-  } else if (event.keyCode === 66 && event.ctrlKey === true) {
+  } else if (event.keyCode === 66 && modified) {
     thisReplCard.query.query = "(query [e a v]\n\t(fact-btu e a v))";
   // Catch ctrl + q
-  } else if (event.keyCode === 81 && event.ctrlKey === true) {
+  } else if (event.keyCode === 81 && modified) {
     thisReplCard.query.query = "(query [] \n\t\n)";
     let cm = getCodeMirrorInstance(thisReplCard);
     // @HACK Wait for CM to render
@@ -741,10 +760,9 @@ function queryInputKeydown(event, elem) {
 }
 
 function queryInputBlur(event, elem) {
-  let cm = getCodeMirrorInstance(elemToReplCard(elem));
+  /*let cm = getCodeMirrorInstance(elemToReplCard(elem));
   cm.getDoc().setCursor({line: 0, ch: 0});
-  //repl.deck.cards.map((r) => r.focused = false);
-  //rerender();
+  rerender();*/
 }
 
 function queryInputFocus(event, elem) {
@@ -907,7 +925,7 @@ function queryInputClick(event, elem) {
     card.display = card.display === CardDisplay.BOTH ? CardDisplay.QUERY : CardDisplay.BOTH;
     // If we can't see the query results, close the query
     if (card.display === CardDisplay.QUERY) {
-      sendClose(card.query);
+      //sendClose(card.query);
     // If we can see the query results, open the query
     } else {
       // @TODO
@@ -974,8 +992,8 @@ function generateReplCardElement(replCard: ReplCard) {
     //spellcheck: false,
     //text: replCard.query,
     keydown: queryInputKeydown, 
-    blur: queryInputBlur, 
-    focus: queryInputFocus,
+    //blur: queryInputBlur, 
+    //focus: queryInputFocus,
     change: queryInputChange,
     mouseup: queryInputClick,
     matchBrackets: true,
@@ -1045,9 +1063,19 @@ function generateResultElement(card: ReplCard) {
     result = generateResultTable(card.query.result);  
   } else if (card.resultDisplay === ResultsDisplay.HISTORY) {
     let tables = card.history.map((h) => {
-      let insertTable = h.insert.length > 0 ? generateResultTable({fields: h.fields, values: h.insert}) : {};
-      let removeTable = h.remove.length > 0 ? generateResultTable({fields: h.fields, values: h.remove}) : {};
-      return {c: "", children: [{t: "h2", text: "Insert"}, insertTable, {t: "h2", text: "Remove"}, removeTable]};
+      let insertTable = h.insert.length > 0 ? generateResultTable({fields: h.fields, values: h.insert}) : false;
+      let removeTable = h.remove.length > 0 ? generateResultTable({fields: h.fields, values: h.remove}) : false;
+      let historyChildren = [];
+      if(insertTable || removeTable) {
+        historyChildren.push({t: "h1", text: `Received: ${formatDate(h.timestamp)} ${formatTime(h.timestamp)}`});
+      }
+      if(insertTable) {
+        historyChildren.push({t: "h2", text: "Insert"}, insertTable);
+      }
+      if(removeTable) {
+        historyChildren.push({t: "h2", text: "Remove"}, removeTable);
+      }
+      return {c: "", children: historyChildren};
     });
     result = {c: "", children: tables};
   }
@@ -1072,7 +1100,10 @@ function generateResultElement(card: ReplCard) {
   return queryResult;
 }
 
-function generateResultTable(result: QueryResult) {
+function generateResultTable(result: QueryResult): any {
+  if (result === undefined) {
+    return {};
+  }
   if (result.fields.length > 0) {
     let tableHeader = {c: "header", children: result.fields.map((f: string) => {
       return {c: "cell", text: f};
@@ -1153,16 +1184,9 @@ function generateChatElement() {
     let messageElements = repl.chat.messages.map((m) => {
       let userIx = repl.system.users.result.values.map((u) => u[0]).indexOf(m.user);
       let userName = repl.system.users.result.values[userIx][1];
-      let d = new Date(0);
-      d.setUTCMilliseconds(m.time);
-      
-      let hrs = d.getHours() > 12 ? d.getHours() - 12 : d.getHours();
-      let mins = d.getMinutes() < 10 ? `0${d.getMinutes()}` : d.getMinutes();
-      let ampm = d.getHours() < 12 ? "AM" : "PM";
-      let time = `${hrs}:${mins} ${ampm}`
       return {c: "chat-message-box", children: [
                {c: `chat-user ${m.user === repl.user.id ? "me" : ""}`, text: `${userName}`},
-               {c: "chat-time", text: `${time}`},
+               {c: "chat-time", text: `${formatTime(m.time)}`},
                {c: "chat-message", text: `${m.message}`},
              ]};  
     });
@@ -1180,7 +1204,7 @@ function generateChatElement() {
 
 // Create an initial repl card
 //let defaultCard = newReplCard();
-let storedCards = loadReplCards();
+let storedCards = loadCards();
 if (storedCards.length === 0) {
   storedCards.push(newReplCard());
 }
@@ -1271,6 +1295,26 @@ function root() {
 // Utility Functions
 // -----------------
 
+function formatTime(timestamp: number): string {
+  let d = new Date(0);
+  d.setUTCMilliseconds(timestamp);
+  let hrs = d.getHours() > 12 ? d.getHours() - 12 : d.getHours();
+  let mins = d.getMinutes() < 10 ? `0${d.getMinutes()}` : d.getMinutes();
+  let ampm = d.getHours() < 12 ? "AM" : "PM";
+  let timeString = `${hrs}:${mins} ${ampm}`
+  return timeString;
+}
+
+function formatDate(timestamp: number): string {
+  let d = new Date(0);
+  d.setUTCMilliseconds(timestamp);
+  let day = d.getDate();
+  let month = d.getMonth();
+  let year = d.getFullYear();
+  let date = `${month}/${day}/${year}`;
+  return date;
+}
+
 function removeRow(row: Array<any>, array: Array<Array<any>>) {
   let ix;
   for (let i = 0; i < array.length; i++) {
@@ -1339,7 +1383,7 @@ function getCodeMirrorInstance(replCard: ReplCard): CodeMirror.Editor {
     if (target.parentElement["_id"] === replCard.id) {
       return target["cm"];     
     }
-  }  
+  } 
   return undefined;
 }
 
@@ -1394,7 +1438,9 @@ function codeMirrorPostRender(postRender?: RenderHandler): RenderHandler {
       cm = node.cm = CodeMirror(node, {
         lineWrapping: elem.lineWrapping !== false ? true : false,
         lineNumbers: elem.lineNumbers,
-        mode: elem.mode || "text",
+        mode: elem.mode || "clojure",
+        matchBrackets: true,
+        autoCloseBrackets: true,
         extraKeys
       });
       if(elem["cmChange"]) cm.on("change", handleCMEvent(elem["cmChange"], elem));

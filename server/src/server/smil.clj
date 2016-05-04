@@ -61,6 +61,7 @@
 (def schemas {
               ;; Special forms
               'insert-fact! nil
+              'remove-fact! nil
               'fact nil
               'define! nil ; Special due to multiple aliases
               'query nil ; Special due to optional parameterization
@@ -281,6 +282,7 @@
          (= op 'query) (parse-query sexpr)
          (= op 'fact) (parse-fact sexpr)
          (= op 'insert-fact!) (parse-fact sexpr)
+         (= op 'remove-fact!) (parse-fact sexpr)
          (= op 'define-ui) (parse-define-ui sexpr)
          :else (throw (syntax-error (str "Unknown operator " op) sexpr)))
        {:expr sexpr :schema schema}))))
@@ -322,22 +324,20 @@
   (let [projection (vec (distinct (apply concat (map :join (:ui args)))))
         generated (reduce
                    (fn [memo ui-group]
-                     (reduce (fn [memo id]
-                               (let [grouping (:grouping ui-group)
-                                     row-id (interpose "__" (cons (name id) grouping))]
-                                 (assoc memo id `(~'str ~@row-id))))
-                             memo
-                             (vals (:ids ui-group))))
+                     (as-> memo memo
+                       (reduce (fn [memo id]
+                                 (let [grouping (:grouping ui-group)
+                                       row-id (interpose "__" (cons (name id) grouping))]
+                                   (assoc memo id `(~'str ~@row-id))))
+                               memo
+                               (vals (:ids ui-group)))
+
+                       (reduce
+                        (fn [memo [var val]]
+                          (assoc memo var val))
+                        memo
+                        (:aliases ui-group))))
                    {}
-                   (:ui args))
-        generated (reduce
-                   (fn [memo ui-group]
-                     (reduce
-                      (fn [memo [var val]]
-                        (assoc memo var val))
-                      memo
-                      (:aliases ui-group)))
-                   generated
                    (:ui args))
         query (concat (:query args)
                       (map
@@ -350,7 +350,7 @@
            (fn [ui-group]
              `(~'define! ~'ui ~['e 'a 'v]
                (~(:id args) ~@(map keyword (:join ui-group)))
-               (~'union ~(into ['e 'a 'v] projection)
+               (~'union ~(into ['e 'a 'v] (:join ui-group))
                ~@(map (fn [[elem attribute value]]
                         `(~'query
                           (~'= ~'e ~elem)
@@ -378,6 +378,10 @@
                      define-ui (expand-each db (generate-ui db args))
 
                      ;; Macros
+                     remove-fact! (expand-each db (for [fact (:facts args)
+                                                        :let [tick (gensym "tick")]]
+                                                    [`(~(with-meta 'fact-btu (meta op)) ~@fact :tick ~tick)
+                                                     `(~'remove-by-t! ~tick)]))
                      remove-by-t! (expand db (list (with-meta 'insert-fact-btu! (meta op)) (:tick args) REMOVE_FACT nil))
                      if (let [[head body] (split-at 2 (expand db (as-query (:then args))))
                               then (concat head (expand db (:cond args)) body)
