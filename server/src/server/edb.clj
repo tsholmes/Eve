@@ -113,7 +113,7 @@
 (defn flush-bag [view id]
   (doseq [i @(flush-listeners view)]
     (when (not (= id (i 1)))
-          ((i 0) 'flush [] (i 1)))))
+          ((i 0)))))
 
 (defn scan [view index in c]
   ((index-map (symbol index)) view in c))

@@ -9,6 +9,9 @@
 (def temp-register [3])
 (def initial-register 4)
 
+(def bogoflush (object-array ['flush nil nil nil nil nil nil nil nil nil nil]))
+
+
 (def object-array-type (class (object-array 1)))
 
 (defn third [x] (nth x 2))
@@ -113,7 +116,7 @@
                                        ;; this is kinda sad...both in the representation
                                        ;; of the flush and the assumption that it will
                                        ;; complete synchronously
-                                       (@head (object-array ['flush (rget r [1]) nil nil nil nil nil]))
+                                       (@head bogoflush)
                                        n))))))
     
         ;; could cache the projection - meh
@@ -491,11 +494,11 @@
 (defn exec-error [reg comment]
   (throw (ex-info comment {:registers reg :type "exec"})))
 
-
 (defn doscan [id d terms build c]
   (let [[scan dest index key] terms
         opened (atom ())
-        flistener (edb/add-flush-listener d id c)
+        flistener (edb/add-flush-listener d id
+                                          (fn [] (c bogoflush)))
         scan (fn [r]
                (let [dr (object-array (vec r))
                      ;; handle needs to be moved to the top level
