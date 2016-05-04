@@ -102,7 +102,7 @@
         evaluations (atom {})
 
         head (atom ())
-    
+
         get-count (fn [r]
                     (when (process? r)
                       (let [k (map #(rget r %1) projection)]
@@ -115,7 +115,7 @@
                                        ;; complete synchronously
                                        (@head (object-array ['flush (rget r [1]) nil nil nil nil nil]))
                                        n))))))
-    
+
         ;; could cache the projection - meh
         tail  (fn [r]
                 (let [count (get-count r)]
@@ -133,7 +133,7 @@
           (@head r)
           ;; assuming synchronous?
           (c r))))))
-                                           
+
 
 
 (defn tuple [d terms build c]
@@ -381,6 +381,7 @@
             remove-fact (fn remove-fact [assertion]
                           ;; @NOTE: Should this error on remove before insert?
                           {:r (aclone ^objects r) :cnt (dec (get assertion :cnt 0)) :prev (:prev assertion)})]
+        (println "delta-c" (rget r op-register) proj "=>" fact)
         (condp = (rget r op-register)
           'insert (swap! assertions update-in [fact] insert-fact)
           'remove (swap! assertions update-in [fact] remove-fact)
@@ -496,18 +497,17 @@
   (let [[scan dest key] terms
         opened (atom ())
         scan (fn [r]
-               (let [dr (object-array (vec r))
-                     ;; handle needs to be moved to the top level
-                     handle (edb/full-scan d
-                                           (rget r qid-register)
-                                           (fn [op t qid]
-                                             (rset dr op-register op)
-                                             (rset dr qid-register qid)
-                                             (when (= op 'insert)
-                                               (rset dr dest t))
-                                             (c dr)))]
-                 (swap! opened conj handle)))]
-
+               (swap! opened conj
+                      (edb/full-scan d
+                                     (rget r qid-register)
+                                     (fn [op t qid]
+                                       (println "injecting" op (vec t) "into" terms "for" qid)
+                                       (let [dr (aclone ^objects r)]
+                                         (rset dr op-register op)
+                                         (rset dr qid-register qid)
+                                         (when (= op 'insert)
+                                           (rset dr dest t))
+                                         (c dr))))))]
 
     (fn [r]
       (condp = (rget r op-register)
@@ -517,7 +517,6 @@
                  (doseq [i @opened] (i))
                  (c r))
         'flush (c r)))))
-
 
 
 (def command-map {'move      (simple move)
