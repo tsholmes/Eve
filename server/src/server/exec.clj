@@ -11,7 +11,6 @@
 
 (def bogoflush (object-array ['flush nil nil nil nil nil nil nil nil nil nil]))
 
-
 (def object-array-type (class (object-array 1)))
 
 (defn third [x] (nth x 2))
@@ -515,6 +514,7 @@
 
 
     (fn [r]
+      (println "scan" dest index key id (rget r op-register))
       (condp = (rget r op-register)
         'insert (scan r)
         'remove (scan r)
@@ -589,7 +589,6 @@
             (swap! blocks assoc (second i) (nth i 2)))
         e (build 'main blocks built d (@blocks 'main) trace-function
                  callback id)]
-
     (fn [op]
       (rset reg op-register op)
       (e reg))))

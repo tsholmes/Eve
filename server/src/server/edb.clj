@@ -48,7 +48,7 @@
 
 (def index-map {'full       full-scan
                 'ea-index   ea-index
-                'e          e-index})
+                'e-index    e-index})
 
 ;; should take bound and free both?
 (defn index-of [keys]
@@ -113,7 +113,7 @@
 (defn flush-bag [view id]
   (doseq [i @(flush-listeners view)]
     (when (not (= id (i 1)))
-          ((i 0)))))
+      ((i 0)))))
 
 (defn scan [view index in c]
   ((index-map (symbol index)) view in c))
