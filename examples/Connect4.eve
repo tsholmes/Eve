@@ -1,0 +1,248 @@
+* display
+  ["div"
+    ["div" {"id" "turn-container"}]
+    ["div" {"id" "join-container"}]
+    ["div" {"id" "button-container"}]
+    ["div" {"id" "board-container"}]
+    ["div"
+      ["button" {"style" "width:350" "click" "clickReset"} "reset"]]]
+
+* turn display
+  | whos_turn team
+  ["div" {"parent" "turn-container" "ix" 1}
+    "It is Team " team "'s turn"]
+
+* my team display
+  | my_team team
+  ? @team > 0
+  ["div" {"parent" "turn-container" "ix" 2}
+    "You are Team " team]
+
+* unjoined display
+  | my_team team=0
+  ["div" {"parent" "turn-container" "ix" 2}
+    "You haven't joined a team"]
+
+* drop buttons
+  | lets_count value:column
+  ? @column > 0
+  | count_by_column column count
+  | my_team team:me
+  | whos_turn team:cur
+  uuid = "button-" + @column
+  disabled = @count >= 7 || @me != @cur
+  event_id = "drop" + @column
+  ["button" {
+    "id" uuid
+    "parent" "button-container"
+    "style" "width:50"
+    "disabled" disabled
+    "click" event_id
+    "ix" column} "drop"]
+
+* join buttons
+  | team_colors team
+  event_id = "clickJoin" + @team
+  > joined_players team | filled = count(@joined_players.team) > 0
+  | my_team team:me
+  disabled = @filled || @me > 0
+  uuid = "join" + @team
+  ["button" {
+    "id" uuid
+    "parent" "join-container"
+    "disabled" disabled
+    "ix" team
+    "click" event_id
+    "style" "width:175"}
+    "Join " team]
+
+* game board
+  ["svg" {"id" "board" "parent" "board-container" "height" 350 "width" 350 "ix" 9}]
+
+* draw grid h
+  | lets_count value
+  y = @value * 50
+  uuid = "horiz-" + @value
+  ["line" {
+    "id" uuid
+    "parent" "board"
+    "x1" 0
+    "x2" 350
+    "y1" y
+    "y2" y
+    "style" "stroke:black;stroke-width:1"}]
+
+* draw grid v
+  | lets_count value
+  x = @value * 50
+  uuid = "vert-" + @value
+  style = "stroke:black;stroke-width:1"
+  ["line" {
+    "id" uuid
+    "parent" "board"
+    "y1" 0
+    "y2" 350
+    "x1" x
+    "x2" x
+    "style" style}]
+
+* draw pieces
+  | piece_pos row column team time
+  | team_colors team color
+  cx = @column * 50 - 25
+  cy = 50 * 7 - @row * 50 + 25
+  uuid = "circle-" + @time
+  ["circle" {
+    "id" uuid
+    "parent" "board"
+    "cx" cx
+    "cy" cy
+    "r" 22
+    "fill" color
+    "stroke" "black"
+    "stroke-width" 3}]
+
+* lets_count
+  value = 0
+
+* lets_count_r
+  | lets_count value:v
+  ? @v < 7
+  value = @v + 1
+
+* lets_count
+  | lets_count_r value
+
+* my_team
+  > myJoins | team = maxBy(@myJoins.team, @myJoins.time, 0)
+
+* whos_turn
+  > drops | team = 3 - maxBy(@drops.team, @drops.time, 2)
+
+* joined_players
+  | incomingJoins team time
+  | lastReset time:last_r
+  ? @time > @last_r
+
+* drops
+  ~ column team time
+
+* drops_m
+  | incomingDrops column team time
+  | lastReset time:r_time
+  ? @time > @r_time
+
+* drops
+  | drops_m column team time
+
+* count_by_column
+  | lets_count value:column
+  ? @column > 0
+  > drops column | count = count(@drops.team)
+
+* first_by_column
+  | drops column
+  > drops column | team = firstAfter(@drops.team, @drops.time, -1)
+  > drops column | time = firstAfter(@drops.time, @drops.time, -1)
+
+* piece_pos
+  | first_by_column column team time
+  row = 1
+
+* piece_pos_r
+  | piece_pos column time:last_t row:last_r
+  | count_by_column column count
+  ? @last_r < @count
+  > drops column | team = firstAfter(@drops.team, @drops.time, @last_t, -1)
+  > drops column | time = firstAfter(@drops.time, @drops.time, @last_t, -1)
+  row = @last_r + 1
+
+* piece_pos
+  | piece_pos_r column team time row
+
+* team_colors
+  ~ team color
+  + 1    "red"
+  + 2    "yellow"
+
+* myJoins
+  | outgoingJoins team time
+  | lastReset time:last_r
+  ? @time > @last_r
+
+# YAY BUTTONS
+
+* button_presses
+  ~ eid column
+
+* button_presses_r
+  | event label eid
+  ? @label.startsWith("drop")
+  column = Number(@label.substring(4))
+
+* button_presses
+  | button_presses_r eid column
+
+# remote communication
+
+* incomingDrops
+  | incomingMessages type="drop" column team time
+
+* incomingResets
+  | incomingMessages type="reset" time
+
+* lastReset
+  > incomingResets | time = maxBy(@incomingResets.time, @incomingResets.time, 0)
+
+* incomingJoins
+  | incomingMessages type="join" team time
+
+* incomingMessages
+  ~ type column team time
+
+* outgoingDrops
+  | button_presses eid column
+  | eventTime tick:eid time
+
+* outgoingResets
+  | event label="clickReset" eid
+  | eventTime tick:eid time
+
+* outgoingJoins
+  | event label eid
+  ? @label.startsWith("clickJoin")
+  | eventTime tick:eid time
+  team = Number(@label.substring(9))
+
+* outgoingMessages
+  ~ type column team time
+
+* outgoingMessages
+  | outgoingDrops column time
+  | my_team team
+  type = "drop"
+
+* outgoingMessages
+  | outgoingResets time
+  team = 0
+  column = 0
+  type = "reset"
+
+* outgoingMessages
+  | outgoingJoins time team
+  type = "join"
+  column = 0
+
+* remoteSubsTemp
+  | client client:me
+  stack = "editor|Connect4"
+  server = "server"
+  inbound = "incomingMessages"
+  outbound = "outgoingMessages"
+  asCells = false
+
+* remote|subscription
+  | remoteSubsTemp server:remote inbound:view inbound:alias asCells me:recipient
+
+* remote|subscription
+  | remoteSubsTemp stack:remote outbound:view inbound:alias asCells server:recipient
